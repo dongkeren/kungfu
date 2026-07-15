@@ -692,6 +692,11 @@ test('cache apply overrides Cargo and isolates Conan without mutating persistent
     `fs.mkdirSync(${JSON.stringify(path.join(conanStorage, 'packages'))}, {recursive: true});`,
     `fs.writeFileSync(${JSON.stringify(path.join(conanStorage, 'packages', 'marker'))}, 'warm');`,
   ].join('');
+  const {
+    SHIFU_CARGO_ORIGINAL_PATH: _cargoOriginalPath,
+    SHIFU_CONAN_ORIGINAL_PATH: _conanOriginalPath,
+    ...isolatedEnv
+  } = process.env;
   const status = await applyCacheProfile({
     reference: profilePath,
     expectedDigest: sha256(raw),
@@ -700,7 +705,7 @@ test('cache apply overrides Cargo and isolates Conan without mutating persistent
     command: process.execPath,
     args: ['-e', script],
     env: {
-      ...process.env,
+      ...isolatedEnv,
       CARGO_HOME: persistentCargo,
       CONAN_HOME: persistentConan,
       XDG_CACHE_HOME: xdgCache,
@@ -845,6 +850,10 @@ test('nested cache apply preserves the original tool PATH instead of wrapping a 
   const outputPath = path.join(directory, 'nested.json');
   const fakeBin = path.join(directory, 'fake-bin');
   const originalPath = `${fakeBin}${path.delimiter}${process.env.PATH || ''}`;
+  const expectedCargoOriginalPath =
+    process.env.SHIFU_CARGO_ORIGINAL_PATH || originalPath;
+  const expectedConanOriginalPath =
+    process.env.SHIFU_CONAN_ORIGINAL_PATH || originalPath;
   fs.mkdirSync(fakeBin);
   fs.writeFileSync(profilePath, raw);
   fs.writeFileSync(
@@ -877,8 +886,8 @@ process.exit(status);
   });
   assert.equal(status, 0);
   const nested = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-  assert.equal(nested.cargoOriginalPath, originalPath);
-  assert.equal(nested.conanOriginalPath, originalPath);
+  assert.equal(nested.cargoOriginalPath, expectedCargoOriginalPath);
+  assert.equal(nested.conanOriginalPath, expectedConanOriginalPath);
   assert.match(nested.path[0], /shifu-cache-overlay-/);
   assert.match(nested.path[1], /shifu-cache-overlay-/);
   assert.notEqual(nested.path[0], nested.path[1]);
