@@ -3,8 +3,9 @@ metadata_schema: kungfu.document-metadata/v1
 doc_type: architecture-decision
 adr_id: ADR-0101
 decision_status: accepted
-implementation_status: staged
-implementation_prs: []
+implementation_status: implemented
+implementation_prs: [https://github.com/kungfu-systems/kungfu/pull/969]
+closure_pr: https://github.com/kungfu-systems/kungfu/pull/969
 qualification_refs: [framework/project-cut/settlement.contract.json, scripts/check-project-cut-settlement.test.mjs, scripts/check-project-cut-settlement-integration.test.mjs]
 review_state: self-reviewed
 sensitivity: public
@@ -18,7 +19,7 @@ last_reviewed: 2026-07-15
 
 # ADR-0101: Project Cut settlement is agent-first and hook-optional
 
-- Status: accepted; implementation staged
+- Status: accepted; implementation implemented by PR #969
 - Date: 2026-07-15
 - Category: Project Cut / Git settlement / recovery
 - Related: [ADR-0097](ADR-0097-project-cut-spacetime-and-publication-boundary.md),
