@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs';
+import { observeHistory, reconcileHistory } from '../src/history.mjs';
 import { parseRootJson } from '../src/project-cut.mjs';
 import {
   abandonSettlement,
@@ -18,7 +19,9 @@ function usage() {
   project-cut commit-observe --state FILE --commit REF [--root DIR] [--execute] --json
   project-cut inspect --state FILE [--root DIR] --json
   project-cut reconcile --commit REF [--root DIR] --json
-  project-cut abandon --state FILE [--root DIR] [--execute] --json`;
+  project-cut abandon --state FILE [--root DIR] [--execute] --json
+  project-cut history-observe --request FILE [--root DIR] --json
+  project-cut history-reconcile --observations FILE [--root DIR] --json`;
 }
 
 function parseArguments(argv) {
@@ -59,15 +62,21 @@ function required(values, name) {
 
 function responseError(action, error) {
   return {
-    schema: 'project.cut.settlement-response/v1',
+    schema: responseSchema(action),
     ok: false,
     action,
     error: {
-      code: error.code ?? 'settlement-failed',
+      code: error.code ?? 'project-cut-failed',
       message: String(error.message),
       details: error.details ?? {},
     },
   };
+}
+
+function responseSchema(action) {
+  return action.startsWith('history-')
+    ? 'project.cut.history-response/v1'
+    : 'project.cut.settlement-response/v1';
 }
 
 let action = 'unknown';
@@ -109,13 +118,30 @@ try {
     result = abandonSettlement(root, required(parsed.values, '--state'), {
       execute,
     });
+  } else if (action === 'history-observe') {
+    const request = parseRootJson(
+      readFileSync(required(parsed.values, '--request'), 'utf8'),
+    );
+    result = observeHistory(root, request);
+  } else if (action === 'history-reconcile') {
+    const input = parseRootJson(
+      readFileSync(required(parsed.values, '--observations'), 'utf8'),
+    );
+    const observations = Array.isArray(input) ? input : input.observations;
+    if (!Array.isArray(observations))
+      throw Object.assign(new Error('observations must be an array'), {
+        code: 'invalid-observations',
+      });
+    result = reconcileHistory(root, observations, {
+      archivedRoots: Array.isArray(input) ? [] : input.archivedRoots,
+    });
   } else {
     throw Object.assign(new Error(`unknown action: ${action}`), {
       code: 'unknown-action',
     });
   }
   process.stdout.write(
-    `${JSON.stringify({ schema: 'project.cut.settlement-response/v1', ...result })}\n`,
+    `${JSON.stringify({ schema: responseSchema(action), ...result })}\n`,
   );
   if (result.ok === false) process.exitCode = 1;
 } catch (error) {
