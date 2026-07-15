@@ -675,7 +675,10 @@ test('the product runtime executes a reviewed plan through the real Capsule host
 
 test('the local product RPC preserves the same action and error envelopes', async (t) => {
   const directory = await mkdtemp(
-    path.join(os.tmpdir(), 'kungfu-agent-session-product-rpc-'),
+    path.join(
+      process.platform === 'darwin' ? '/tmp' : os.tmpdir(),
+      'kungfu-agent-session-product-rpc-',
+    ),
   );
   const endpoint = path.join(directory, 'surface.sock');
   const { surface } = fixture();

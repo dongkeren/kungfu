@@ -14,6 +14,7 @@ const workerScript = path.join(here, '..', 'src', 'capsule-worker.mjs');
 const providerScript = path.join(here, 'fixtures', 'synthetic-provider.mjs');
 const PROFILE_ROOT = `sha256:${'b'.repeat(64)}`;
 const require = createRequire(import.meta.url);
+const socketTempRoot = process.platform === 'darwin' ? '/tmp' : os.tmpdir();
 
 function preparedNodePty(temp) {
   const source = path.dirname(require.resolve('node-pty/package.json'));
@@ -77,7 +78,7 @@ async function connect(endpoint) {
 }
 
 test('detached Capsule worker survives client loss and reattaches to the same PTY', async (t) => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-capsule-'));
+  const temp = fs.mkdtempSync(path.join(socketTempRoot, 'kungfu-capsule-'));
   const endpoint = path.join(temp, 'capsule.sock');
   const ptyModule = preparedNodePty(temp);
   const child = spawn(
