@@ -6,7 +6,10 @@ Episode delta. It implements [ADR-0097](../../docs/adr/ADR-0097-project-cut-spac
 and [ADR-0098](../../docs/adr/ADR-0098-project-cut-v1-canonical-root-and-source-projection.md).
 The agent-first settlement surface implements
 [ADR-0101](../../docs/adr/ADR-0101-project-cut-agent-first-settlement.md)
-without changing the frozen `project.cut/v1` root contract.
+without changing the frozen `project.cut/v1` root contract. Explicit Git
+history qualification implements
+[ADR-0102](../../docs/adr/ADR-0102-project-cut-git-history-bindings.md)
+as a separate rooted observation layer.
 
 The layer owns no source, Atlas, Episode, Mission, Go, or Git authority. It
 validates references to those authorities and computes four deliberately
@@ -55,6 +58,8 @@ fixtures, and a real Xinfa successor-Atlas integration:
 ./shifu check:project-cut-settlement
 ./shifu test:project-cut-settlement
 ./shifu test:project-cut-settlement:integration
+./shifu check:project-cut-history
+./shifu test:project-cut-history
 ./shifu check:source
 ```
 
@@ -68,7 +73,16 @@ only `--stage` adds those exact paths to the index. It never commits or pushes:
 ./shifu project-cut verify --state .kungfu/runtime/project-cut/settlements/<cut>/state.json --json
 ./shifu project-cut commit-observe --state .kungfu/runtime/project-cut/settlements/<cut>/state.json --commit HEAD --execute --json
 ./shifu project-cut reconcile --commit HEAD --json
+./shifu project-cut history-observe --request history-request.json --json
+./shifu project-cut history-reconcile --observations history-observations.json --json
 ```
+
+History requests declare the operation and semantic relation explicitly. A
+rewrite or branch requires qualified prior observation objects; a merge
+requires observations for its exact Git parents plus an admitted independent
+Integration Episode. Reconciliation returns N:M Cut and Episode publication
+maps and distinguishes superseded, archived, and orphaned bindings. It never
+locks unrelated worktrees or mutates a ref.
 
 `hooks/project-cut-hook.mjs` is an optional thin adapter. Point
 `PROJECT_CUT_SETTLEMENT_STATE` at local rebuildable state and invoke it with

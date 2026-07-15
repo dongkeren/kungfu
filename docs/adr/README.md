@@ -171,6 +171,7 @@ implemented and qualified or explicitly waived for that release.
 | [0099](ADR-0099-git-workspace-episode-provider.md) | accepted | Git Workspace stores qualified sealed Episodes as immutable per-Episode JSONL segments without becoming Episode authority |
 | [0100](ADR-0100-xinfa-qualified-episode-evidence-provider.md) | accepted | Xinfa admits qualified sealed Episode evidence into a deterministic successor Atlas without becoming Episode authority |
 | [0101](ADR-0101-project-cut-agent-first-settlement.md) | accepted | An agent-first settlement CLI binds the Git index, successor Atlas, Episode providers, and Project Cut while hooks remain thin and non-authoritative |
+| [0102](ADR-0102-project-cut-git-history-bindings.md) | accepted | Explicit rooted observations qualify N:M Project Cut and Episode publication across Git rewrites, merges, recovery, refs, and concurrent worktrees without changing Cut roots or treating ancestry as causal authority |
 | [SHIFU-0001](SHIFU-ADR-0001-cache-profile-contract-and-ownership.md) | accepted | Cache profiles are Shifu-owned contracts; inventories project instances and Buildchain owns process |
 | [SHIFU-0002](SHIFU-ADR-0002-local-artifact-catalog-and-safe-promotion.md) | accepted | Shifu and Kungfu product artifacts share provenance-aware, Git-safe local promotion semantics |
 | [SHIFU-0003](SHIFU-ADR-0003-uv-effective-lock-cache-enforcement.md) | accepted | Strict uv cache execution uses a disposable effective lock while canonical locks stay public |
