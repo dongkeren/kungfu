@@ -4,6 +4,9 @@
 binds one declared source projection, one Xinfa Atlas, and an admitted Kungfu
 Episode delta. It implements [ADR-0097](../../docs/adr/ADR-0097-project-cut-spacetime-and-publication-boundary.md)
 and [ADR-0098](../../docs/adr/ADR-0098-project-cut-v1-canonical-root-and-source-projection.md).
+The agent-first settlement surface implements
+[ADR-0101](../../docs/adr/ADR-0101-project-cut-agent-first-settlement.md)
+without changing the frozen `project.cut/v1` root contract.
 
 The layer owns no source, Atlas, Episode, Mission, Go, or Git authority. It
 validates references to those authorities and computes four deliberately
@@ -45,16 +48,35 @@ import {
 } from './framework/project-cut/src/project-cut.mjs';
 ```
 
-Run the contract, schema bundle, golden roots, receipt, and negative fixtures:
+Run the protocol and settlement contracts, golden roots, receipts, negative
+fixtures, and a real Xinfa successor-Atlas integration:
 
 ```sh
-node scripts/check-project-cut-contract.mjs
-node --test scripts/check-project-cut-contract.test.mjs
+./shifu check:project-cut-settlement
+./shifu test:project-cut-settlement
+./shifu test:project-cut-settlement:integration
 ./shifu check:source
 ```
 
-This stage does not walk a Git tree, write `.kungfu`, seal an Episode, compile
-an Atlas, create a Git hook, or publish a commit. Providers and the settlement
-CLI consume this contract in later stages. Optional JSON Schema validation runs
-when repository dependencies are present; the semantic/root verifier itself
-uses only Node built-ins and remains available for stage-0 recovery.
+The settlement CLI reads the Git index as the source candidate and defaults to
+dry-run. Only `--execute` writes the Atlas promotion and content-addressed cut;
+only `--stage` adds those exact paths to the index. It never commits or pushes:
+
+```sh
+./shifu project-cut prepare --request settlement-request.json --json
+./shifu project-cut prepare --request settlement-request.json --execute --stage --json
+./shifu project-cut verify --state .kungfu/runtime/project-cut/settlements/<cut>/state.json --json
+./shifu project-cut commit-observe --state .kungfu/runtime/project-cut/settlements/<cut>/state.json --commit HEAD --execute --json
+./shifu project-cut reconcile --commit HEAD --json
+```
+
+`hooks/project-cut-hook.mjs` is an optional thin adapter. Point
+`PROJECT_CUT_SETTLEMENT_STATE` at local rebuildable state and invoke it with
+`pre-commit` or `post-commit`; it only calls the same public verify/observe
+core, performs no compile or network access, and explicitly reports
+`authority: false`. Skipped or absent hooks do not create proof: `reconcile`
+is the stage-0, headless recovery path from tracked Git JSON/JSONL.
+
+Optional JSON Schema validation runs when repository dependencies are present;
+the semantic/root verifier and settlement core use only Node built-ins and
+remain available for stage-0 recovery.

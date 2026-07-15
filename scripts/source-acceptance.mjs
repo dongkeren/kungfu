@@ -172,6 +172,10 @@ export function sourceAcceptancePlan(files) {
     ['agent session contract', 'scripts/check-agent-session-contract.mjs'],
     ['Project Cut contract', 'scripts/check-project-cut-contract.mjs'],
     [
+      'Project Cut settlement contract',
+      'scripts/check-project-cut-settlement.mjs',
+    ],
+    [
       'durability production-candidate admission',
       'scripts/check-durability-production-candidate.mjs',
     ],
@@ -215,6 +219,7 @@ export function sourceAcceptancePlan(files) {
         'scripts/check-agent-session-contract.test.mjs',
         'scripts/check-project-cut-contract.test.mjs',
         'scripts/check-git-episode-provider.test.mjs',
+        'scripts/check-project-cut-settlement.test.mjs',
         'framework/agent-session/tests/capsule-host.test.mjs',
         'framework/agent-session/tests/peer-transport.test.mjs',
         'framework/agent-session/tests/runtime-port.test.mjs',
