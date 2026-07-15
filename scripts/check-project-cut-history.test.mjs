@@ -201,6 +201,35 @@ test('rewrite operations preserve sealed roots and unqualified rewrites fail vis
   const publications = reconcileHistory(root, observations);
   assert.equal(publications.ok, true);
   assert.equal(publications.publications[0].commitOids.length, 5);
+
+  const duplicateInitial = qualified(
+    root,
+    request('publish', 'HEAD', [firstCut.cutRoot]),
+  );
+  const duplicate = reconcileHistory(root, [observations[0], duplicateInitial]);
+  assert.equal(duplicate.ok, false);
+  assert.ok(
+    duplicate.diagnostics.some(
+      (entry) => entry.code === 'duplicate-initial-publication',
+    ),
+  );
+
+  const forged = structuredClone(observations[0]);
+  forged.operation = 'merge';
+  forged.relation.kind = 'successor';
+  const { observationRoot: _root, ...forgedPreimage } = forged;
+  forged.observationRoot = semanticRoot(forgedPreimage);
+  const forgedResult = verifyHistoryObservation(forged);
+  assert.equal(forgedResult.ok, false);
+  assert.ok(
+    forgedResult.diagnostics.some((entry) => entry.code === 'not-a-merge'),
+  );
+
+  const invalidOid = structuredClone(observations[0]);
+  invalidOid.publication.commitOid = 'a'.repeat(41);
+  const { observationRoot: _invalidRoot, ...invalidPreimage } = invalidOid;
+  invalidOid.observationRoot = semanticRoot(invalidPreimage);
+  assert.equal(verifyHistoryObservation(invalidOid).ok, false);
 });
 
 test('merge, revert, recovery, empty, and ref contention have explicit semantics', (t) => {

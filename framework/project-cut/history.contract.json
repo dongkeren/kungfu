@@ -44,7 +44,7 @@
       "schema/history-observation-v1.schema.json",
       "schema/history-request-v1.schema.json"
     ],
-    "schemaRoot": "sha256:033decaf47f9bd9fc39979d3cba17a1c7a56f4f16d59cc9a9de6fea7bf14b95f"
+    "schemaRoot": "sha256:5fcd30c3fcbe4720d1ce10ea3c9ebbbd46dba497e6276b5489d94deb8455dd96"
   },
-  "contractRoot": "sha256:69173e982b04d0939ae1b5f90337a0b041b4b192d869e72d5339aaa56a9f390b"
+  "contractRoot": "sha256:01ff866029f7b19e2a18ba97a96cf1cc75844d145103abdda9a4c6c7420c8720"
 }

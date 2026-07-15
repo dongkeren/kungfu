@@ -108,7 +108,10 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/root" }
     },
-    "oid": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+    "oid": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
     "ref": {
       "type": "string",
       "pattern": "^refs/(?:heads|tags)/[A-Za-z0-9._/-]+$"

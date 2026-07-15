@@ -14,7 +14,7 @@ export const HISTORY_REQUEST_SCHEMA = 'project.cut.history-request/v1';
 export const HISTORY_OBSERVATION_SCHEMA = 'project.cut.history-observation/v1';
 
 const ROOT = /^sha256:[0-9a-f]{64}$/u;
-const OID = /^[0-9a-f]{40,64}$/u;
+const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const REF = /^refs\/(?:heads|tags)\/[A-Za-z0-9._/-]+$/u;
 const OPERATIONS = new Set([
   'publish',
@@ -532,6 +532,14 @@ function operationDiagnostics(
       diagnostic('missing-ref', '$.ref', 'branch observation requires a ref'),
     );
   if (request.ref !== null) {
+    if (gitResult(root, ['check-ref-format', request.ref.name]).status !== 0)
+      diagnostics.push(
+        diagnostic(
+          'invalid-ref',
+          '$.ref.name',
+          'ref does not satisfy Git check-ref-format',
+        ),
+      );
     const actual = currentRef(root, request.ref.name);
     if (request.ref.expectedOid !== publication.commitOid)
       diagnostics.push(
@@ -547,6 +555,128 @@ function operationDiagnostics(
           'ref-cas-lost',
           '$.ref.expectedOid',
           `expected ${request.ref.expectedOid ?? 'missing'}, observed ${actual ?? 'missing'}`,
+        ),
+      );
+  }
+}
+
+function qualifiedObservationDiagnostics(value, diagnostics) {
+  if (value.status !== 'qualified') return;
+  const priorRoots = value.relation.priorBindingRoots;
+  const priorCommits = value.relation.priorCommitOids;
+  const parents = value.publication.parentCommitOids;
+  const integration = value.semantics.integrationEpisodeRoot;
+  const episodes = value.semantics.episodeRoots;
+  if (value.operation === 'publish' && priorRoots.length > 0)
+    diagnostics.push(
+      diagnostic(
+        'unexpected-prior-binding',
+        '$.relation.priorBindingRoots',
+        'an initial publication cannot claim prior bindings',
+      ),
+    );
+  if (REWRITE_OPERATIONS.has(value.operation) && priorRoots.length === 0)
+    diagnostics.push(
+      diagnostic(
+        'unqualified-rewrite',
+        '$.relation.priorBindingRoots',
+        'rewrite and republish observations require prior rooted bindings',
+      ),
+    );
+  if (value.operation === 'branch') {
+    if (priorRoots.length === 0)
+      diagnostics.push(
+        diagnostic(
+          'missing-prior-binding',
+          '$.relation.priorBindingRoots',
+          'branch publication requires the source binding',
+        ),
+      );
+    if (value.ref === null)
+      diagnostics.push(
+        diagnostic('missing-ref', '$.ref', 'branch observation requires a ref'),
+      );
+  }
+  if (value.operation === 'merge') {
+    if (parents.length < 2)
+      diagnostics.push(
+        diagnostic(
+          'not-a-merge',
+          '$.publication',
+          'merge requires Git parents',
+        ),
+      );
+    if (!sameStrings(sortedUnique(parents), priorCommits))
+      diagnostics.push(
+        diagnostic(
+          'parent-publication-mismatch',
+          '$.relation.priorCommitOids',
+          'merge bindings must qualify the exact Git parent commits',
+        ),
+      );
+    if (integration === null || !episodes.includes(integration))
+      diagnostics.push(
+        diagnostic(
+          'missing-integration-episode',
+          '$.semantics.integrationEpisodeRoot',
+          'merge requires an admitted independent Integration Episode',
+        ),
+      );
+  }
+  if (value.operation === 'revert' || value.operation === 'recovery') {
+    if (priorRoots.length === 0)
+      diagnostics.push(
+        diagnostic(
+          'missing-prior-binding',
+          '$.relation.priorBindingRoots',
+          'operation requires the prior publication binding',
+        ),
+      );
+    if (integration === null || !episodes.includes(integration))
+      diagnostics.push(
+        diagnostic(
+          'missing-resolution-episode',
+          '$.semantics.integrationEpisodeRoot',
+          'operation requires an admitted resolution Episode',
+        ),
+      );
+  }
+  if (value.operation === 'empty') {
+    if (parents.length !== 1)
+      diagnostics.push(
+        diagnostic(
+          'invalid-empty',
+          '$.publication.parentCommitOids',
+          'empty requires exactly one Git parent',
+        ),
+      );
+    if (
+      value.semantics.cutRoots.length !== 0 ||
+      value.semantics.episodeRoots.length !== 0
+    )
+      diagnostics.push(
+        diagnostic(
+          'invalid-empty',
+          '$.semantics',
+          'empty cannot claim Cuts or Episodes',
+        ),
+      );
+  }
+  if (value.ref !== null) {
+    if (value.ref.expectedOid !== value.publication.commitOid)
+      diagnostics.push(
+        diagnostic(
+          'ref-target-mismatch',
+          '$.ref.expectedOid',
+          'expected ref target must equal the publication commit',
+        ),
+      );
+    if (value.ref.observedOid !== value.ref.expectedOid)
+      diagnostics.push(
+        diagnostic(
+          'ref-cas-lost',
+          '$.ref.observedOid',
+          'qualified ref evidence must observe its expected target',
         ),
       );
   }
@@ -870,6 +1000,8 @@ export function verifyHistoryObservation(value) {
       );
   }
   requireRoot(value.observationRoot, '$.observationRoot', diagnostics);
+  if (diagnostics.length === 0)
+    qualifiedObservationDiagnostics(value, diagnostics);
   if (diagnostics.length === 0) {
     const { observationRoot: _root, ...preimage } = value;
     if (semanticRoot(preimage) !== value.observationRoot)
@@ -914,7 +1046,15 @@ export function reconcileHistory(rootInput, observations, options = {}) {
       );
       continue;
     }
-    bindings.set(observation.observationRoot, observation);
+    if (bindings.has(observation.observationRoot))
+      diagnostics.push(
+        diagnostic(
+          'duplicate-observation',
+          `$[${index}].observationRoot`,
+          'observation root occurs more than once',
+        ),
+      );
+    else bindings.set(observation.observationRoot, observation);
   }
   const superseded = new Set(
     [...bindings.values()].flatMap(
@@ -923,6 +1063,7 @@ export function reconcileHistory(rootInput, observations, options = {}) {
   );
   const publications = new Map();
   const episodes = new Map();
+  const initialPublications = new Map();
   const report = [];
   for (const observation of bindings.values()) {
     for (const priorRoot of observation.relation.priorBindingRoots) {
@@ -938,6 +1079,11 @@ export function reconcileHistory(rootInput, observations, options = {}) {
     for (const cutRoot of observation.semantics.cutRoots) {
       if (!publications.has(cutRoot)) publications.set(cutRoot, new Set());
       publications.get(cutRoot).add(observation.publication.commitOid);
+      if (observation.relation.kind === 'new') {
+        if (!initialPublications.has(cutRoot))
+          initialPublications.set(cutRoot, new Set());
+        initialPublications.get(cutRoot).add(observation.observationRoot);
+      }
     }
     for (const episodeRoot of observation.semantics.episodeRoots) {
       if (!episodes.has(episodeRoot)) episodes.set(episodeRoot, new Set());
@@ -973,6 +1119,16 @@ export function reconcileHistory(rootInput, observations, options = {}) {
       cutRoots: observation.semantics.cutRoots,
       disposition,
     });
+  }
+  for (const [cutRoot, roots] of initialPublications) {
+    if (roots.size > 1)
+      diagnostics.push(
+        diagnostic(
+          'duplicate-initial-publication',
+          cutRoot,
+          'one Cut has multiple unrelated initial publication observations',
+        ),
+      );
   }
   const normalized = normalizeDiagnostics(diagnostics);
   return {
