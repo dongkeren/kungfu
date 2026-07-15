@@ -85,7 +85,7 @@ test('current Kungfu catalog, docs, matrix, actions, and workflows align', () =>
   );
   assert.equal(controllers.length, 6);
   assert.ok(controllers.every((fact) => fact.gates.length > 0));
-  assert.equal(result.workflowAuthority.workflows.length, 15);
+  assert.equal(result.workflowAuthority.workflows.length, 16);
 });
 
 test('workflow authority rejects unknown workflows, jobs, steps, and activation drift', () => {
@@ -445,11 +445,11 @@ test('matrix, gate document, and workflow drift each fail closed', () => {
     'docs/qualification/gates/workflow-bindings.json',
   );
   const bindings = JSON.parse(fs.readFileSync(bindingsPath, 'utf8'));
-  bindings.bindings[0].gates.push('source.changed-scope');
+  bindings.bindings[0].gates.push('source.whole-tree');
   fs.writeFileSync(bindingsPath, JSON.stringify(bindings));
   assert.ok(
     checkKungfuGateCatalog(root).issues.some((issue) =>
-      issue.includes('dev-pr:source.changed-scope is bound but policy is off'),
+      issue.includes('dev-pr:source.whole-tree is bound but policy is off'),
     ),
   );
 });

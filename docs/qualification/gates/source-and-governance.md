@@ -78,20 +78,33 @@ Each section is bound to the registry id by the catalog meta gate.
 
 <a id="source-changed-scope"></a>
 <!-- gate-doc:source.changed-scope -->
-## Changed-scope developer check (`source.changed-scope`)
+## Affected Core native developer check (`source.changed-scope`)
 
-- **Problem:** Checks changed source plus shared contract and tooling tests.
-- **Protects:** source regressions from becoming an unexplained green profile or release claim.
-- **Action:** `./shifu check`
-- **Dependencies:** `gate.catalog`.
-- **Platforms and runner:** linux, macos, windows; capabilities `node`.
-- **Pass:** the structured action exits successfully, required artifacts exist, and the Gate receipt remains current for the source and definition.
-- **Failure or skip:** action failure, timeout, unsupported required capability, dependency failure, or missing required artifact is non-qualifying; advisory mode remains visible.
-- **Evidence:** unified Gate receipt; no separate artifact is currently required.
-- **Diagnosis:** `./shifu gate explain source.changed-scope --profile <profile>`; reproduce with `./shifu gate run source.changed-scope` on a capable runner.
-- **Cost:** light; timeout 1200 seconds.
-- **Current source:** independent Shifu task; not selected by a current remote profile.
-- **Retirement:** remove only after every selecting profile and workflow binding is migrated or explicitly replaced, with the registry and matrix changed in the same review.
+- **Problem:** Resolves changed Core paths through the architecture authority and compiles, links, and tests the bounded native impact closure.
+- **Protects:** template instantiation, link, public-header propagation and
+  native contract regressions that the deliberately build-free source gate
+  cannot observe.
+- **Action:** `./shifu core:affected -- --execute`
+- **Dependencies:** `gate.catalog`, `source.acceptance`.
+- **Platforms and runner:** linux; capabilities `native-toolchain`.
+- **Pass:** the resolver validates the authority, selects a supported minimal
+  profile, and the selected configure/compile/link/CTest closure passes.
+- **Failure or skip:** unclassified Core files, missing target/test evidence,
+  stale authority, unsupported profiles, native failures, timeout or receipt
+  drift are non-qualifying.
+- **Evidence:** the unified Gate receipt plus
+  `kungfu.core-affected-native-receipt/v1` and raw per-step logs under
+  `product/qualification/affected-native/`. The receipt binds exact source,
+  architecture digests, toolchain, targets/tests, duration and honest cache
+  facts.
+- **Diagnosis:** inspect without building with `./shifu core:affected -- --base
+  <base> --head <head> --json`; run mutation fixtures with `./shifu
+  core:affected -- --self-test`.
+- **Cost:** heavy; timeout 1500 seconds.
+- **Current source:** .github/workflows/affected-native-pr.yml (affected-native; every development pull request; outside-Core changes produce a passed tier-none receipt so the required check never deadlocks)
+- **Retirement:** remove only with a replacement that consumes the same
+  architecture authority and preserves changed-path completeness, raw native
+  evidence and the alpha/release responsibility split.
 <!-- /gate-doc:source.changed-scope -->
 
 <a id="source-whole-tree"></a>

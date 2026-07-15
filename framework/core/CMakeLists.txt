@@ -139,6 +139,10 @@ if ("runtime-contracts" IN_LIST KUNGFU_BUILD_COMPONENTS AND
   add_subdirectory(src/libkungfu)
 endif()
 
+# Public-header self-compilation and frozen old-consumer ABI tests are generated
+# from the same architecture authority as the component graph.
+include(${PROJECT_SOURCE_DIR}/architecture/PUBLIC_CONTRACTS.cmake)
+
 if (TARGET ${LIBKUNGFU_NAME} AND "wasm" IN_LIST KUNGFU_BUILD_BINDINGS)
   message(STATUS "Enabled production libwasm runtime")
   add_subdirectory(src/libwasm)

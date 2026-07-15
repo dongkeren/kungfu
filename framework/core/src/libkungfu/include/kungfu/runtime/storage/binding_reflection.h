@@ -3,6 +3,8 @@
 #ifndef KUNGFU_RUNTIME_STORAGE_BINDING_REFLECTION_H
 #define KUNGFU_RUNTIME_STORAGE_BINDING_REFLECTION_H
 
+#include <kungfu/common.h>
+
 #include <boost/hana/adapt_struct.hpp>
 
 #include <kungfu/runtime/durability.h>

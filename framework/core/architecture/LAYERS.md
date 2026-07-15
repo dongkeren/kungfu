@@ -51,7 +51,7 @@ The production graph is budgeted to 6-12 bounded components.
 | `runtime-storage-adapters` | `adapters` | `core/runtime-storage-adapters` | 8 | `kungfu_storage_adapters`<br>`kungfu`<br>`kungfu_native_storage_shared` | `kungfu_durability_contract_tests` | `src/libkungfu/src/runtime/storage/provider.cpp`<br>`src/libkungfu/src/runtime/native_storage.cpp` |
 | `runtime-platform-adapters` | `adapters` | `core/runtime-platform-adapters` | 10 | `kungfu_view_adapters`<br>`kungfu_platform_adapters`<br>`kungfu` | `kungfu_view_component_link_tests`<br>`kungfu_embedding_generic_codec_tests` | `src/libkungfu/src/view/schema.cpp`<br>`src/libkungfu/src/runtime/io/io.cpp` |
 | `core-composition-bindings` | `composition-bindings` | `core/bindings` | 43 | `kungfu_composition`<br>`kungfu`<br>`kungfu_embedding`<br>`kungfu_wasm_host`<br>`kungfu_node`<br>`kungfu_electron`<br>`drone`<br>`kungfu_kfc`<br>`kungfu_node_host`<br>`pykungfu` | `kungfu_projection_bootstrap_tests`<br>`kungfu_embedding_generic_codec_tests` | `src/bindings/node/binding/kungfu_node.cpp`<br>`src/bindings/python/binding/pykungfu.cpp`<br>`src/libkungfu/src/runtime/embedding.cpp` |
-| `core-native-qualification` | `qualification` | `core/qualification` | 18 | `yijinjing_mmap_tests`<br>`yijinjing_content_hash_tests`<br>`yijinjing_custom_provider_qualification`<br>`yijinjing_mmap_qualification`<br>`kungfu_view_component_link_tests`<br>`kungfu_durability_contract_tests`<br>`kungfu_runtime_error_tests`<br>`kungfu_embedding_generic_codec_tests`<br>`kungfu_peer_continuity_tests`<br>`kungfu_state_service_contract_tests`<br>`kungfu_durable_ingest_tests`<br>`kungfu_durability_powercut_fixture`<br>`kungfu_durability_slo_fixture`<br>`kungfu_offhost_backup_fixture`<br>`kungfu_projection_bootstrap_tests`<br>`kungfu_crash_recovery_tests`<br>`kungfu_profile_lifecycle_tests`<br>`kungfu_native_kfx_contract_tests` | `kungfu_view_component_link_tests`<br>`kungfu_durability_contract_tests`<br>`yijinjing_mmap_tests` | `src/libkungfu/tests/domain_component_link_tests.cpp`<br>`src/libkungfu/tests/durability_contract_tests.cpp`<br>`src/libyijinjing/tests/mmap_tests.cpp` |
+| `core-native-qualification` | `qualification` | `core/qualification` | 19 | `yijinjing_mmap_tests`<br>`yijinjing_content_hash_tests`<br>`yijinjing_custom_provider_qualification`<br>`yijinjing_mmap_qualification`<br>`kungfu_view_component_link_tests`<br>`kungfu_durability_contract_tests`<br>`kungfu_runtime_error_tests`<br>`kungfu_embedding_generic_codec_tests`<br>`kungfu_peer_continuity_tests`<br>`kungfu_state_service_contract_tests`<br>`kungfu_durable_ingest_tests`<br>`kungfu_durability_powercut_fixture`<br>`kungfu_durability_slo_fixture`<br>`kungfu_offhost_backup_fixture`<br>`kungfu_projection_bootstrap_tests`<br>`kungfu_crash_recovery_tests`<br>`kungfu_profile_lifecycle_tests`<br>`kungfu_native_kfx_contract_tests`<br>`kungfu_public_headers_stable_versioned_c_abi`<br>`kungfu_public_headers_libkungfu_cxx_source_surface`<br>`kungfu_public_headers_libyijinjing_source_embedding_surface`<br>`kungfu_public_contract_compatibility_tests` | `kungfu_view_component_link_tests`<br>`kungfu_durability_contract_tests`<br>`yijinjing_mmap_tests`<br>`kungfu_public_contract_compatibility_tests` | `src/libkungfu/tests/domain_component_link_tests.cpp`<br>`src/libkungfu/tests/durability_contract_tests.cpp`<br>`src/libyijinjing/tests/mmap_tests.cpp` |
 
 ## Internal target graph
 
@@ -89,6 +89,42 @@ back into the compatibility facade.
 | Status, fsck, projection rebuild, GC and compaction planning | `src/libkungfu/src/runtime/storage/maintenance_service.cpp` | 500 |
 | Manifest bundle import, export and sync verification | `src/libkungfu/src/runtime/storage/transfer_service.cpp` | 520 |
 | JSON edge and domain operation dispatch composition | `src/libkungfu/src/runtime/storage/domain_dispatch.cpp` | 1000 |
+
+## Public contracts
+
+The rows below are expanded and checked from the same authority. Stable
+means versioned compatibility; experimental C++ does not freeze STL or
+toolchain ABI; source-embedding-only does not promise a shared library.
+
+| Rule | Level | Minimum profile | Headers | Consumers |
+| --- | --- | --- | ---: | --- |
+| `stable-versioned-c-abi` | `stable` | `embedded-sqlite` | 2 | native C/C++ embedders<br>Node/Electron hosts<br>Python hosts |
+| `libkungfu-cxx-source-surface` | `experimental` | `embedded-sqlite` | 53 | libkungfu<br>in-repository C++ bindings and applications |
+| `libyijinjing-source-embedding-surface` | `source-embedding-only` | `journal` | 29 | yijinjing static target embedders<br>libkungfu |
+
+### Stable link-visible symbols
+
+| Symbol | Owner | ABI versions | Minimum profile |
+| --- | --- | --- | --- |
+| `kungfu_embedding_get_api` | `core-composition-bindings` | v1, v2, v3 | `embedded-sqlite` |
+| `kungfu_native_storage_get_api` | `core-composition-bindings` | v1 | `embedded-sqlite` |
+
+### Schema, layout and binding parity
+
+| Contract | Level | Owner / shared semantic authority | Minimum profile |
+| --- | --- | --- | --- |
+| `journal-wire-v1` | `stable` | `yijinjing-kernel` | `journal` |
+| `libkungfu-event-schemas` | `experimental` | `libkungfu-contracts` | `embedded-sqlite` |
+| binding:`node` | `experimental` | `libkungfu-in-process-contracts` | `full` |
+| binding:`python` | `experimental` | `libkungfu-in-process-contracts` | `full` |
+| binding:`electron` | `experimental` | `libkungfu-in-process-contracts` | `full` |
+| binding:`wasm` | `experimental` | `libkungfu-in-process-contracts` | `full` |
+
+### Deprecation ledger
+
+| Surface | Replacement | Minimum window | Removal condition |
+| --- | --- | --- | --- |
+| `yijinjing-boolean-mmap-adapters` | mapping_policy and explicit page_open_policy overloads | one complete minor release after all known consumers migrate | No production call sites, retained migration fixture remains green, and release notes name the removal. |
 
 ## Navigation
 

@@ -7,6 +7,8 @@
 #include <kungfu/yijinjing/platform/mmap.h>
 #include <kungfu/yijinjing/schema/core.h>
 
+#include <nlohmann/json.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -213,6 +215,28 @@ void test_wire_layout_invariants() {
   static_assert(!std::is_copy_constructible_v<mapped_region>);
   static_assert(std::is_move_constructible_v<writer::frame_transaction>);
   static_assert(!std::is_copy_constructible_v<writer::frame_transaction>);
+}
+
+void test_retained_wire_v1_fixture() {
+  std::ifstream input(YIJINJING_RETAINED_WIRE_V1_FIXTURE);
+  require(input.good(), "retained wire-v1 fixture is unavailable");
+  const auto fixture = nlohmann::json::parse(input);
+  require(fixture.at("schema") == "kungfu.journal-wire-retained-fixture/v1", "retained fixture schema drifted");
+  require(fixture.at("page_header_size").get<size_t>() == sizeof(page_header), "retained page header size changed");
+  require(fixture.at("frame_header_size").get<size_t>() == sizeof(frame_header), "retained frame header size changed");
+  require(fixture.at("page_last_frame_position_offset").get<size_t>() == offsetof(page_header, last_frame_position),
+          "retained page publication offset changed");
+  require(fixture.at("frame_length_offset").get<size_t>() == offsetof(frame_header, length),
+          "retained frame publication offset changed");
+
+  temp_tree tree;
+  const auto loc = make_location(tree.root());
+  const auto page_size = fixture.at("page_size").get<size_t>();
+  const auto first_gen_time = fixture.at("first_frame_gen_time").get<int64_t>();
+  create_seek_page(loc, 1, first_gen_time);
+  const auto retained = page::load(loc, location::PUBLIC, page_size, 1, page_open_policy::reader());
+  require(retained->get_version() == journal_format_epoch, "current reader rejected retained wire-v1 epoch");
+  require(retained->begin_time() == first_gen_time, "current reader misread retained wire-v1 frame header");
 }
 
 void test_mapping_policy_truth_table() {
@@ -689,6 +713,7 @@ void test_reader_management_uses_membership_snapshots() {
 int main() {
   const std::pair<const char *, void (*)()> tests[] = {
       {"wire layout invariants", test_wire_layout_invariants},
+      {"retained wire-v1 fixture", test_retained_wire_v1_fixture},
       {"mapping policy truth table", test_mapping_policy_truth_table},
       {"page open intent truth table", test_page_open_intent_truth_table},
       {"existing mapping never creates or grows", test_existing_mapping_never_creates_or_grows},

@@ -63,6 +63,7 @@ layout, and code style.
 ```sh
 ./shifu check           # changed-scope lint, typecheck and unit/tooling tests
 ./shifu check:source    # GitHub-hosted source acceptance; no build or artifacts
+./shifu core:affected -- --base <base> --head <head> --json # explain the native PR closure
 ./shifu verify          # assert existing build artifacts (quick)
 ./shifu verify --full   # rebuild + freeze, then assert (slow; needs the full toolchain)
 ./shifu docs:check      # deterministic Markdown, local-link, anchor, and docs-contract gate

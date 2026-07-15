@@ -28,6 +28,25 @@
       }
     },
     {
+      "id": "dev-core-affected-native",
+      "execution": "gate",
+      "workflow": ".github/workflows/affected-native-pr.yml",
+      "job": "affected-native",
+      "profiles": [
+        "dev-pr"
+      ],
+      "gates": [
+        "source.changed-scope"
+      ],
+      "activation": "every development pull request; outside-Core changes produce a passed tier-none receipt so the required check never deadlocks",
+      "invocation": {
+        "args": [
+          "--capability",
+          "native-toolchain"
+        ]
+      }
+    },
+    {
       "id": "dev-adr",
       "execution": "gate",
       "workflow": ".github/workflows/adr-release-gate.yml",

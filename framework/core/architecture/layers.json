@@ -36,6 +36,10 @@
       "targets": ["kungfu_contracts", "kungfu_ledger_services", "kungfu_state_query_services", "kungfu_state_cache_services", "kungfu_live_services", "kungfu_storage_services", "kungfu_extension_services", "kungfu_storage_adapters", "kungfu_view_adapters", "kungfu_platform_adapters", "kungfu_composition"]
     },
     {
+      "file": "architecture/PUBLIC_CONTRACTS.cmake",
+      "targets": ["kungfu_public_headers_stable_versioned_c_abi", "kungfu_public_headers_libkungfu_cxx_source_surface", "kungfu_public_headers_libyijinjing_source_embedding_surface", "kungfu_public_contract_compatibility_tests"]
+    },
+    {
       "file": "src/libembedding/CMakeLists.txt",
       "targets": ["kungfu_embedding"]
     },
@@ -218,6 +222,151 @@
       "forbidden_text": ["#include <rocksdb/", "class rocksdb_storage_provider"]
     }
   ],
+  "public_contracts": {
+    "levels": [
+      {
+        "id": "stable",
+        "policy": "Versioned compatibility is required; removal or signature/layout change needs an accepted ADR and retained old-consumer evidence."
+      },
+      {
+        "id": "experimental",
+        "policy": "Source compatibility is reviewed and migration is documented, but C++ object layout and toolchain ABI are not frozen."
+      },
+      {
+        "id": "internal",
+        "policy": "Not exported or installed; consumers must remain inside the owning component."
+      },
+      {
+        "id": "source-embedding-only",
+        "policy": "Supported through source embedding of the static target; no shared-library ABI promise."
+      }
+    ],
+    "header_rules": [
+      {
+        "id": "stable-versioned-c-abi",
+        "include_files": [
+          "src/libkungfu/include/kungfu/embedding.h",
+          "src/libkungfu/include/kungfu/native_storage.h"
+        ],
+        "level": "stable",
+        "minimum_profile": "embedded-sqlite",
+        "consumers": ["native C/C++ embedders", "Node/Electron hosts", "Python hosts"],
+        "compatibility_policy": "Only the version-negotiated bootstrap is link-visible; tables grow additively behind version, size and capability checks."
+      },
+      {
+        "id": "libkungfu-cxx-source-surface",
+        "include_prefixes": ["src/libkungfu/include/"],
+        "exclude_files": [
+          "src/libkungfu/include/kungfu/embedding.h",
+          "src/libkungfu/include/kungfu/native_storage.h"
+        ],
+        "level": "experimental",
+        "minimum_profile": "embedded-sqlite",
+        "consumers": ["libkungfu", "in-repository C++ bindings and applications"],
+        "compatibility_policy": "Source evolution requires migration evidence; STL, object layout and compiler ABI are explicitly not stable contracts."
+      },
+      {
+        "id": "libyijinjing-source-embedding-surface",
+        "include_prefixes": ["src/libyijinjing/include/"],
+        "level": "source-embedding-only",
+        "minimum_profile": "journal",
+        "consumers": ["yijinjing static target embedders", "libkungfu"],
+        "compatibility_policy": "Headers compile from source with the yijinjing target; there is no shared ABI or packaged binary promise."
+      }
+    ],
+    "stable_symbols": [
+      {
+        "name": "kungfu_embedding_get_api",
+        "header": "src/libkungfu/include/kungfu/embedding.h",
+        "implementation": "src/libkungfu/src/runtime/embedding.cpp",
+        "owner_component": "core-composition-bindings",
+        "minimum_profile": "embedded-sqlite",
+        "abi_versions": [1, 2, 3],
+        "consumers": ["native embedding hosts"],
+        "removal_policy": "Retain all negotiated versions in the supported compatibility window; new operations require an additive table version or capability."
+      },
+      {
+        "name": "kungfu_native_storage_get_api",
+        "header": "src/libkungfu/include/kungfu/native_storage.h",
+        "implementation": "src/libkungfu/src/runtime/native_storage.cpp",
+        "owner_component": "core-composition-bindings",
+        "minimum_profile": "embedded-sqlite",
+        "abi_versions": [1],
+        "consumers": ["native storage SDK hosts"],
+        "removal_policy": "Retain v1 negotiation and table prefix; incompatible growth requires a new version and old-consumer fixture."
+      }
+    ],
+    "schema_layout_contracts": [
+      {
+        "id": "journal-wire-v1",
+        "level": "stable",
+        "owner_component": "yijinjing-kernel",
+        "minimum_profile": "journal",
+        "authority_files": [
+          "src/libyijinjing/include/kungfu/yijinjing/journal/layout_fingerprint.h",
+          "src/libyijinjing/include/kungfu/yijinjing/schema/core.h"
+        ],
+        "retained_fixture": "src/libyijinjing/tests/fixtures/journal-wire-v1.json",
+        "consumers": ["current journal reader", "retained v1 page files"],
+        "compatibility_policy": "Current readers must accept the retained v1 header fixture; an epoch change requires migration and an ADR."
+      },
+      {
+        "id": "libkungfu-event-schemas",
+        "level": "experimental",
+        "owner_component": "libkungfu-contracts",
+        "minimum_profile": "embedded-sqlite",
+        "authority_prefixes": ["src/libkungfu/schemas/"],
+        "authority_extensions": [".fbs"],
+        "consumers": ["libkungfu view adapters", "Node/Python/Electron/WASM membranes"],
+        "compatibility_policy": "Checked-in FlatBuffers sources are authoritative; compatibility changes require explicit schema evolution evidence."
+      }
+    ],
+    "binding_surfaces": [
+      {
+        "id": "node",
+        "level": "experimental",
+        "contract": "libkungfu-in-process-contracts",
+        "evidence": "src/bindings/node/CMakeLists.txt",
+        "minimum_profile": "full",
+        "semantic_axes": ["version", "capability", "error"]
+      },
+      {
+        "id": "python",
+        "level": "experimental",
+        "contract": "libkungfu-in-process-contracts",
+        "evidence": "src/bindings/python/CMakeLists.txt",
+        "minimum_profile": "full",
+        "semantic_axes": ["version", "capability", "error"]
+      },
+      {
+        "id": "electron",
+        "level": "experimental",
+        "contract": "libkungfu-in-process-contracts",
+        "evidence": "src/bindings/node/CMakeLists.txt",
+        "minimum_profile": "full",
+        "semantic_axes": ["version", "capability", "error"]
+      },
+      {
+        "id": "wasm",
+        "level": "experimental",
+        "contract": "libkungfu-in-process-contracts",
+        "evidence": "src/libwasm/CMakeLists.txt",
+        "minimum_profile": "full",
+        "semantic_axes": ["version", "capability", "error"]
+      }
+    ],
+    "deprecations": [
+      {
+        "id": "yijinjing-boolean-mmap-adapters",
+        "surface": "src/libyijinjing/include/kungfu/yijinjing/platform/mmap.h",
+        "replacement": "mapping_policy and explicit page_open_policy overloads",
+        "introduced": "ADR-0058",
+        "minimum_window": "one complete minor release after all known consumers migrate",
+        "known_consumers": ["in-repository compatibility tests"],
+        "removal_condition": "No production call sites, retained migration fixture remains green, and release notes name the removal."
+      }
+    ]
+  },
   "layers": [
     {
       "id": "schema-values",
@@ -470,9 +619,9 @@
       "exclude_prefixes": [],
       "exclude_files": [],
       "dependencies": ["core-composition-bindings", "runtime-storage-adapters", "runtime-platform-adapters", "runtime-ledger-services", "runtime-state-query-services", "runtime-live-services", "runtime-storage-services", "runtime-extension-services", "libkungfu-contracts", "yijinjing-kernel", "yijinjing-schema"],
-      "current_targets": ["yijinjing_mmap_tests", "yijinjing_content_hash_tests", "yijinjing_custom_provider_qualification", "yijinjing_mmap_qualification", "kungfu_view_component_link_tests", "kungfu_durability_contract_tests", "kungfu_runtime_error_tests", "kungfu_embedding_generic_codec_tests", "kungfu_peer_continuity_tests", "kungfu_state_service_contract_tests", "kungfu_durable_ingest_tests", "kungfu_durability_powercut_fixture", "kungfu_durability_slo_fixture", "kungfu_offhost_backup_fixture", "kungfu_projection_bootstrap_tests", "kungfu_crash_recovery_tests", "kungfu_profile_lifecycle_tests", "kungfu_native_kfx_contract_tests"],
+      "current_targets": ["yijinjing_mmap_tests", "yijinjing_content_hash_tests", "yijinjing_custom_provider_qualification", "yijinjing_mmap_qualification", "kungfu_view_component_link_tests", "kungfu_durability_contract_tests", "kungfu_runtime_error_tests", "kungfu_embedding_generic_codec_tests", "kungfu_peer_continuity_tests", "kungfu_state_service_contract_tests", "kungfu_durable_ingest_tests", "kungfu_durability_powercut_fixture", "kungfu_durability_slo_fixture", "kungfu_offhost_backup_fixture", "kungfu_projection_bootstrap_tests", "kungfu_crash_recovery_tests", "kungfu_profile_lifecycle_tests", "kungfu_native_kfx_contract_tests", "kungfu_public_headers_stable_versioned_c_abi", "kungfu_public_headers_libkungfu_cxx_source_surface", "kungfu_public_headers_libyijinjing_source_embedding_surface", "kungfu_public_contract_compatibility_tests"],
       "entry_points": ["src/libkungfu/tests/domain_component_link_tests.cpp", "src/libkungfu/tests/durability_contract_tests.cpp", "src/libyijinjing/tests/mmap_tests.cpp"],
-      "contract_tests": ["kungfu_view_component_link_tests", "kungfu_durability_contract_tests", "yijinjing_mmap_tests"]
+      "contract_tests": ["kungfu_view_component_link_tests", "kungfu_durability_contract_tests", "yijinjing_mmap_tests", "kungfu_public_contract_compatibility_tests"]
     }
   ],
   "navigation": [

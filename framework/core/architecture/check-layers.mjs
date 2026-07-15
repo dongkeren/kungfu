@@ -11,6 +11,14 @@ const coreRoot = path.resolve(architectureRoot, '..');
 const contractPath = path.join(architectureRoot, 'layers.json');
 const mapPath = path.join(architectureRoot, 'LAYERS.md');
 const targetsCmakePath = path.join(architectureRoot, 'TARGETS.cmake');
+const publicContractsCmakePath = path.join(
+  architectureRoot,
+  'PUBLIC_CONTRACTS.cmake',
+);
+const buildCapabilitiesPath = path.join(
+  architectureRoot,
+  'build-capabilities.json',
+);
 
 function findCycles(items) {
   const byId = new Map(items.map((item) => [item.id, item]));
@@ -84,6 +92,17 @@ function targetOwns(target, file, componentId) {
   }
   if ((target.exclude_files || []).includes(file)) return false;
   return !(target.exclude_prefixes || []).some((prefix) =>
+    file.startsWith(prefix),
+  );
+}
+
+function ruleOwns(rule, file) {
+  const included =
+    (rule.include_files || []).includes(file) ||
+    (rule.include_prefixes || []).some((prefix) => file.startsWith(prefix));
+  if (!included) return false;
+  if ((rule.exclude_files || []).includes(file)) return false;
+  return !(rule.exclude_prefixes || []).some((prefix) =>
     file.startsWith(prefix),
   );
 }
@@ -463,6 +482,193 @@ function validate(root, contract) {
     }
   }
 
+  const publicContracts = contract.public_contracts;
+  if (publicContracts) {
+    const buildAuthority = JSON.parse(
+      fs.readFileSync(buildCapabilitiesPath, 'utf8'),
+    );
+    const supportedProfiles = new Set(
+      buildAuthority.profiles
+        .filter((profile) => profile.status === 'supported')
+        .map((profile) => profile.id),
+    );
+    const levelIds = new Set();
+    for (const level of publicContracts.levels || []) {
+      if (levelIds.has(level.id))
+        problems.push(`duplicate public contract level: ${level.id}`);
+      levelIds.add(level.id);
+      if (!level.policy)
+        problems.push(`public contract level ${level.id} lacks policy`);
+    }
+    for (const required of [
+      'stable',
+      'experimental',
+      'internal',
+      'source-embedding-only',
+    ]) {
+      if (!levelIds.has(required))
+        problems.push(`missing public contract level: ${required}`);
+    }
+
+    const publicHeaders = [...ownership.keys()].filter(
+      (file) =>
+        (file.startsWith('src/libkungfu/include/') ||
+          file.startsWith('src/libyijinjing/include/')) &&
+        ['.h', '.hh', '.hpp', '.hxx'].includes(path.extname(file)),
+    );
+    const headerRuleIds = new Set();
+    for (const rule of publicContracts.header_rules || []) {
+      if (headerRuleIds.has(rule.id))
+        problems.push(`duplicate public header rule: ${rule.id}`);
+      headerRuleIds.add(rule.id);
+      if (!levelIds.has(rule.level))
+        problems.push(
+          `${rule.id}: unknown public contract level ${rule.level}`,
+        );
+      if (!supportedProfiles.has(rule.minimum_profile)) {
+        problems.push(
+          `${rule.id}: minimum profile is not supported: ${rule.minimum_profile}`,
+        );
+      }
+      if (!(rule.consumers || []).length || !rule.compatibility_policy) {
+        problems.push(
+          `${rule.id}: consumers and compatibility policy required`,
+        );
+      }
+    }
+    for (const header of publicHeaders) {
+      const rules = (publicContracts.header_rules || []).filter((rule) =>
+        ruleOwns(rule, header),
+      );
+      if (rules.length === 0)
+        problems.push(`unclassified public header: ${header}`);
+      if (rules.length > 1) {
+        problems.push(
+          `multiply classified public header: ${header} -> ${rules.map((rule) => rule.id).join(', ')}`,
+        );
+      }
+    }
+    for (const rule of publicContracts.header_rules || []) {
+      if (!publicHeaders.some((header) => ruleOwns(rule, header))) {
+        problems.push(`public header rule matches no headers: ${rule.id}`);
+      }
+    }
+
+    const symbolNames = new Set();
+    for (const symbol of publicContracts.stable_symbols || []) {
+      if (symbolNames.has(symbol.name))
+        problems.push(`duplicate stable symbol: ${symbol.name}`);
+      symbolNames.add(symbol.name);
+      const header = path.join(root, symbol.header || '');
+      const implementation = path.join(root, symbol.implementation || '');
+      if (
+        !fs.existsSync(header) ||
+        !fs.readFileSync(header, 'utf8').includes(symbol.name)
+      ) {
+        problems.push(`${symbol.name}: stable symbol missing from header`);
+      }
+      if (
+        !fs.existsSync(implementation) ||
+        !fs.readFileSync(implementation, 'utf8').includes(symbol.name)
+      ) {
+        problems.push(
+          `${symbol.name}: stable symbol missing from implementation`,
+        );
+      }
+      if (!componentById.has(symbol.owner_component))
+        problems.push(
+          `${symbol.name}: unknown owner ${symbol.owner_component}`,
+        );
+      if (!supportedProfiles.has(symbol.minimum_profile))
+        problems.push(`${symbol.name}: unsupported minimum profile`);
+      if (
+        !(symbol.abi_versions || []).length ||
+        !(symbol.consumers || []).length ||
+        !symbol.removal_policy
+      ) {
+        problems.push(`${symbol.name}: incomplete stable symbol policy`);
+      }
+    }
+
+    for (const layout of publicContracts.schema_layout_contracts || []) {
+      if (!levelIds.has(layout.level))
+        problems.push(
+          `${layout.id}: unknown schema/layout level ${layout.level}`,
+        );
+      if (!componentById.has(layout.owner_component))
+        problems.push(`${layout.id}: unknown owner ${layout.owner_component}`);
+      if (!supportedProfiles.has(layout.minimum_profile))
+        problems.push(`${layout.id}: unsupported minimum profile`);
+      const authorities = [...(layout.authority_files || [])];
+      for (const prefix of layout.authority_prefixes || []) {
+        const extensionSet = new Set(layout.authority_extensions || []);
+        for (const file of walk(path.join(root, prefix))) {
+          if (extensionSet.has(path.extname(file))) {
+            authorities.push(posix(path.relative(root, file)));
+          }
+        }
+      }
+      if (!authorities.length)
+        problems.push(`${layout.id}: no schema/layout authority files`);
+      for (const file of authorities) {
+        if (!fs.existsSync(path.join(root, file)))
+          problems.push(`${layout.id}: missing authority file ${file}`);
+      }
+      if (
+        layout.retained_fixture &&
+        !fs.existsSync(path.join(root, layout.retained_fixture))
+      ) {
+        problems.push(
+          `${layout.id}: missing retained fixture ${layout.retained_fixture}`,
+        );
+      }
+      if (!(layout.consumers || []).length || !layout.compatibility_policy) {
+        problems.push(`${layout.id}: incomplete schema/layout policy`);
+      }
+    }
+
+    const requiredBindings = new Set(['node', 'python', 'electron', 'wasm']);
+    for (const binding of publicContracts.binding_surfaces || []) {
+      requiredBindings.delete(binding.id);
+      if (!levelIds.has(binding.level))
+        problems.push(`${binding.id}: unknown binding level ${binding.level}`);
+      if (!fs.existsSync(path.join(root, binding.evidence || '')))
+        problems.push(
+          `${binding.id}: missing binding evidence ${binding.evidence}`,
+        );
+      if (!supportedProfiles.has(binding.minimum_profile))
+        problems.push(`${binding.id}: unsupported binding minimum profile`);
+      if (
+        binding.contract !== 'libkungfu-in-process-contracts' ||
+        JSON.stringify(binding.semantic_axes) !==
+          JSON.stringify(['version', 'capability', 'error'])
+      ) {
+        problems.push(`${binding.id}: binding parity semantics drifted`);
+      }
+    }
+    for (const binding of requiredBindings) {
+      problems.push(`missing binding parity surface: ${binding}`);
+    }
+
+    for (const deprecation of publicContracts.deprecations || []) {
+      for (const field of [
+        'id',
+        'surface',
+        'replacement',
+        'introduced',
+        'minimum_window',
+        'removal_condition',
+      ]) {
+        if (!deprecation[field])
+          problems.push(`deprecation entry lacks ${field}`);
+      }
+      if (!fs.existsSync(path.join(root, deprecation.surface || '')))
+        problems.push(`${deprecation.id}: missing deprecated surface`);
+      if (!(deprecation.known_consumers || []).length)
+        problems.push(`${deprecation.id}: known consumers required`);
+    }
+  }
+
   return { problems, ownership };
 }
 
@@ -555,6 +761,75 @@ function renderMap(contract, ownership) {
     for (const constraint of contract.source_constraints) {
       lines.push(
         `| ${constraint.responsibility || 'Checked source boundary'} | \`${constraint.file}\` | ${constraint.max_lines || '—'} |`,
+      );
+    }
+  }
+  if (contract.public_contracts) {
+    lines.push(
+      '',
+      '## Public contracts',
+      '',
+      'The rows below are expanded and checked from the same authority. Stable',
+      'means versioned compatibility; experimental C++ does not freeze STL or',
+      'toolchain ABI; source-embedding-only does not promise a shared library.',
+      '',
+      '| Rule | Level | Minimum profile | Headers | Consumers |',
+      '| --- | --- | --- | ---: | --- |',
+    );
+    const publicHeaders = [...ownership.keys()].filter(
+      (file) =>
+        (file.startsWith('src/libkungfu/include/') ||
+          file.startsWith('src/libyijinjing/include/')) &&
+        ['.h', '.hh', '.hpp', '.hxx'].includes(path.extname(file)),
+    );
+    for (const rule of contract.public_contracts.header_rules || []) {
+      const count = publicHeaders.filter((header) =>
+        ruleOwns(rule, header),
+      ).length;
+      lines.push(
+        `| \`${rule.id}\` | \`${rule.level}\` | \`${rule.minimum_profile}\` | ${count} | ${rule.consumers.join('<br>')} |`,
+      );
+    }
+    lines.push(
+      '',
+      '### Stable link-visible symbols',
+      '',
+      '| Symbol | Owner | ABI versions | Minimum profile |',
+      '| --- | --- | --- | --- |',
+    );
+    for (const symbol of contract.public_contracts.stable_symbols || []) {
+      lines.push(
+        `| \`${symbol.name}\` | \`${symbol.owner_component}\` | ${symbol.abi_versions.map((version) => `v${version}`).join(', ')} | \`${symbol.minimum_profile}\` |`,
+      );
+    }
+    lines.push(
+      '',
+      '### Schema, layout and binding parity',
+      '',
+      '| Contract | Level | Owner / shared semantic authority | Minimum profile |',
+      '| --- | --- | --- | --- |',
+    );
+    for (const layout of contract.public_contracts.schema_layout_contracts ||
+      []) {
+      lines.push(
+        `| \`${layout.id}\` | \`${layout.level}\` | \`${layout.owner_component}\` | \`${layout.minimum_profile}\` |`,
+      );
+    }
+    for (const binding of contract.public_contracts.binding_surfaces || []) {
+      lines.push(
+        `| binding:\`${binding.id}\` | \`${binding.level}\` | \`${binding.contract}\` | \`${binding.minimum_profile}\` |`,
+      );
+    }
+    lines.push(
+      '',
+      '### Deprecation ledger',
+      '',
+      '| Surface | Replacement | Minimum window | Removal condition |',
+      '| --- | --- | --- | --- |',
+    );
+    for (const item of contract.public_contracts.deprecations || []) {
+      lines.push(
+        `| \`${item.id}\` | ${item.replacement} | ${item.minimum_window} | ${item.removal_condition} |`,
       );
     }
   }
@@ -657,6 +932,91 @@ function renderTargetsCmake(contract, ownership) {
     lines.push(`  $<TARGET_OBJECTS:${target}>`);
   }
   lines.push(')', '');
+  return lines.join('\n');
+}
+
+function renderPublicContractsCmake(contract, ownership) {
+  const buildAuthority = JSON.parse(
+    fs.readFileSync(buildCapabilitiesPath, 'utf8'),
+  );
+  const profiles = new Map(
+    buildAuthority.profiles.map((profile) => [profile.id, profile]),
+  );
+  const supported = buildAuthority.profiles.filter(
+    (profile) => profile.status === 'supported',
+  );
+  const eligibleProfiles = (minimumProfile) => {
+    const required = new Set(profiles.get(minimumProfile)?.components || []);
+    return supported
+      .filter((profile) =>
+        [...required].every((component) =>
+          profile.components.includes(component),
+        ),
+      )
+      .map((profile) => profile.id);
+  };
+  const publicHeaders = [...ownership.keys()].filter(
+    (file) =>
+      (file.startsWith('src/libkungfu/include/') ||
+        file.startsWith('src/libyijinjing/include/')) &&
+      ['.h', '.hh', '.hpp', '.hxx'].includes(path.extname(file)),
+  );
+  const lines = [
+    '# Generated from architecture/layers.json by check-layers.mjs.',
+    '# Do not edit this projection directly.',
+    '',
+    'if(KUNGFU_WITH_CORE_TESTS)',
+    '  set(KUNGFU_PUBLIC_HEADER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/public-contract-headers")',
+    '  file(MAKE_DIRECTORY "${KUNGFU_PUBLIC_HEADER_GENERATED_DIR}")',
+  ];
+  for (const rule of contract.public_contracts?.header_rules || []) {
+    const target = `kungfu_public_headers_${rule.id.replace(/[^A-Za-z0-9]+/g, '_')}`;
+    const sourceVariable = `${target.toUpperCase()}_SOURCES`;
+    const eligible = eligibleProfiles(rule.minimum_profile);
+    lines.push(
+      `  if(KUNGFU_BUILD_PROFILE IN_LIST KUNGFU_PUBLIC_${cmakeVariable(rule.id)}_PROFILES)`,
+    );
+    lines.splice(
+      lines.length - 1,
+      0,
+      `  set(KUNGFU_PUBLIC_${cmakeVariable(rule.id)}_PROFILES "${eligible.join(';')}")`,
+    );
+    lines.push(`    set(${sourceVariable})`);
+    const headers = publicHeaders
+      .filter((header) => ruleOwns(rule, header))
+      .sort();
+    headers.forEach((header, index) => {
+      const includeMarker = '/include/';
+      const includeName = header.slice(
+        header.indexOf(includeMarker) + includeMarker.length,
+      );
+      const language = rule.level === 'stable' ? 'c' : 'cpp';
+      const source = `\${KUNGFU_PUBLIC_HEADER_GENERATED_DIR}/${rule.id}-${index}.${language}`;
+      lines.push(
+        `    file(WRITE "${source}" "#include <${includeName}>\\n")`,
+        `    list(APPEND ${sourceVariable} "${source}")`,
+      );
+    });
+    lines.push(
+      `    add_library(${target} OBJECT \${${sourceVariable}})`,
+      `    target_link_libraries(${target} PRIVATE ${rule.id.startsWith('libyijinjing') ? 'yijinjing' : '${LIBKUNGFU_NAME}'})`,
+    );
+    if (rule.level !== 'stable') {
+      lines.push(`    target_compile_features(${target} PRIVATE cxx_std_20)`);
+    }
+    lines.push('  endif()');
+  }
+  lines.push(
+    '  if(TARGET ${LIBKUNGFU_NAME})',
+    '    add_executable(kungfu_public_contract_compatibility_tests',
+    '      "${PROJECT_SOURCE_DIR}/src/libkungfu/tests/compat/public_contract_compatibility_tests.c")',
+    '    target_link_libraries(kungfu_public_contract_compatibility_tests PRIVATE ${LIBKUNGFU_NAME})',
+    '    set_target_properties(kungfu_public_contract_compatibility_tests PROPERTIES LINKER_LANGUAGE CXX)',
+    '    add_test(NAME kungfu_public_contract_compatibility_tests COMMAND kungfu_public_contract_compatibility_tests)',
+    '  endif()',
+    'endif()',
+    '',
+  );
   return lines.join('\n');
 }
 
@@ -930,6 +1290,65 @@ function selfTest() {
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+  const production = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  expect(
+    'clean public contract inventory passes',
+    validate(coreRoot, production).problems.length === 0,
+  );
+  const missingPublicHeader = structuredClone(production);
+  missingPublicHeader.public_contracts.header_rules[0].include_files.shift();
+  expect(
+    'unclassified public header fails',
+    validate(coreRoot, missingPublicHeader).problems.some((item) =>
+      item.includes('unclassified public header'),
+    ),
+  );
+  const duplicatePublicHeader = structuredClone(production);
+  duplicatePublicHeader.public_contracts.header_rules[1].exclude_files = [];
+  expect(
+    'multiply classified public header fails',
+    validate(coreRoot, duplicatePublicHeader).problems.some((item) =>
+      item.includes('multiply classified public header'),
+    ),
+  );
+  const missingStableSymbol = structuredClone(production);
+  missingStableSymbol.public_contracts.stable_symbols[0].name =
+    'missing_stable_bootstrap';
+  expect(
+    'stable symbol drift fails',
+    validate(coreRoot, missingStableSymbol).problems.some((item) =>
+      item.includes('stable symbol missing'),
+    ),
+  );
+  const bindingParityDrift = structuredClone(production);
+  bindingParityDrift.public_contracts.binding_surfaces[0].semantic_axes = [
+    'version',
+    'error',
+  ];
+  expect(
+    'binding parity drift fails',
+    validate(coreRoot, bindingParityDrift).problems.some((item) =>
+      item.includes('binding parity semantics drifted'),
+    ),
+  );
+  const missingRetainedFixture = structuredClone(production);
+  missingRetainedFixture.public_contracts.schema_layout_contracts[0].retained_fixture =
+    'src/libyijinjing/tests/fixtures/missing.json';
+  expect(
+    'missing retained layout fixture fails',
+    validate(coreRoot, missingRetainedFixture).problems.some((item) =>
+      item.includes('missing retained fixture'),
+    ),
+  );
+  const incompleteDeprecation = structuredClone(production);
+  incompleteDeprecation.public_contracts.deprecations[0].minimum_window =
+    undefined;
+  expect(
+    'incomplete deprecation ledger fails',
+    validate(coreRoot, incompleteDeprecation).problems.some((item) =>
+      item.includes('deprecation entry lacks minimum_window'),
+    ),
+  );
   console.log(
     'OK: core architecture negative fixtures fail for the intended reasons.',
   );
@@ -948,11 +1367,16 @@ if (result.problems.length) {
 }
 const rendered = renderMap(contract, result.ownership);
 const renderedTargetsCmake = renderTargetsCmake(contract, result.ownership);
+const renderedPublicContractsCmake = renderPublicContractsCmake(
+  contract,
+  result.ownership,
+);
 if (process.argv.includes('--write-projections')) {
   fs.writeFileSync(mapPath, rendered);
   fs.writeFileSync(targetsCmakePath, renderedTargetsCmake);
+  fs.writeFileSync(publicContractsCmakePath, renderedPublicContractsCmake);
   console.log(
-    'Updated LAYERS.md and TARGETS.cmake from the architecture authority.',
+    'Updated LAYERS.md, TARGETS.cmake and PUBLIC_CONTRACTS.cmake from the architecture authority.',
   );
   process.exit(0);
 }
@@ -962,6 +1386,10 @@ if (process.argv.includes('--print-map')) {
 }
 if (process.argv.includes('--print-targets')) {
   process.stdout.write(renderedTargetsCmake);
+  process.exit(0);
+}
+if (process.argv.includes('--print-public-contracts')) {
+  process.stdout.write(renderedPublicContractsCmake);
   process.exit(0);
 }
 if (!fs.existsSync(mapPath) || fs.readFileSync(mapPath, 'utf8') !== rendered) {
@@ -979,6 +1407,16 @@ if (
   );
   process.exit(1);
 }
+if (
+  !fs.existsSync(publicContractsCmakePath) ||
+  fs.readFileSync(publicContractsCmakePath, 'utf8') !==
+    renderedPublicContractsCmake
+) {
+  console.error(
+    'framework/core/architecture/PUBLIC_CONTRACTS.cmake is stale; regenerate it from layers.json.',
+  );
+  process.exit(1);
+}
 console.log(
-  `OK: ${result.ownership.size} first-party C/C++ files have one component owner; the layer map and internal target graph are current.`,
+  `OK: ${result.ownership.size} first-party C/C++ files have one component owner; public contracts, the layer map and internal target graph are current.`,
 );

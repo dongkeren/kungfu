@@ -17,7 +17,7 @@ Do not hand-edit the generated block. A mode applies when the corresponding
 | [`governance.buildchain-config`](source-and-governance.md#governance-buildchain-config) | light | required | off | required | required | off | required |
 | [`governance.promotion-rehearsal`](release-and-promotion.md#governance-promotion-rehearsal) | light | required | off | required | required | advisory | required |
 | [`source.acceptance`](source-and-governance.md#source-acceptance) | light | required | off | off | off | advisory | off |
-| [`source.changed-scope`](source-and-governance.md#source-changed-scope) | light | off | off | off | off | advisory | off |
+| [`source.changed-scope`](source-and-governance.md#source-changed-scope) | heavy | required | off | off | off | advisory | off |
 | [`source.whole-tree`](source-and-governance.md#source-whole-tree) | heavy | off | off | off | off | advisory | off |
 | [`docs.contracts`](source-and-governance.md#docs-contracts) | light | required | advisory | off | off | advisory | off |
 | [`docs.prose`](source-and-governance.md#docs-prose) | light | required | off | off | off | advisory | off |

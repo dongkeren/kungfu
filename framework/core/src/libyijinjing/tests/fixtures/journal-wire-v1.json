@@ -1,0 +1,9 @@
+{
+  "schema": "kungfu.journal-wire-retained-fixture/v1",
+  "page_header_size": 32,
+  "frame_header_size": 72,
+  "page_last_frame_position_offset": 24,
+  "frame_length_offset": 0,
+  "page_size": 2097152,
+  "first_frame_gen_time": 1700000000000000000
+}

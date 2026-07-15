@@ -219,35 +219,44 @@
     },
     {
       "id": "source.changed-scope",
-      "title": "Changed-scope developer check",
-      "summary": "Checks changed source plus shared contract and tooling tests.",
-      "category": "source",
+      "title": "Affected Core native developer check",
+      "summary": "Resolves changed Core paths through the architecture authority and compiles, links, and tests the bounded native impact closure.",
+      "category": "native",
       "documentation": "docs/qualification/gates/source-and-governance.md",
       "dependencies": [
-        "gate.catalog"
+        "gate.catalog",
+        "source.acceptance"
       ],
       "platforms": [
-        "linux",
-        "macos",
-        "windows"
+        "linux"
       ],
       "runner": {
         "capabilities": [
-          "node"
+          "native-toolchain"
         ]
       },
       "cost": {
-        "class": "light",
-        "timeoutSeconds": 1200
+        "class": "heavy",
+        "timeoutSeconds": 1500
       },
       "action": {
         "kind": "task",
-        "task": "check",
-        "args": []
+        "task": "core:affected",
+        "args": [
+          "--",
+          "--execute"
+        ]
       },
-      "artifacts": [],
+      "artifacts": [
+        {
+          "id": "core-affected-native-receipt",
+          "path": "product/qualification/affected-native",
+          "required": true
+        }
+      ],
       "receipt": {
-        "expectation": "optional"
+        "expectation": "required",
+        "schema": "kungfu.core-affected-native-receipt/v1"
       }
     },
     {
@@ -1381,8 +1390,8 @@
           "reason": "Selected by the current dev-pr workflow policy when its activation condition matches."
         },
         "source.changed-scope": {
-          "mode": "off",
-          "reason": "Not selected by the current dev-pr workflow policy."
+          "mode": "required",
+          "reason": "Core-affecting development pull requests require the deterministic GitHub-hosted Linux native closure."
         },
         "source.whole-tree": {
           "mode": "off",

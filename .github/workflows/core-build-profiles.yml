@@ -81,7 +81,7 @@ jobs:
         run: |
           # shifu-entry-contract: allow direct read of the generated build identity artifact
           test "$(node -p "require('./framework/core/build/kungfu-core-build-identity.json').profile")" = "$KUNGFU_BUILD_PROFILE"
-          ctest --test-dir framework/core/build -R "yijinjing_(custom_provider|fact_authority)" --output-on-failure
+          ctest --test-dir framework/core/build -R "yijinjing_(custom_provider|fact_authority|mmap)|kungfu_public_contract_compatibility" --output-on-failure
           # shifu-entry-contract: allow standalone external-consumer qualification outside the parent build
           node framework/core/slices/custom-provider/run.mjs
 
@@ -91,7 +91,7 @@ jobs:
         run: |
           $identity = Get-Content framework/core/build/kungfu-core-build-identity.json | ConvertFrom-Json
           if ($identity.profile -ne $env:KUNGFU_BUILD_PROFILE) { throw "build identity profile mismatch" }
-          ctest --test-dir framework/core/build -R "yijinjing_(custom_provider|fact_authority)" --output-on-failure
+          ctest --test-dir framework/core/build -R "yijinjing_(custom_provider|fact_authority|mmap)|kungfu_public_contract_compatibility" --output-on-failure
           # shifu-entry-contract: allow standalone external-consumer qualification outside the parent build
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsInstall = & $vswhere -latest -property installationPath

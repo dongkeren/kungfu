@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Core affected native
+
+on:
+  pull_request:
+    branches:
+      - dev/v*/v*
+
+permissions:
+  contents: read
+
+jobs:
+  affected-native:
+    name: affected-native / linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      KUNGFU_BUILDCHAIN_SOURCE_BUILD: "1"
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: "24"
+      - name: Install pinned source acceptance tools
+        shell: bash
+        env:
+          BUILDCHAIN_CHECK_MODE: source
+        # shifu-entry-contract: allow source-tool bootstrap before Gate dependencies are runnable
+        run: node scripts/buildchain-install.mjs
+      - name: Install frozen workspace
+        shell: bash
+        run: ./shifu install --frozen-lockfile
+      - name: Resolve and run affected native closure
+        shell: bash
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./shifu gate run source.changed-scope --capability native-toolchain
+      - name: Upload raw plan, receipt, and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: core-affected-native-${{ github.event.pull_request.head.sha }}
+          path: product/qualification/affected-native
+          if-no-files-found: warn
+          retention-days: 14
