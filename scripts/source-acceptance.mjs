@@ -150,6 +150,15 @@ export function sourceAcceptancePlan(files) {
       '--self-test',
     ],
     [
+      'core architecture query and health contract',
+      'framework/core/architecture/query-health.mjs',
+    ],
+    [
+      'core architecture query negative and navigation fixtures',
+      'framework/core/architecture/query-health.mjs',
+      '--self-test',
+    ],
+    [
       'core build capability contract',
       'framework/core/architecture/check-build-capabilities.mjs',
     ],

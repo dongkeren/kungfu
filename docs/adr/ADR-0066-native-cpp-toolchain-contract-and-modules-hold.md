@@ -4,7 +4,7 @@ doc_type: architecture-decision
 adr_id: ADR-0066
 decision_status: accepted
 implementation_status: staged
-implementation_prs: [https://github.com/kungfu-systems/kungfu/pull/951, https://github.com/kungfu-systems/kungfu/pull/955, https://github.com/kungfu-systems/kungfu/pull/966, https://github.com/kungfu-systems/kungfu/pull/971, https://github.com/kungfu-systems/kungfu/pull/973]
+implementation_prs: [https://github.com/kungfu-systems/kungfu/pull/951, https://github.com/kungfu-systems/kungfu/pull/955, https://github.com/kungfu-systems/kungfu/pull/966, https://github.com/kungfu-systems/kungfu/pull/971, https://github.com/kungfu-systems/kungfu/pull/973, https://github.com/kungfu-systems/kungfu/pull/974]
 qualification_refs: [framework/core/architecture/build-capabilities.json, framework/core/architecture/check-build-capabilities.mjs, framework/core/architecture/layers.json, framework/core/architecture/check-layers.mjs, framework/core/architecture/PUBLIC_CONTRACTS.cmake, framework/core/src/libkungfu/tests/domain_component_link_tests.cpp, framework/core/src/libkungfu/tests/compat/public_contract_compatibility_tests.c, framework/core/src/libyijinjing/tests/fixtures/journal-wire-v1.json, framework/core/src/libyijinjing/tests/custom_provider_qualification.cpp, .github/workflows/core-build-profiles.yml, scripts/source-acceptance.mjs]
 review_state: self-reviewed
 sensitivity: public

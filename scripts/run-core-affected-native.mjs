@@ -353,6 +353,12 @@ function planFromChanged(changedFiles, authority, buildAuthority, base, head) {
     tests: unique(tests),
     profile,
     platformTier: closure.size ? 'github-hosted-linux-native-pr' : 'none',
+    reviewRoutes: unique(closure).map((componentId) => ({
+      component: componentId,
+      ownerRole: componentById.get(componentId)?.owner,
+      backupRole: authority.review_policy.architecture_reviewer_role,
+      fallbackAccount: authority.review_policy.fallback_account,
+    })),
     reasons: reasons.sort((left, right) => left.path.localeCompare(right.path)),
   };
   return { ...plan, planDigest: digest(plan) };

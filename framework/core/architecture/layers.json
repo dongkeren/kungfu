@@ -641,5 +641,88 @@
     {"question": "Transport, process or OS integration", "component": "runtime-platform-adapters", "entry_point": "src/libkungfu/src/runtime/io/io.cpp"},
     {"question": "Python, Node, C embedding or WASM entry", "component": "core-composition-bindings", "entry_point": "src/libkungfu/src/runtime/embedding.cpp"},
     {"question": "Native regression or qualification fixture", "component": "core-native-qualification", "entry_point": "src/libkungfu/tests/durability_contract_tests.cpp"}
-  ]
+  ],
+  "review_policy": {
+    "fallback_account": "@dongkeren",
+    "architecture_reviewer_role": "core/architecture",
+    "required_routes": ["owner", "architecture-review"],
+    "missing_backup_policy": "fail-visible"
+  },
+  "diagnostics": [
+    {
+      "id": "journal-layout-mismatch",
+      "error_tokens": ["journal layout", "layout fingerprint", "epoch mismatch"],
+      "capabilities": ["journal", "replay"],
+      "component": "yijinjing-kernel",
+      "document": "framework/core/architecture/LAYERS.md",
+      "runbook": "docs/qualification/durability-and-crash-recovery.md",
+      "adrs": ["ADR-0058"],
+      "products": ["journal", "embedded-minimal", "embedded-sqlite", "server", "full"]
+    },
+    {
+      "id": "storage-provider-failure",
+      "error_tokens": ["storage provider", "content store", "rocksdb", "sqlite"],
+      "capabilities": ["storage", "content-store"],
+      "component": "runtime-storage-adapters",
+      "document": "framework/core/architecture/LAYERS.md",
+      "runbook": "docs/qualification/durability-and-crash-recovery.md",
+      "adrs": ["ADR-0018"],
+      "products": ["embedded-minimal", "embedded-sqlite", "server", "full"]
+    },
+    {
+      "id": "storage-query-or-state-failure",
+      "error_tokens": ["state query", "fact query", "projection query"],
+      "capabilities": ["query", "state"],
+      "component": "runtime-state-query-services",
+      "document": "framework/core/architecture/LAYERS.md",
+      "runbook": "docs/qualification/durability-and-crash-recovery.md",
+      "adrs": ["ADR-0048"],
+      "products": ["embedded-sqlite", "server", "full"]
+    },
+    {
+      "id": "live-continuity-failure",
+      "error_tokens": ["peer continuity", "coordinator", "reactor"],
+      "capabilities": ["live", "peer-continuity"],
+      "component": "runtime-live-services",
+      "document": "framework/core/architecture/LAYERS.md",
+      "runbook": "docs/qualification/durability-and-crash-recovery.md",
+      "adrs": ["ADR-0086"],
+      "products": ["server", "full"]
+    },
+    {
+      "id": "embedding-negotiation-failure",
+      "error_tokens": ["unsupported api version", "capability negotiation", "struct size"],
+      "capabilities": ["embedding", "native-storage", "bindings"],
+      "component": "core-composition-bindings",
+      "document": "framework/core/architecture/LAYERS.md",
+      "runbook": "docs/qualification/gates/native-qualification.md",
+      "adrs": ["ADR-0078"],
+      "products": ["embedded-sqlite", "server", "full"]
+    },
+    {
+      "id": "native-qualification-failure",
+      "error_tokens": ["native contract", "qualification fixture", "affected native"],
+      "capabilities": ["qualification", "affected-native"],
+      "component": "core-native-qualification",
+      "document": "docs/qualification/gates/native-qualification.md",
+      "runbook": "docs/qualification/gates/README.md",
+      "adrs": [],
+      "products": ["journal", "embedded-minimal", "embedded-sqlite", "server", "full"]
+    }
+  ],
+  "health_policy": {
+    "baseline_id": "level5-2026-07-15",
+    "churn_window": {"since": "2026-06-01", "until": "2026-07-15"},
+    "metrics": {
+      "component_cycles": {"direction": "zero", "budget": 0, "blocking": true},
+      "maximum_component_fanout": {"direction": "lower", "budget": 11, "blocking": true},
+      "maximum_public_header_propagation": {"direction": "lower", "budget": 12, "blocking": true},
+      "maximum_responsibility_utilization_percent": {"direction": "lower", "budget": 100, "blocking": true},
+      "maximum_component_churn": {"direction": "lower", "budget": 319, "blocking": false, "reason": "Historical coupling is diagnostic; ordinary development must not be blocked by commit volume alone."},
+      "affected_native_duration_ms": {"direction": "lower", "budget": 1200000, "blocking": true},
+      "binary_size_bytes": {"direction": "lower", "budget": null, "blocking": false, "reason": "PR source authority has no stable packaged artifact; release qualification retains binary-size evidence."},
+      "external_dependency_closure": {"direction": "lower", "budget": 12, "blocking": true}
+    },
+    "waivers": []
+  }
 }
