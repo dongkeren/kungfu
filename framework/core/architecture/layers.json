@@ -10,6 +10,7 @@
     "src/bindings/node/",
     "src/bindings/python/",
     "src/capability/",
+    "src/kfd-agent-runtime/",
     "src/libwasm/"
   ],
   "extensions": [".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".json"],
@@ -46,6 +47,10 @@
     {
       "file": "src/libwasm/CMakeLists.txt",
       "targets": ["kungfu_wasm_host"]
+    },
+    {
+      "file": "src/kfd-agent-runtime/CMakeLists.txt",
+      "targets": ["kungfu-kfd-agent-runtime"]
     },
     {
       "file": "src/bindings/node/CMakeLists.txt",
@@ -288,7 +293,7 @@
         "implementation": "src/libkungfu/src/runtime/embedding.cpp",
         "owner_component": "core-composition-bindings",
         "minimum_profile": "embedded-sqlite",
-        "abi_versions": [1, 2, 3, 4],
+        "abi_versions": [1, 2, 3, 4, 5],
         "consumers": ["native embedding hosts"],
         "removal_policy": "Retain all negotiated versions in the supported compatibility window; new operations require an additive table version or capability."
       },
@@ -605,7 +610,7 @@
       "id": "core-composition-bindings",
       "layer": "composition-bindings",
       "owner": "core/bindings",
-      "include_prefixes": ["src/bindings/", "src/capability/", "src/libwasm/"],
+      "include_prefixes": ["src/bindings/", "src/capability/", "src/kfd-agent-runtime/", "src/libwasm/"],
       "include_files": [
         "src/libkungfu/src/runtime/embedding.cpp",
         "src/libkungfu/src/runtime/projection_bootstrap.cpp",
@@ -614,8 +619,8 @@
       "exclude_prefixes": [],
       "exclude_files": [],
       "dependencies": ["runtime-storage-adapters", "runtime-platform-adapters", "runtime-ledger-services", "runtime-state-query-services", "runtime-live-services", "runtime-storage-services", "runtime-extension-services", "libkungfu-contracts", "yijinjing-kernel", "yijinjing-schema"],
-      "current_targets": ["kungfu_composition", "kungfu", "kungfu_embedding", "kungfu_wasm_host", "kungfu_node", "kungfu_electron", "drone", "kungfu_kfc", "kungfu_node_host", "pykungfu"],
-      "entry_points": ["src/bindings/node/binding/kungfu_node.cpp", "src/bindings/python/binding/pykungfu.cpp", "src/libkungfu/src/runtime/embedding.cpp"],
+      "current_targets": ["kungfu_composition", "kungfu", "kungfu_embedding", "kungfu-kfd-agent-runtime", "kungfu_wasm_host", "kungfu_node", "kungfu_electron", "drone", "kungfu_kfc", "kungfu_node_host", "pykungfu"],
+      "entry_points": ["src/bindings/node/binding/kungfu_node.cpp", "src/bindings/python/binding/pykungfu.cpp", "src/kfd-agent-runtime/main.cpp", "src/libkungfu/src/runtime/embedding.cpp"],
       "contract_tests": ["kungfu_projection_bootstrap_tests", "kungfu_embedding_generic_codec_tests"]
     },
     {

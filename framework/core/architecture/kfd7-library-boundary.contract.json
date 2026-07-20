@@ -93,7 +93,7 @@
       {
         "name": "kungfu_embedding_get_api",
         "header": "framework/core/src/libkungfu/include/kungfu/embedding.h",
-        "versions": [1, 2, 3, 4],
+        "versions": [1, 2, 3, 4, 5],
         "currency": ["fixed-width-c-structs", "borrowed-mmap-views", "json-diagnostic-reports"],
         "disposition": "compatibility-adapter"
       },
@@ -107,11 +107,11 @@
     ],
     "knownGaps": [
       "two-public-bootstraps",
-      "partial-native-ledger-lifecycle",
+      "legacy-json-operation-currency",
       "json-edge-is-the-only-native-storage-currency",
       "no-action-binding-interface",
       "no-installed-cmake-sdk-coordinate",
-      "no-repo-external-installed-shared-consumer-evidence"
+      "no-independent-cross-platform-reference-reports"
     ]
   },
   "successorAbi": {
@@ -169,7 +169,7 @@
   "compatibility": {
     "retainedSymbols": ["kungfu_embedding_get_api", "kungfu_native_storage_get_api"],
     "retainedVersions": {
-      "kungfu_embedding_get_api": [1, 2, 3, 4],
+      "kungfu_embedding_get_api": [1, 2, 3, 4, 5],
       "kungfu_native_storage_get_api": [1]
     },
     "rules": [

@@ -534,6 +534,9 @@ function checkKfd7LibraryBoundary() {
   run('KFD-7 library boundary contract', 'node', [
     path.join('scripts', 'check-kfd7-library-boundary.test.mjs'),
   ]);
+  run('KFD Agent Runtime public boundary', 'node', [
+    path.join('scripts', 'check-kfd-agent-runtime-boundary.mjs'),
+  ]);
 }
 
 function checkJournalAuthorityBoundary() {

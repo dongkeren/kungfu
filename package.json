@@ -62,6 +62,8 @@
     "xinfa:standalone": "node scripts/require-shifu.mjs xinfa:standalone && node xinfa/tooling/task.mjs standalone",
     "xinfa:dogfood": "node scripts/require-shifu.mjs xinfa:dogfood && node xinfa/tooling/dogfood.mjs",
     "kfd:verify-owned-fixtures": "node scripts/require-shifu.mjs kfd:verify-owned-fixtures && node scripts/verify-kfd-owned-fixtures.mjs",
+    "check:kfd-agent-runtime-boundary": "node scripts/require-shifu.mjs check:kfd-agent-runtime-boundary && node scripts/check-kfd-agent-runtime-boundary.mjs",
+    "kfd:agent-runtime:qualify": "node scripts/require-shifu.mjs kfd:agent-runtime:qualify && node framework/core/tests/qualification/kfd-agent-runtime/run.mjs",
     "project-cut": "node scripts/require-shifu.mjs project-cut && node framework/project-cut/bin/project-cut.mjs",
     "check:project-cut-settlement": "node scripts/require-shifu.mjs check:project-cut-settlement && node scripts/check-project-cut-settlement.mjs",
     "test:project-cut-settlement": "node scripts/require-shifu.mjs test:project-cut-settlement && node --test scripts/check-project-cut-settlement.test.mjs",

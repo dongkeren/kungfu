@@ -17,7 +17,7 @@ Repository files and qualified artifacts remain the underlying facts.
 | Root canonical encoding | protocol contract consumed by `libyijinjing` | staged Fact Kernel implementation; independent protocol goal paused | do not move or reinterpret yet |
 | storage service composition and runtime lifecycle | `libkungfu` | `libkungfu/runtime/storage/service*` | remains above kernel |
 | file/RocksDB providers, SQLite projections, transport and process utilities | `libkungfu` adapters | `libkungfu/runtime/storage/provider*`, `io`, `util`, projections | remains above kernel |
-| zero-copy stream and generic decode/checksum membrane | `libkungfu` public ABI | `embedding.h` v1-v4 | successor stream adapter |
+| zero-copy stream, generic decode/checksum, maintenance-plan and read-only storage-status membrane | `libkungfu` public ABI | `embedding.h` v1-v5 | successor stream/maintenance adapter |
 | Fact/Episode/ActionBinding operations and receipts | `libkungfu` public ABI over one authority | partial `native_storage.h` v1 operation+JSON edge | successor ledger-action interface |
 | diagnostics, maintenance, recovery planning | `libkungfu` public ABI | split between embedding v2/v4 and storage service | successor maintenance interface |
 | Pursuit, Atlas, Warrant responsibility boundaries, non-substitution invariants, and session refinement | Action Geometry contract above the reality kernel | KFD-7 action contract, Agent Work contract, Action MJS | separate from Domain Profile semantics |
@@ -30,16 +30,18 @@ Repository files and qualified artifacts remain the underlying facts.
 
 | Symbol | Versions | Currency | Strength | Long-term disposition |
 | --- | --- | --- | --- | --- |
-| `kungfu_embedding_get_api` | v1-v4 | C structs, borrowed mmap views, JSON diagnostic reports | proven version/size negotiation and zero-copy data plane | retain as compatibility adapter; successor stream/maintenance interfaces absorb new work |
+| `kungfu_embedding_get_api` | v1-v5 | C structs, borrowed mmap views, JSON diagnostic/status reports | proven version/size negotiation and zero-copy data plane | retain as compatibility adapter; successor stream/maintenance interfaces absorb new work |
 | `kungfu_native_storage_get_api` | v1 | operation name plus JSON request/result | language-host-free entry to a bounded subset of current storage operations | retain as compatibility adapter; do not grow into the final semantic ABI |
 | `kungfu_get_api` | planned | discovery plus separately versioned interfaces and protocol/schema-tagged bytes | not implemented, exported, packaged, or stable | new-consumer target only after qualification |
 
-The current storage bootstrap advertises seven capability bits but allows only
-18 operation names. It reaches Episode begin/end, Fact query and selected Fact
-operations, fsck/export, assessment/trust, and `fact_kernel`. It does not
-provide the complete lifecycle, backend, recovery, import, cancellation, or
-ActionBinding surface required by the target contract. JSON is its named edge
-currency and therefore cannot be reused as the implicit canonical Root format.
+The current storage bootstrap advertises eleven capability bits and allows
+forty operation names. It reaches the bounded language-host-free Episode
+lifecycle, recovery and projection rebuild; Fact query/admission/Cut-kernel
+and Fact Library operations; fsck, export/import, index rebuild, backend
+lifecycle, and assessment/trust. It still does not provide the successor
+ActionBinding, cancellation, timeout, or independently versioned interface
+topology. JSON is its named edge currency and therefore cannot be reused as
+the implicit canonical Root format.
 
 ## Language and product surfaces
 
@@ -63,8 +65,9 @@ currency and therefore cannot be reused as the implicit canonical Root format.
   package, public native SDK layout, or repo-external installed/shared example.
 - Public-header self-compilation and frozen old-consumer tests exist, but
   package-coordinate and clean-scratch consumption evidence remains open.
-- Architecture authority recorded embedding ABI v1-v3 even though v4 is live;
-  ADR-0120 corrects that factual drift and adds a frozen v4 caller check.
+- Architecture authority now records the implemented embedding ABI v1-v5 and
+  native-storage v1 eleven-capability/forty-operation closure; frozen callers
+  retain every embedding table version.
 
 ## Dependency boundary
 

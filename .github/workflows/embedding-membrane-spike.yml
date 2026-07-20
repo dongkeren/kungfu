@@ -13,6 +13,8 @@ on:
       - "framework/core/src/libkungfu/include/kungfu/native_storage.h"
       - "framework/core/src/libkungfu/src/runtime/embedding.cpp"
       - "framework/core/src/libkungfu/src/runtime/native_storage.cpp"
+      - "framework/core/src/kfd-agent-runtime/**"
+      - "framework/core/tests/qualification/kfd-agent-runtime/**"
       - "framework/core/src/libkungfu/include/kungfu/runtime/durable_ingest.h"
       - "framework/core/src/libkungfu/src/runtime/durable_ingest.cpp"
       - "framework/core/src/libyijinjing/include/kungfu/yijinjing/ownership.h"
@@ -35,6 +37,7 @@ on:
       - "product/scripts/compatibility.test.mjs"
       - "product/scripts/dist.mjs"
       - "scripts/qualify-embedding-membranes.mjs"
+      - "scripts/check-kfd-agent-runtime-boundary.mjs"
       - "scripts/verify.mjs"
       - "package.json"
       - ".github/workflows/embedding-membrane-spike.yml"
@@ -247,3 +250,68 @@ jobs:
         run: |
           Set-Location $env:SOURCE_ROOT
           .\shifu.cmd gate run embedding.membranes --capability native-toolchain --capability rust
+
+      - name: Materialize exact KFD Runtime 100
+        shell: bash
+        env:
+          KFD_SHA: 1f3819f48d30f4fb2d5ebf5931193b0ad97da9fe
+        run: |
+          kfd_root="${RUNNER_TEMP}/kfd-runtime-100"
+          git init "$kfd_root"
+          git -C "$kfd_root" remote add origin https://github.com/kungfu-systems/kfd.git
+          git -C "$kfd_root" fetch --no-tags --depth=1 origin "$KFD_SHA"
+          git -C "$kfd_root" checkout --detach "$KFD_SHA"
+          test "$(git -C "$kfd_root" rev-parse HEAD)" = "$KFD_SHA"
+          echo "KFD_PACKAGE_ROOT=$kfd_root" >> "$GITHUB_ENV"
+
+      - name: Stage exact KFD Agent Runtime artifact
+        shell: bash
+        run: |
+          artifact_dir="${RUNNER_TEMP}/kfd-agent-runtime-artifact"
+          mkdir -p "$artifact_dir"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            adapter_name="kungfu-kfd-agent-runtime.exe"
+            library_pattern="kungfu.dll"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            adapter_name="kungfu-kfd-agent-runtime"
+            library_pattern="libkungfu.dylib"
+          else
+            adapter_name="kungfu-kfd-agent-runtime"
+            library_pattern="libkungfu.so"
+          fi
+          adapter="$(find "$SOURCE_ROOT/framework/core/build" -type f -name "$adapter_name" -print -quit)"
+          library="$(find "$SOURCE_ROOT/framework/core/build" -type f -name "$library_pattern" -print -quit)"
+          test -n "$adapter"
+          test -n "$library"
+          cp "$adapter" "$artifact_dir/$adapter_name"
+          cp "$library" "$artifact_dir/$library_pattern"
+          cp "$SOURCE_ROOT/framework/core/src/kfd-agent-runtime/kfd-agent-runtime.manifest.json" \
+            "$artifact_dir/kfd-agent-runtime.manifest.json"
+          chmod +x "$artifact_dir/$adapter_name"
+          echo "KFD_AGENT_RUNTIME_ADAPTER=$artifact_dir/$adapter_name" >> "$GITHUB_ENV"
+          echo "KFD_AGENT_RUNTIME_ARTIFACT_DIR=$artifact_dir" >> "$GITHUB_ENV"
+
+      - name: Qualify exact artifact against KFD Runtime 100
+        shell: bash
+        run: |
+          report_dir="${RUNNER_TEMP}/kfd-agent-runtime-report"
+          mkdir -p "$report_dir"
+          export KUNGFU_KFD_RUNTIME_DIR="${RUNNER_TEMP}/kfd-agent-runtime.kungfu"
+          # shifu-entry-contract: allow the immutable external KFD checkout to own its conformance runner
+          node "$KFD_PACKAGE_ROOT/bin/kfd.mjs" test agent-runtime \
+            --adapter "$KFD_AGENT_RUNTIME_ADAPTER" \
+            --output "$report_dir/kfd-report.json"
+          # shifu-entry-contract: allow the immutable external KFD checkout to own its independent verifier
+          node "$KFD_PACKAGE_ROOT/bin/kfd.mjs" verify agent-runtime-report \
+            "$report_dir/kfd-report.json" --json \
+            > "$report_dir/kfd-verification-report.json"
+
+      - name: Upload KFD Agent Runtime evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: kfd-agent-runtime-${{ runner.os }}-${{ runner.arch }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/kfd-agent-runtime-artifact
+            ${{ runner.temp }}/kfd-agent-runtime-report
+          if-no-files-found: error
+          retention-days: 30

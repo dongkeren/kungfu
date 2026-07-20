@@ -712,14 +712,14 @@
     {
       "path": ".github/workflows/embedding-membrane-spike.yml",
       "authority": "qualification",
-      "definitionDigest": "sha256:967f8ce44b1470c9134aa07ff373ecb06f822d1276ce36e4ceec3a750a5337db",
+      "definitionDigest": "sha256:d7ff582239a2ea9d3f69c9acf26710b9274a36663286d64b8960931060544a24",
       "jobs": [
         {
           "id": "native-membrane",
           "authority": "qualification",
           "publication": "none",
           "receipt": "diagnostic",
-          "definitionDigest": "sha256:c7cbf9c679a8a8eeae13028be638e8bc32dfcb90ac9839350b187eef4cbd8c2a",
+          "definitionDigest": "sha256:5eed8922f646e7b2f9f4f3208708c19d5f9be336b05fe982be6c5a3598483d1e",
           "credentials": {
             "githubToken": "read",
             "oidc": false,
@@ -729,7 +729,8 @@
           },
           "externalActions": [
             "actions/setup-node@v6.4.0",
-            "actions/download-artifact@v4"
+            "actions/download-artifact@v4",
+            "actions/upload-artifact@v4"
           ],
           "steps": [
             {
@@ -809,6 +810,30 @@
               "label": "name:Build and run membrane consumers (Windows)",
               "authority": "qualification",
               "definitionDigest": "sha256:c46a1f25437849007a71c826c949d8e104b40a49186a277425eee3139d6219f1"
+            },
+            {
+              "index": 14,
+              "label": "name:Materialize exact KFD Runtime 100",
+              "authority": "qualification",
+              "definitionDigest": "sha256:8fd002a7648e401304b5985d25086609fd715da74feed1bfd209e7cf14d58099"
+            },
+            {
+              "index": 15,
+              "label": "name:Stage exact KFD Agent Runtime artifact",
+              "authority": "qualification",
+              "definitionDigest": "sha256:b60b3ad49a8962162073da3a5135f43fd89dd495b0f627df23005e2f7b806db8"
+            },
+            {
+              "index": 16,
+              "label": "name:Qualify exact artifact against KFD Runtime 100",
+              "authority": "qualification",
+              "definitionDigest": "sha256:b66c28aac95c6fe950d2d6f3dc0e802839d28ddc58fb1fb9a8896d3e5a00eb5c"
+            },
+            {
+              "index": 17,
+              "label": "name:Upload KFD Agent Runtime evidence",
+              "authority": "evidence-publication",
+              "definitionDigest": "sha256:9f2b86ecdda52f00effbc01729aae1266e5f62438492f6b2c12ec5f717b098e0"
             }
           ]
         },

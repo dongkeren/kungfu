@@ -63,7 +63,7 @@ for (const symbol of [
   );
 }
 
-for (const version of [1, 2, 3, 4]) {
+for (const version of [1, 2, 3, 4, 5]) {
   assert.match(
     embeddingHeader,
     new RegExp(`KF_EMBEDDING_ABI_V${version}\\s+UINT32_C\\(${version}\\)`),
