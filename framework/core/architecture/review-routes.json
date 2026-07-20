@@ -1,6 +1,6 @@
 {
   "schema": "kungfu.core-review-routes/v1",
-  "authorityRoot": "sha256:1dabbe08dc71c689bd8a5801632cad8dae112909f9c350502858a0460e8fac2c",
+  "authorityRoot": "sha256:a2eeb77f11ea6ef7c1b75ac5ac09f4bdca1c39a52bf0743d0afdf108a6950532",
   "fallbackAccount": "@dongkeren",
   "routes": [
     {
@@ -162,6 +162,7 @@
       "paths": [
         "src/bindings/",
         "src/capability/",
+        "src/kfd-agent-runtime/",
         "src/libkungfu/src/runtime/embedding.cpp",
         "src/libkungfu/src/runtime/projection_bootstrap.cpp",
         "src/libkungfu/src/runtime/storage/domain_dispatch.cpp",

@@ -1166,6 +1166,8 @@ function writeCliManifest(stageRoot, archiveName, layout) {
           kfd3Registry: 'kfd/kfd-3-surfaces.json',
           kfdUpstreamAggregate: 'kfd/upstream-aggregate.json',
           kfdPackage: 'node_modules/@kungfu-tech/kfd/package.json',
+          kfdAgentRuntime: `runtime/${isWin ? 'kungfu-kfd-agent-runtime.exe' : 'kungfu-kfd-agent-runtime'}`,
+          kfdAgentRuntimeManifest: 'runtime/kfd-agent-runtime.manifest.json',
           tui: 'tui/tui.mjs',
           extensions: 'extensions',
           templates: 'templates',
@@ -1430,11 +1432,12 @@ function runInstalledKungfuKfdSmoke({
   kfd3Registry,
   kfdUpstreamAggregate,
   extensionsRoot,
+  env,
 }) {
   const result = spawnSync(kungfuBin, ['kfd', 'status', '--json'], {
     cwd: installRoot,
     env: {
-      ...process.env,
+      ...env,
       KUNGFU_SDK_ENTRY: sdkEntry,
       KUNGFU_KFD3_REGISTRY: kfd3Registry,
       KUNGFU_KFD_UPSTREAM_AGGREGATE: kfdUpstreamAggregate,
@@ -1460,6 +1463,14 @@ function runInstalledKungfuKfdSmoke({
   }
   if (data.standards?.['kfd-3']?.status !== 'supported') {
     throw new Error('installed kungfu kfd status did not report KFD-3 support');
+  }
+  if (
+    data.agentRuntime?.status !== 'available' ||
+    data.agentRuntime?.profile?.id !== 'kfd-agent-runtime'
+  ) {
+    throw new Error(
+      'installed kungfu kfd status did not discover the KFD Agent Runtime adapter',
+    );
   }
 }
 
@@ -1776,6 +1787,16 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           manifest.entries,
           'kfdPackage',
         );
+        const kfdAgentRuntime = entryPath(
+          installRoot,
+          manifest.entries,
+          'kfdAgentRuntime',
+        );
+        const kfdAgentRuntimeManifest = entryPath(
+          installRoot,
+          manifest.entries,
+          'kfdAgentRuntimeManifest',
+        );
         const tuiEntry = entryPath(installRoot, manifest.entries, 'tui');
         const extensionsRoot = entryPath(
           installRoot,
@@ -1814,6 +1835,11 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
         assertFile(kfd3Registry, 'installed KFD-3 registry');
         assertFile(kfdUpstreamAggregate, 'installed KFD upstream aggregate');
         assertFile(kfdPackage, 'installed KFD package metadata');
+        assertFile(kfdAgentRuntime, 'installed KFD Agent Runtime adapter');
+        assertFile(
+          kfdAgentRuntimeManifest,
+          'installed KFD Agent Runtime manifest',
+        );
         assertFile(tuiEntry, 'installed TUI entry');
         assertDirectory(extensionsRoot, 'installed kfx extensions');
         assertDirectory(templatesRoot, 'installed SDK templates');
@@ -1847,6 +1873,8 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           KUNGFU_SDK_ENTRY: sdkEntry,
           KUNGFU_KFD3_REGISTRY: kfd3Registry,
           KUNGFU_KFD_UPSTREAM_AGGREGATE: kfdUpstreamAggregate,
+          KUNGFU_KFD_AGENT_RUNTIME_ADAPTER: kfdAgentRuntime,
+          KUNGFU_KFD_AGENT_RUNTIME_MANIFEST: kfdAgentRuntimeManifest,
           KF_FIRST_PARTY_SOURCE_ROOT: extensionsRoot,
           KUNGFU_ACTION_ENTRY: actionEntry,
           KUNGFU_XINFA_ENTRY: xinfaEngine,
@@ -1875,6 +1903,7 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           kfd3Registry,
           kfdUpstreamAggregate,
           extensionsRoot,
+          env: smokeEnv,
         });
         runInstalledCliSemanticSmoke({
           installRoot,

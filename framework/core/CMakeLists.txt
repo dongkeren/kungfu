@@ -137,6 +137,10 @@ if ("runtime-contracts" IN_LIST KUNGFU_BUILD_COMPONENTS AND
     (NOT DEFINED ENV{KUNGFU_BUILD_SKIP_LIBKUNGFU} OR NOT $ENV{KUNGFU_BUILD_SKIP_LIBKUNGFU}))
   message(STATUS "Enabled libkungfu")
   add_subdirectory(src/libkungfu)
+  if ("c" IN_LIST KUNGFU_BUILD_BINDINGS)
+    message(STATUS "Enabled KFD Agent Runtime adapter")
+    add_subdirectory(src/kfd-agent-runtime)
+  endif()
 endif()
 
 # Public-header self-compilation and frozen old-consumer ABI tests are generated

@@ -53,7 +53,7 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/dev-verify-patrol.yml` | `verify` | qualification | none | qualifying | token:write, oidc | none | 0 |
 | `.github/workflows/docs-check.yml` | `docs-check` | qualification | none | diagnostic | token:read | none | 3 |
 | `.github/workflows/docs-external-links.yml` | `external-links` | qualification | none | diagnostic | token:read, repo-secret:GITHUB_TOKEN | none | 2 |
-| `.github/workflows/embedding-membrane-spike.yml` | `native-membrane` | qualification | none | diagnostic | token:read | none | 13 |
+| `.github/workflows/embedding-membrane-spike.yml` | `native-membrane` | qualification | none | diagnostic | token:read | none | 17 |
 | `.github/workflows/embedding-membrane-spike.yml` | `source-delta` | qualification | none | diagnostic | token:read | none | 3 |
 | `.github/workflows/gate-measurement.yml` | `focused` | qualification | none | diagnostic | token:read | none | 7 |
 | `.github/workflows/gate-measurement.yml` | `measure` | qualification | none | qualifying | token:read | none | 0 |

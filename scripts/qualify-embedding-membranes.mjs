@@ -61,6 +61,7 @@ const buildTargets = [
   'libwasm_shared_membrane_host',
   'kungfu_libwasm_self_test',
   'kungfu_embedding_generic_codec_tests',
+  'kungfu-kfd-agent-runtime',
 ];
 if (process.platform === 'win32') buildTargets.push('kungfu_embedding');
 

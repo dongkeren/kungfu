@@ -249,6 +249,41 @@ function copyLibwasmRuntime() {
   console.log('[freeze] production libwasm host + dual-engine adapters staged');
 }
 
+/** @param {string} bt */
+function copyKfdAgentRuntime(bt) {
+  const buildDir = path.join(CORE, 'build');
+  const distKfc = path.join(CORE, 'dist', 'kungfu');
+  const binaryName = isWin
+    ? 'kungfu-kfd-agent-runtime.exe'
+    : 'kungfu-kfd-agent-runtime';
+  const configured = path.join(buildDir, bt, binaryName);
+  const source = fs.existsSync(configured)
+    ? configured
+    : findFileShallow(
+        buildDir,
+        isWin
+          ? /^kungfu-kfd-agent-runtime\.exe$/i
+          : /^kungfu-kfd-agent-runtime$/,
+      );
+  if (!source) {
+    throw new Error(
+      'production KFD Agent Runtime adapter is absent; rebuild core before freeze',
+    );
+  }
+  fs.copyFileSync(source, path.join(distKfc, binaryName));
+  fs.copyFileSync(
+    path.join(
+      CORE,
+      'src',
+      'kfd-agent-runtime',
+      'kfd-agent-runtime.manifest.json',
+    ),
+    path.join(distKfc, 'kfd-agent-runtime.manifest.json'),
+  );
+  copyPdbSibling(source, distKfc);
+  console.log('[freeze] KFD Agent Runtime adapter staged');
+}
+
 // BFS 查 build 树里首个匹配文件（返回最浅一份，避开 obj/临时深目录里的副本）。
 /**
  * @param {string} root
@@ -685,6 +720,7 @@ function assembleTree(bt) {
   else copyRuntimeNative(bt, distKfc);
   copyAppNative(bt);
   copyLibwasmRuntime();
+  copyKfdAgentRuntime(bt);
   copyConfigContract();
   stageEntry(distKfc, bt);
   generateHelpManifest(layout.python, distKfc);

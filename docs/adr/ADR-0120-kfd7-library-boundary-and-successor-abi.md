@@ -44,7 +44,8 @@ eras:
   but the generic Fact Cut implementation and much of Episode orchestration
   still live in `libkungfu`;
 - `kungfu_embedding_get_api` exposes zero-copy journal reads, diagnostics,
-  generic decoding, checksums, and maintenance plans through ABI v1-v4;
+  generic decoding, checksums, maintenance plans, and read-only storage status
+  through ABI v1-v5;
 - `kungfu_native_storage_get_api` exposes a second bootstrap whose v1 semantic
   currency is an operation name plus JSON; and
 - Python, Node, MJS, CLI, projections, and concrete providers reach overlapping
@@ -138,7 +139,7 @@ identity or operation meaning.
 
 ### 4. Existing bootstraps remain stable compatibility adapters
 
-`kungfu_embedding_get_api` v1-v4 and `kungfu_native_storage_get_api` v1 remain
+`kungfu_embedding_get_api` v1-v5 and `kungfu_native_storage_get_api` v1 remain
 supported symbols. They are not removed, renamed, or reinterpreted in place.
 Their existing table layouts, capability bits, memory rules, and refusal
 behavior remain covered by frozen old-consumer fixtures.
@@ -186,10 +187,12 @@ The reviewed human-readable inventory is
 machine contract records the same ownership, current bootstraps, successor
 interfaces, dependency gates, and readiness states.
 
-One concrete drift is corrected with this decision: the architecture registry
-listed `kungfu_embedding_get_api` only through v3 while the public header and
-implementation already support v4. The registry and frozen old-consumer test
-now cover v4. That correction changes no ABI.
+The original decision corrected registry drift through embedding v4. The
+current implementation has since added the read-only storage-status surface as
+v5, and native-storage v1 now advertises eleven capability bits and forty
+bounded operation names. The registry, inventory, and frozen old-consumer test
+record that implemented state without promoting the planned successor
+bootstrap or making JSON canonical Root currency.
 
 ## Falsification and qualification
 
@@ -218,8 +221,9 @@ protocol/root/receipt comparisons where the surface claims portability.
 ## Version impact
 
 The boundary and machine contract are additive documentation and architecture
-authority. Correcting the recorded embedding version from v1-v3 to v1-v4
-matches the already implemented public ABI and is non-breaking.
+authority. Recording embedding v5 and the expanded native-storage v1
+capability/operation inventory matches the already implemented public ABI and
+is non-breaking.
 
 `kungfu_get_api` and its responsibility-scoped interfaces are a planned
 successor surface. They do not become stable until implemented, exported,

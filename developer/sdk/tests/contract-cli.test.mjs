@@ -369,6 +369,21 @@ test('kfd status exposes KFD-1/2/3/4 support facts', () => {
   assert.equal(data.standards['kfd-3'].status, 'supported');
   assert.equal(data.standards['kfd-4'].status, 'schema-only');
   assert.ok(data.standards['kfd-4'].schemaCount >= 1);
+  assert.equal(data.agentRuntime.profile.id, 'kfd-agent-runtime');
+  assert.equal(data.agentRuntime.suite.id, 'kfd-runtime-100');
+  assert.match(data.agentRuntime.suite.vectorRoot, /^sha256:[0-9a-f]{64}$/);
+});
+
+test('kfd agent-runtime exposes bounded adapter and report discovery', () => {
+  const data = runJson(['kfd', 'agent-runtime', 'status', '--json']);
+  assert.equal(data.contract, 'kungfu.sdk.kfd-agent-runtime-status/v1');
+  assert.equal(data.profile.version, '0.1.0-alpha.1');
+  assert.equal(data.suite.vectorCount, 100);
+  assert.equal(data.runtimeBoundary.embeddingAbi, 5);
+  assert.equal(data.runtimeBoundary.nativeStorageAbi, 1);
+  assert.equal(data.runtimeBoundary.languageHosts, 0);
+  assert.equal(data.latestReport.status, 'not-provided');
+  assert.ok(data.nonClaims.includes('industry-standard-adoption'));
 });
 
 test('kfd standard commands expose KFD-1, KFD-2, and KFD-4 facts', () => {

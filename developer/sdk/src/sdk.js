@@ -93,6 +93,7 @@ const SDK_KFD2_CLAIM_ARGS = path.join(
   'kfd-2',
   'buildchain-claim-args.txt',
 );
+const KFD_AGENT_RUNTIME_MANIFEST = 'kfd-agent-runtime.manifest.json';
 const isWin = process.platform === 'win32';
 
 /**
@@ -118,6 +119,7 @@ function usage(code) {
       '       kungfu sdk kfd 1 status|schema|witness|gate|verify [--json]',
       '       kungfu sdk kfd 2 status|schema|claims|trust-claims|trust-assessment [--json]',
       '       kungfu sdk kfd 4 status|schema [--json]',
+      '       kungfu sdk kfd agent-runtime status [--json]',
       '       kungfu sdk kfd query|check|witness|upstream|aggregate [--json]',
       '       kungfu sdk kfx build | clean',
       '       kungfu sdk product gui dev|build|pack|dist [--dir <app-dir>] [--dry-run]',
@@ -163,7 +165,9 @@ function usage(code) {
       'standard keys or JSON formatting rules.',
       '',
       'kfd status/schema and kfd 1/2/4 expose Kungfu KFD-1 contract-world,',
-      'KFD-2 release-claim, KFD-3 capability, and KFD-4 schema-only facts.',
+      'KFD-2 release-claim, KFD-3 capability, and KFD-4 schema-only facts;',
+      'kfd agent-runtime exposes the installed reference adapter, exact profile,',
+      'suite root, and an explicitly supplied latest report without self-certifying it.',
       'query/check/witness keep the existing KFD-3 capability query behavior;',
       'upstream and aggregate expose the SDK-packaged KFD view of Kungfu plus',
       'upstream KFD/libnode/Buildchain package facts, without a separate',
@@ -3060,6 +3064,107 @@ function readKfd2ClaimsDocument() {
   };
 }
 
+function resolveKfdAgentRuntimeManifest() {
+  const candidates = [
+    process.env.KUNGFU_KFD_AGENT_RUNTIME_MANIFEST || '',
+    path.resolve(SDK_ROOT, '..', 'runtime', KFD_AGENT_RUNTIME_MANIFEST),
+    path.resolve(
+      SDK_ROOT,
+      '..',
+      '..',
+      'framework',
+      'core',
+      'dist',
+      'kungfu',
+      KFD_AGENT_RUNTIME_MANIFEST,
+    ),
+    path.resolve(
+      SDK_ROOT,
+      '..',
+      '..',
+      'framework',
+      'core',
+      'src',
+      'kfd-agent-runtime',
+      KFD_AGENT_RUNTIME_MANIFEST,
+    ),
+  ].filter(Boolean);
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!found) {
+    fail(
+      'KFD Agent Runtime manifest not found; set KUNGFU_KFD_AGENT_RUNTIME_MANIFEST',
+    );
+  }
+  return found;
+}
+
+function buildKfdAgentRuntimeStatus() {
+  const manifestPath = resolveKfdAgentRuntimeManifest();
+  const manifest = /** @type {Record<string, any>} */ (readJson(manifestPath));
+  const adapterName = `${manifest.adapter.basename}${isWin ? '.exe' : ''}`;
+  const adapterCandidates = [
+    process.env.KUNGFU_KFD_AGENT_RUNTIME_ADAPTER || '',
+    path.join(path.dirname(manifestPath), adapterName),
+    path.resolve(
+      SDK_ROOT,
+      '..',
+      '..',
+      'framework',
+      'core',
+      'dist',
+      'kungfu',
+      adapterName,
+    ),
+  ].filter(Boolean);
+  const adapterPath =
+    adapterCandidates.find((candidate) => fs.existsSync(candidate)) || '';
+  const reportPath = process.env.KUNGFU_KFD_AGENT_RUNTIME_REPORT || '';
+  const report =
+    reportPath && fs.existsSync(reportPath)
+      ? /** @type {Record<string, any>} */ (readJson(reportPath))
+      : null;
+  return {
+    schemaVersion: 1,
+    contract: 'kungfu.sdk.kfd-agent-runtime-status/v1',
+    status: adapterPath ? 'available' : 'manifest-only',
+    manifest: {
+      path: path.relative(process.cwd(), manifestPath) || '.',
+      sha256: sha256File(manifestPath),
+    },
+    adapter: {
+      available: Boolean(adapterPath),
+      basename: adapterName,
+      ...(adapterPath
+        ? {
+            path: path.relative(process.cwd(), adapterPath) || '.',
+            sha256: sha256File(adapterPath),
+          }
+        : {}),
+    },
+    profile: manifest.profile,
+    suite: manifest.suite,
+    runtimeBoundary: manifest.runtimeBoundary,
+    languageProjection: manifest.languageProjection,
+    latestReport: report
+      ? {
+          status: 'provided',
+          path: path.relative(process.cwd(), reportPath) || '.',
+          sha256: sha256File(reportPath),
+          valid: report.valid === true,
+          qualifying: report.qualifying === true,
+          selfCertified: report.selfCertified === true,
+          adapterDigest: report.adapter?.artifactDigest || '',
+          resultRoot: report.execution?.resultRoot || '',
+        }
+      : {
+          status: 'not-provided',
+          environment: manifest.conformance.latestReportEnvironment,
+        },
+    claim: manifest.conformance.claim,
+    nonClaims: manifest.conformance.nonClaims,
+  };
+}
+
 /**
  * @param {Record<string, any>} registry
  * @param {string} registryPath
@@ -3159,7 +3264,9 @@ function buildKfdStandardsStatus(registry, registryPath, aggregate) {
       ],
       'kfd-3': ['query', 'check', 'witness', 'aggregate'],
       'kfd-4': ['status', 'schema'],
+      'agent-runtime': ['status'],
     },
+    agentRuntime: buildKfdAgentRuntimeStatus(),
     buildchainStatus: collectKfdStatus({ cwd: process.cwd() }),
   };
 }
@@ -3328,6 +3435,22 @@ async function kfd(command, args, options) {
     if (options.json)
       process.stdout.write(`${JSON.stringify(schema, null, 2)}\n`);
     else process.stdout.write(`${JSON.stringify(schema.schema, null, 2)}\n`);
+    return;
+  }
+  if (
+    ['agent-runtime', 'runtime'].includes(String(command || '').toLowerCase())
+  ) {
+    const action = args[0] || 'status';
+    if (action !== 'status') {
+      fail('unknown kfd agent-runtime command (supported: status)');
+    }
+    const status = buildKfdAgentRuntimeStatus();
+    if (options.json)
+      process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+    else
+      process.stdout.write(
+        `Kungfu KFD Agent Runtime: ${status.status}, profile=${status.profile.id}@${status.profile.version}\n`,
+      );
     return;
   }
   if (['1', 'kfd-1'].includes(String(command || '').toLowerCase())) {
@@ -3558,7 +3681,7 @@ async function kfd(command, args, options) {
     return;
   }
   fail(
-    'unknown kfd command (supported: status, schema, 1, 2, 4, query, check, witness, upstream, aggregate)',
+    'unknown kfd command (supported: status, schema, 1, 2, 4, agent-runtime, query, check, witness, upstream, aggregate)',
   );
 }
 
