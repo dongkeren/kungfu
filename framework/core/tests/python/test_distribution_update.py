@@ -8,6 +8,7 @@ import hashlib
 import importlib
 import io
 import json
+import platform
 import subprocess
 import sys
 import tarfile
@@ -1427,7 +1428,17 @@ def test_local_dogfood_residency_binds_product_mainline_profile_and_rollback(
     tmp_path: Path,
 ) -> None:
     commit = "a" * 40
-    registry = tmp_path / ".cache/kungfu/product/macos-aarch64"
+    arch = {
+        "arm64": "aarch64",
+        "aarch64": "aarch64",
+        "x64": "x86_64",
+        "x86_64": "x86_64",
+        "amd64": "x86_64",
+    }.get(platform.machine().lower(), platform.machine().lower())
+    os_name = {"Darwin": "macos", "Linux": "linux", "Windows": "windows"}.get(
+        platform.system(), platform.system().lower()
+    )
+    registry = tmp_path / ".cache/kungfu/product" / f"{os_name}-{arch}"
     artifact = tmp_path / "Applications/Kungfu Episodes.app"
     runtime = artifact / "Contents/Resources/kungfu"
     upgrade = artifact / "Contents/Resources/upgrade/kungfu-release-manifest.json"
