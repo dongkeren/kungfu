@@ -396,6 +396,19 @@ def query_federation(
                             "workspace_identity_root": root,
                         }
                     )
+        for problem in component.get("problems", []):
+            if problem.get("code") != "unresolved-assignment-dependency":
+                continue
+            unresolved.append(
+                {
+                    "code": problem["code"],
+                    "workspace_identity_root": component["workspace"].get(
+                        "identity_root"
+                    ),
+                    "assignment_subject": problem.get("assignment_subject"),
+                    "dependency_id": problem.get("dependency_id"),
+                }
+            )
 
     if scope == "all":
         projected_roots = {
@@ -647,6 +660,19 @@ def _load_component(identity: WorkspaceIdentity) -> dict[str, Any]:
         "fact_versions": fact_versions,
     }
     root = semantic_root(body)
+    problems = [
+        {
+            "code": "unresolved-assignment-dependency",
+            "assignment_subject": str(
+                row.get("sealed_identity", {}).get("subject_key")
+                or row.get("subject_key")
+                or ""
+            ),
+            "dependency_id": dependency,
+        }
+        for row in assignments
+        for dependency in row.get("unresolved_dependency_ids", [])
+    ]
     return {
         "availability": "available",
         "stale": False,
@@ -666,7 +692,7 @@ def _load_component(identity: WorkspaceIdentity) -> dict[str, Any]:
             for row in assignments
         ],
         "relations": relations,
-        "problems": [],
+        "problems": problems,
     }
 
 
