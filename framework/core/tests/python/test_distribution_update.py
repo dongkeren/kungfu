@@ -11,6 +11,7 @@ import json
 import subprocess
 import sys
 import tarfile
+import time
 import types
 import zipfile
 from pathlib import Path
@@ -1420,6 +1421,106 @@ def test_cli_status_explains_frontend_runtime_and_no_daemon(tmp_path: Path) -> N
     assert payload["frontendVersion"] == "4.0.0-alpha.0"
     assert payload["installSource"]["source"] == "archive"
     assert payload["backgroundUpdater"] is False
+
+
+def test_local_dogfood_residency_binds_product_mainline_profile_and_rollback(
+    tmp_path: Path,
+) -> None:
+    commit = "a" * 40
+    registry = tmp_path / ".cache/kungfu/product/macos-aarch64"
+    artifact = tmp_path / "Applications/Kungfu Episodes.app"
+    runtime = artifact / "Contents/Resources/kungfu"
+    upgrade = artifact / "Contents/Resources/upgrade/kungfu-release-manifest.json"
+    rollback = registry / "previous-build"
+    runtime.mkdir(parents=True)
+    upgrade.parent.mkdir(parents=True)
+    rollback.mkdir(parents=True)
+    (rollback / "meta.env").write_text("KUNGFU_BUILD_SHA='old'\n", encoding="utf-8")
+    (runtime / "kungfubuildinfo.json").write_text(
+        json.dumps(
+            {
+                "version": "4.0.0-alpha.1",
+                "git": {
+                    "revision": commit,
+                    "branch": "dev/v4/v4.0",
+                    "pristine": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime / "profile-kfd3.json").write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "profileId": "kungfu.mission-control",
+                        "profileSuiteRoot": "sha256:" + "b" * 64,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    upgrade.write_text(
+        json.dumps(
+            {
+                "schema": "kungfu.product-upgrade.manifest/v1",
+                "sourceCommit": commit,
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry.mkdir(parents=True, exist_ok=True)
+    (registry / "installed.meta.env").write_text(
+        "\n".join(
+            [
+                f"KUNGFU_INSTALLED_SHA='{commit}'",
+                "KUNGFU_INSTALLED_BUILD_ID='current-build'",
+                f"KUNGFU_INSTALLED_ARTIFACT='{artifact}'",
+                "KUNGFU_INSTALLED_DIGEST='sha256:" + "c" * 64 + "'",
+                "KUNGFU_INSTALLED_MAINLINE_REF='origin/dev/v4/v4.0'",
+                f"KUNGFU_INSTALLED_MAINLINE_SHA='{commit}'",
+                "KUNGFU_INSTALLED_INTEGRATED='true'",
+                "KUNGFU_INSTALLED_QUALIFIED='true'",
+                "KUNGFU_ROLLBACK_BUILD_ID='previous-build'",
+                "KUNGFU_ROLLBACK_SHA='" + "d" * 40 + "'",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (registry / "last-promotion.json").write_text(
+        json.dumps(
+            {
+                "schema": "shifu.local-promotion-receipt/v1",
+                "product": "kungfu",
+                "action": "promote",
+                "artifactId": "current-build",
+                "toCommit": commit,
+                "occurredAt": int(time.time()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    status = distribution_update.local_dogfood_residency(
+        {
+            "HOME": str(tmp_path),
+            "KUNGFU_DIR": str(runtime),
+            "KUNGFU_UPGRADE_MANIFEST": str(upgrade),
+            "KUNGFU_CONTROLLER_ENTRYPOINT": "/usr/local/bin/kungfu",
+        }
+    )
+
+    assert status["state"] == "qualified"
+    assert status["sourceCommit"] == commit
+    assert status["mainline"]["integrated"] is True
+    assert status["controllerProfileRoots"] == ["sha256:" + "b" * 64]
+    assert status["rollback"]["available"] is True
+    assert status["qualification"]["promotionMatches"] is True
+    assert status["freshness"]["state"] == "fresh"
+    assert status["writes"] == []
 
 
 def test_cli_package_manager_download_returns_one_external_action(
