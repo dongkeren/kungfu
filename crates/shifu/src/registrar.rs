@@ -423,20 +423,27 @@ pub fn register(root: &Path, plan: &DistributionPlan) {
         return;
     };
 
-    let sha = git(root, &["rev-parse", "--short=9", "HEAD"]);
+    let sha = git(root, &["rev-parse", "HEAD"]);
     let sha = if sha.is_empty() {
         "unknown".to_string()
     } else {
         sha
     };
     let dirty = !git(root, &["status", "--porcelain", "--untracked-files=no"]).is_empty();
-    let fingerprint = if dirty { format!("{sha}-dirty") } else { sha };
+    let (build_sha, slot_fingerprint) = build_identifiers(&sha, dirty);
     let branch = git(root, &["rev-parse", "--abbrev-ref", "HEAD"]);
     let branch = if branch.is_empty() {
         "unknown".to_string()
     } else {
         branch
     };
+    let mainline_ref = "origin/dev/v4/v4.0";
+    let mainline_sha = git(root, &["rev-parse", mainline_ref]);
+    let integrated = sha != "unknown"
+        && !dirty
+        && !mainline_sha.is_empty()
+        && sha == mainline_sha
+        && git_success(root, &["merge-base", "--is-ancestor", &sha, mainline_ref]);
     let repo = git(root, &["worktree", "list", "--porcelain"])
         .lines()
         .find_map(|line| line.strip_prefix("worktree "))
@@ -445,8 +452,11 @@ pub fn register(root: &Path, plan: &DistributionPlan) {
     let (stamp, built_at) = utc_now();
 
     let registry = registry_dir(&plan.product_id);
-    let slot = registry.join(format!("{stamp}-{fingerprint}"));
-    let staging = registry.join(format!("{stamp}-{fingerprint}.tmp-{}", std::process::id()));
+    let slot = registry.join(format!("{stamp}-{slot_fingerprint}"));
+    let staging = registry.join(format!(
+        "{stamp}-{slot_fingerprint}.tmp-{}",
+        std::process::id()
+    ));
     if let Err(e) = fs::create_dir_all(&staging) {
         warn(&format!("cannot create {}: {e}", staging.display()));
         return;
@@ -465,7 +475,7 @@ pub fn register(root: &Path, plan: &DistributionPlan) {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     let mut meta = vec![
-        format!("KUNGFU_BUILD_SHA={}", quote(&fingerprint)),
+        format!("KUNGFU_BUILD_SHA={}", quote(&build_sha)),
         format!("KUNGFU_BUILD_BRANCH={}", quote(&branch)),
         format!("KUNGFU_BUILD_REPO={}", quote(&repo)),
         format!(
@@ -476,6 +486,16 @@ pub fn register(root: &Path, plan: &DistributionPlan) {
         format!("KUNGFU_BUILD_KIND={}", quote(&primary.kind)),
         format!("KUNGFU_BUILD_ARTIFACT={}", quote(&primary_name)),
         format!("KUNGFU_BUILD_SURFACE={}", quote(&plan.surface_id)),
+        format!("KUNGFU_BUILD_MAINLINE_REF={}", quote(mainline_ref)),
+        format!("KUNGFU_BUILD_MAINLINE_SHA={}", quote(&mainline_sha)),
+        format!(
+            "KUNGFU_BUILD_INTEGRATED={}",
+            quote(if integrated { "true" } else { "false" })
+        ),
+        format!(
+            "KUNGFU_BUILD_QUALIFIED={}",
+            quote(if integrated { "true" } else { "false" })
+        ),
     ];
     if !primary_sha.is_empty() {
         meta.push(format!("KUNGFU_BUILD_SHA256={}", quote(primary_sha)));
@@ -533,11 +553,36 @@ fn git(root: &Path, args: &[&str]) -> String {
         .unwrap_or_default()
 }
 
+fn git_success(root: &Path, args: &[&str]) -> bool {
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 /// meta.env values use the build-local.env single-quote shape; single quotes
 /// cannot be escaped in it, so they are stripped (same rule as the historical
 /// register script).
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', ""))
+}
+
+/// Keep registry directory names compact without truncating the provenance
+/// identity consumed by `shifu promote`.
+fn build_identifiers(sha: &str, dirty: bool) -> (String, String) {
+    let short_sha = sha.get(..sha.len().min(9)).unwrap_or(sha);
+    if dirty {
+        (format!("{sha}-dirty"), format!("{short_sha}-dirty"))
+    } else {
+        (sha.to_string(), short_sha.to_string())
+    }
 }
 
 /// Copy an artifact preserving what its platform requires: `ditto` on macOS
@@ -682,6 +727,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn build_metadata_preserves_full_revision_while_slot_name_stays_compact() {
+        let sha = "9bc84c97c9ce6120dd68a296c46298b361f3a034";
+        assert_eq!(
+            build_identifiers(sha, false),
+            (sha.to_string(), "9bc84c97c".to_string())
+        );
+        assert_eq!(
+            build_identifiers(sha, true),
+            (format!("{sha}-dirty"), "9bc84c97c-dirty".to_string())
+        );
+    }
+
+    #[test]
     fn register_stashes_declared_artifact() {
         // The only test that touches XDG_CACHE_HOME: registration must land
         // in the isolated cache, write a promote-compatible meta.env, and
@@ -728,6 +786,9 @@ mod tests {
         assert!(meta.contains("KUNGFU_BUILD_SURFACE='kungfu.product.release-build'"));
         // No git repo at the temp root: fingerprint degrades honestly.
         assert!(meta.contains("KUNGFU_BUILD_SHA='unknown'"));
+        assert!(meta.contains("KUNGFU_BUILD_MAINLINE_REF='origin/dev/v4/v4.0'"));
+        assert!(meta.contains("KUNGFU_BUILD_INTEGRATED='false'"));
+        assert!(meta.contains("KUNGFU_BUILD_QUALIFIED='false'"));
         // Content hash of b"artifact-bytes", recorded for provenance.
         assert!(meta.contains(
             "KUNGFU_BUILD_SHA256='6521df166eb07efaf36eba5b6bedefd9d6a252e9c80bab1c99653700ec71473c'"
