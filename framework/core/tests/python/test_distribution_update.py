@@ -1518,6 +1518,12 @@ def test_local_dogfood_residency_binds_product_mainline_profile_and_rollback(
     assert status["mainline"]["integrated"] is True
     assert status["controllerProfileRoots"] == ["sha256:" + "b" * 64]
     assert status["rollback"]["available"] is True
+    assert status["rollback"]["checkCommand"] == [
+        "shifu",
+        "promote",
+        "--rollback",
+        "--check",
+    ]
     assert status["qualification"]["promotionMatches"] is True
     assert status["freshness"]["state"] == "fresh"
     assert status["writes"] == []

@@ -608,9 +608,7 @@ def local_dogfood_residency(
             "sourceCommit": installed.get("KUNGFU_ROLLBACK_SHA") or None,
             "available": rollback_available,
             "checkCommand": (
-                ["shifu", "promote", "--build", rollback_id, "--check"]
-                if rollback_id
-                else None
+                ["shifu", "promote", "--rollback", "--check"] if rollback_id else None
             ),
         },
         "freshness": {

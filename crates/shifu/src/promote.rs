@@ -241,6 +241,16 @@ fn rollback_entry_valid(registry: &Path, build_id: &str, sha: &str) -> bool {
         && slot.join(artifact).exists()
 }
 
+fn rollback_build<'a>(
+    entries: &'a [BuildEntry],
+    build_id: &str,
+    sha: &str,
+) -> Option<&'a BuildEntry> {
+    entries
+        .iter()
+        .find(|entry| entry.name == build_id && entry.sha == sha)
+}
+
 fn schema_kind(entry: &BuildEntry) -> &str {
     if matches!(entry.kind.as_str(), "app" | "installer" | "appimage") {
         &entry.kind
@@ -367,8 +377,8 @@ fn write_installed_receipt(
          KUNGFU_INSTALLED_DIGEST='{}'\n\
          KUNGFU_INSTALLED_MAINLINE_REF='{}'\n\
          KUNGFU_INSTALLED_MAINLINE_SHA='{}'\n\
-         KUNGFU_INSTALLED_INTEGRATED='true'\n\
-         KUNGFU_INSTALLED_QUALIFIED='true'\n\
+         KUNGFU_INSTALLED_INTEGRATED='{}'\n\
+         KUNGFU_INSTALLED_QUALIFIED='{}'\n\
          KUNGFU_ROLLBACK_BUILD_ID='{}'\n\
          KUNGFU_ROLLBACK_SHA='{}'\n",
         entry.sha,
@@ -380,6 +390,8 @@ fn write_installed_receipt(
         entry.digest,
         entry.mainline_ref,
         entry.mainline_sha,
+        entry.integrated,
+        entry.qualified,
         rollback_build_id,
         rollback_sha,
     );
@@ -471,6 +483,7 @@ pub fn run_promote(args: &[String]) -> ! {
     let mut launch = false;
     let mut force = false;
     let mut check = false;
+    let mut rollback = false;
     let mut allow_nonlinear = false;
     let mut build_arg: Option<String> = None;
     let mut iter = args.iter();
@@ -479,6 +492,7 @@ pub fn run_promote(args: &[String]) -> ! {
             "--launch" => launch = true,
             "--force" => force = true,
             "--check" => check = true,
+            "--rollback" => rollback = true,
             "--allow-nonlinear" => allow_nonlinear = true,
             "--build" => match iter.next() {
                 Some(value) => build_arg = Some(value.clone()),
@@ -493,19 +507,39 @@ pub fn run_promote(args: &[String]) -> ! {
         no_builds_hint();
     }
     let installed = installed_sha();
-    let entry = select_product_build(&entries, &installed, build_arg.as_deref(), allow_nonlinear);
     let previous_build_id = installed_value("KUNGFU_INSTALLED_BUILD_ID");
-    if !rollback_entry_valid(&registry_dir(), &previous_build_id, &installed) {
+    let rollback_build_id = installed_value("KUNGFU_ROLLBACK_BUILD_ID");
+    let rollback_sha = installed_value("KUNGFU_ROLLBACK_SHA");
+    if rollback && (build_arg.is_some() || allow_nonlinear) {
         util::die(
-            "installed Product has no verified rollback coordinate; refusing dogfood promotion",
+            "--rollback identifies the exact retained Product; do not combine it with \
+             --build or --allow-nonlinear",
         );
     }
+    let entry = if rollback {
+        if !rollback_entry_valid(&registry_dir(), &rollback_build_id, &rollback_sha) {
+            util::die("installed Product has no verified rollback coordinate");
+        }
+        rollback_build(&entries, &rollback_build_id, &rollback_sha).unwrap_or_else(|| {
+            util::die("verified rollback Product is absent from the local registry")
+        })
+    } else {
+        if !rollback_entry_valid(&registry_dir(), &previous_build_id, &installed) {
+            util::die(
+                "installed Product has no verified rollback coordinate; refusing dogfood promotion",
+            );
+        }
+        select_product_build(&entries, &installed, build_arg.as_deref(), allow_nonlinear)
+    };
+    let action = if rollback { "rollback" } else { "promote" };
     if check {
         println!(
             "{{\"schema\":\"shifu.local-promotion-plan/v1\",\"ok\":true,\
+             \"action\":\"{}\",\
              \"artifactId\":\"{}\",\"sourceCommit\":\"{}\",\"mainlineRef\":\"{}\",\
              \"mainlineCommit\":\"{}\",\"qualified\":{},\"integrated\":{},\
              \"currentCommit\":\"{}\",\"wouldWrite\":false}}",
+            action,
             json_escape(&entry.name),
             json_escape(&entry.sha),
             json_escape(&entry.mainline_ref),
@@ -519,8 +553,15 @@ pub fn run_promote(args: &[String]) -> ! {
     eprintln!(
         "\u{1f94b} {}",
         style::bold(&format!(
-            "promoting dev build {} ({} @ {})",
-            entry.name, entry.sha, entry.branch
+            "{} dev build {} ({} @ {})",
+            if rollback {
+                "rolling back to"
+            } else {
+                "promoting"
+            },
+            entry.name,
+            entry.sha,
+            entry.branch
         ))
     );
 
@@ -533,7 +574,7 @@ pub fn run_promote(args: &[String]) -> ! {
 
     eprintln!(
         "\u{2705} {} {}",
-        style::green("promoted"),
+        style::green(if rollback { "rolled back" } else { "promoted" }),
         style::bold(&installed.display().to_string())
     );
     let previous_sha = installed_sha();
@@ -542,7 +583,7 @@ pub fn run_promote(args: &[String]) -> ! {
     if let Err(error) = write_promotion_receipt(
         &registry_dir(),
         "kungfu",
-        "promote",
+        action,
         &entry.name,
         &previous_sha,
         &entry.sha,
@@ -563,7 +604,7 @@ pub fn run_promote(args: &[String]) -> ! {
 }
 
 const PROMOTE_USAGE: &str =
-    "usage: shifu promote [--build <id> [--allow-nonlinear]] [--check] [--launch] [--force]";
+    "usage: shifu promote [--build <id> [--allow-nonlinear] | --rollback] [--check] [--launch] [--force]";
 
 /// Install target: KUNGFU_PRODUCT_INSTALL_DIR > platform default (falling
 /// back to a per-user location when the default is not writable).
@@ -832,6 +873,22 @@ mod tests {
             "prior-build",
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         ));
+        let mut entry = qualified_app(&slot);
+        entry.name = "prior-build".into();
+        entry.sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into();
+        let entries = vec![entry];
+        assert!(rollback_build(
+            &entries,
+            "prior-build",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        .is_some());
+        assert!(rollback_build(
+            &entries,
+            "prior",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        .is_none());
         let _ = fs::remove_dir_all(root);
     }
 }
