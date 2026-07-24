@@ -9,11 +9,11 @@ import {
 export const packageIdentity = Object.freeze({
   key: 'github-webhook-ingress',
   version: '0.1.0',
-  productVersion: '4.0.0-alpha.1',
+  productVersion: '4.0.0-alpha.2',
   kitRoot:
-    'sha256:16eee9fafca2422a613dcb3217689ca03d8b04d51f26b5666eef9af432df9da2',
+    'sha256:36486ad8eb493de96f551089191e2ccf130c638ee44194a36d6f58d8a2f12ca6',
   sdkRoot:
-    'sha256:8afedffb614388b70d7fcb2744bcb34a4eeb167e2b766f301a8df5a62e3a6c68',
+    'sha256:2dc5182cd834d7e0597277af523d2196509b7e1583d6a62b70a25874f5c69fce',
 });
 
 export const declaration = Object.freeze({
