@@ -6,8 +6,10 @@
 // implements (env, prewarm), it interprets nothing and execs the assembled
 // interpreter on `-m kungfu`, so the domain CLI remains the single source of
 // truth for its own surface. The assembled interpreter is a real
-// sys.executable; no PYTHON* staging is needed (the tree carries its own
-// kungfu-host.json marker and site-packages wiring).
+// sys.executable; no Python search-path staging is needed (the tree carries its
+// own kungfu-host.json marker and site-packages wiring). The trunk still owns
+// the external-bytecode boundary because product callers may invoke it without
+// the outer desktop CLI wrapper.
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -196,19 +198,28 @@ fn tree_python() -> Result<PathBuf, String> {
     Ok(python)
 }
 
-/// Exec the assembled interpreter on `-m kungfu` with the caller's arguments,
-/// verbatim. Unix replaces the process; Windows waits and mirrors the exit
-/// code (no exec semantics there).
-pub fn launch(args: &[String]) -> Result<(), String> {
-    let python = tree_python()?;
-    let cache = python_cache_environment()?;
-    let mut command = Command::new(&python);
+fn product_python_command(
+    python: &Path,
+    args: &[String],
+    cache: &PythonCacheEnvironment,
+) -> Command {
+    let mut command = Command::new(python);
     command
         .env("KF_CACHE_HOME", &cache.cache_home)
         .env("PYTHONPYCACHEPREFIX", &cache.pycache_prefix)
         .arg("-m")
         .arg("kungfu")
         .args(args);
+    command
+}
+
+/// Exec the assembled interpreter on `-m kungfu` with the caller's arguments,
+/// verbatim. Unix replaces the process; Windows waits and mirrors the exit
+/// code (no exec semantics there).
+pub fn launch(args: &[String]) -> Result<(), String> {
+    let python = tree_python()?;
+    let cache = python_cache_environment()?;
+    let mut command = product_python_command(&python, args, &cache);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -323,5 +334,41 @@ mod tests {
         );
         assert!(runtime_build_id_from_json(r#"{"runtimeBuildId":"../escape"}"#).is_err());
         assert!(runtime_build_id_from_json(r#"{"version":"4.0.0"}"#).is_err());
+    }
+
+    #[test]
+    fn product_python_dispatch_externalizes_signed_tree_bytecode_writes() {
+        let args = vec!["dogfood".to_string(), "doctor".to_string()];
+        let cache = PythonCacheEnvironment {
+            cache_home: PathBuf::from("/cache/kungfu"),
+            pycache_prefix: PathBuf::from("/cache/kungfu/python/runtime-1"),
+        };
+        let command = product_python_command(Path::new("/product/python3"), &args, &cache);
+
+        assert_eq!(command.get_program(), OsStr::new("/product/python3"));
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            ["-m", "kungfu", "dogfood", "doctor"].map(OsStr::new)
+        );
+        assert_eq!(
+            command
+                .get_envs()
+                .find(|(name, _)| *name == OsStr::new("KF_CACHE_HOME"))
+                .and_then(|(_, value)| value),
+            Some(OsStr::new("/cache/kungfu"))
+        );
+        assert_eq!(
+            command
+                .get_envs()
+                .find(|(name, _)| *name == OsStr::new("PYTHONPYCACHEPREFIX"))
+                .and_then(|(_, value)| value),
+            Some(OsStr::new("/cache/kungfu/python/runtime-1"))
+        );
+        assert_eq!(
+            command
+                .get_envs()
+                .find(|(name, _)| *name == OsStr::new("PYTHONDONTWRITEBYTECODE")),
+            None
+        );
     }
 }

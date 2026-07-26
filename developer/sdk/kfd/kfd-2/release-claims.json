@@ -38,7 +38,7 @@
           "pointer": {
             "kind": "file",
             "path": "framework/core/src/python/kungfu/agent/cli_surface.catalog.json",
-            "sha256": "b2b6e8073305df3a247e11cab626d3767ce1d443e230962befe00256f21404c8"
+            "sha256": "9f2f17fca5aa4e4daa28a276c1e3a153fa263e791b497f7ea83a93796f7aeb1f"
           },
           "description": "Complete deterministic CLI surface graph shared by offline Agent capabilities and catalog parity checks."
         },
@@ -265,7 +265,7 @@
           "pointer": {
             "kind": "file",
             "path": "docs/adr/KF-ADR-019f86da-4f90-786d-aa24-a97705e13917.md",
-            "sha256": "878eb58ddf85aa825ce375f4eb2c14e28470bd8f9c2a0ad6beb2baf1696d7489"
+            "sha256": "427f0628e9fd87ce70a1f67db0c71489e7f5f74812a203ea29c117405a1bfbee"
           },
           "description": "Accepted role-separation decision and bounded P17 qualification boundary."
         },
