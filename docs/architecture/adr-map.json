@@ -5857,9 +5857,9 @@
       "theme": "",
       "domain": "runtime",
       "decisionStatus": "accepted",
-      "implementationStatus": "not-started",
+      "implementationStatus": "implemented",
       "reviewState": "self-reviewed",
-      "qualificationRefCount": 0,
+      "qualificationRefCount": 4,
       "authoritativeRelations": [],
       "inferredNavigationNeighbors": [
         "KF-ADR-019f86da-4f90-7718-8d1f-6402a87408a7",
