@@ -609,6 +609,14 @@ function assertSafeGeneratedDir(dir) {
   }
 }
 
+export function isPythonBytecodePath(value) {
+  const normalized = value.replaceAll('\\', '/');
+  return (
+    normalized.split('/').includes('__pycache__') ||
+    normalized.toLowerCase().endsWith('.pyc')
+  );
+}
+
 function copyPackageDir(source, target) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.cpSync(source, target, {
@@ -620,7 +628,7 @@ function copyPackageDir(source, target) {
         base === 'node_modules' ||
         base === 'build' ||
         base === '.venv' ||
-        base === '__pycache__' ||
+        isPythonBytecodePath(src) ||
         base === '.DS_Store'
       ) {
         return false;
@@ -954,13 +962,10 @@ function copyTree(source, target, options = {}) {
     dereference: false,
     filter: (src) => {
       const base = path.basename(src);
-      return ![
-        'node_modules',
-        'build',
-        '.venv',
-        '__pycache__',
-        '.DS_Store',
-      ].includes(base);
+      return (
+        !isPythonBytecodePath(src) &&
+        !['node_modules', 'build', '.venv', '.DS_Store'].includes(base)
+      );
     },
   });
   return true;
