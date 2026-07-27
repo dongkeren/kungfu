@@ -89,7 +89,7 @@
             "product-stable",
             "product-binaries"
           ],
-          "sourceRoot": "sha256:96bd4e0409c96c75f7b7bf762ed7318808e1bb3dc6b5506a465107582b4c2fbe"
+          "sourceRoot": "sha256:bf0562c5203a036d3b8d1fe913d8719e54247216f738d2d27674bb49ae28966a"
         },
         {
           "path": ".github/workflows/buildchain-validate.yml",
@@ -130,7 +130,7 @@
             "product-alpha",
             "product-binaries"
           ],
-          "sourceRoot": "sha256:d9bbd764d67e5ecd2d4852cc096566516de77e82d81147958a43a9988a0683a6"
+          "sourceRoot": "sha256:d63c602571f0233d59729ea2be06c6b8470027a40d7676bdd79f97a1484fd3ba"
         },
         {
           "path": ".github/workflows/dev-verify-patrol.yml",
@@ -184,6 +184,13 @@
           "sourceRoot": "sha256:b59d313837702193d551d655a944a74b86d6dbf91c4d99b5968cf2a6ceb08488"
         },
         {
+          "path": ".github/workflows/opencode-local-model-canary.yml",
+          "classification": "non-publication",
+          "owner": "kungfu-ci",
+          "surfaceIds": [],
+          "sourceRoot": "sha256:baf3ed36c209a804a24978ece7537399c2fa4b524ec25b283aa78f9f69f9403f"
+        },
+        {
           "path": ".github/workflows/publish-layer-artifacts.yml",
           "classification": "publication",
           "owner": "kungfu-layers",
@@ -203,7 +210,7 @@
             "product-stable",
             "product-binaries"
           ],
-          "sourceRoot": "sha256:46b1f5435d40378f7ef205c1a1f8e3991c02ca5752e8c113375025f1fbcf4779"
+          "sourceRoot": "sha256:63f908db60382d683250c7070b90945161cc1ae8e01f0554ab93e22d20f50d91"
         },
         {
           "path": ".github/workflows/release-shifu.yml",
@@ -237,8 +244,8 @@
     "buildchain": {
       "repository": "kungfu-systems/buildchain",
       "owner": "kungfu-systems/buildchain",
-      "sourceRevision": "625384b4927222022a2cd0758399afbf9333ccdc",
-      "version": "3.0.2-alpha.2",
+      "sourceRevision": "ebc7b2d86ecce1de835c8f8ba4436bcac65a62c2",
+      "version": "3.0.2-alpha.3",
       "compatibilityMode": "stable-v3-contract-plus-exact-additive-runtime",
       "stableContractLock": ".buildchain/contract-lock.json",
       "runtimeContractLock": ".buildchain/alpha-contract-lock.json",
@@ -767,5 +774,5 @@
       }
     }
   ],
-  "registryRoot": "sha256:e845bea3dcfb052daec13bdffd4df53106a610973d28b16a30b013cd23cab4cd"
+  "registryRoot": "sha256:1766677bf02aa873b8fe12a89e80b3af736ad0bf3b3b2c9942db9e021b49274c"
 }
