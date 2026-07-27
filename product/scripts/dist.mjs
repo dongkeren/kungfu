@@ -609,13 +609,8 @@ function assertSafeGeneratedDir(dir) {
   }
 }
 
-export function isPythonBytecodePath(value) {
-  const normalized = value.replaceAll('\\', '/');
-  return (
-    normalized.split('/').includes('__pycache__') ||
-    normalized.toLowerCase().endsWith('.pyc')
-  );
-}
+export const isPythonBytecodePath = (value) =>
+  /(^|\/)__pycache__(\/|$)|\.pyc$/i.test(value.replaceAll('\\', '/'));
 
 function copyPackageDir(source, target) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
