@@ -9,6 +9,10 @@ const PROVIDER_PROFILES = {
       blocked: [],
       approval: [
         [
+          'codex.approval.project-trust',
+          /do you trust the contents of this directory\?/iu,
+        ],
+        [
           'codex.approval.run-command',
           /would you like to run (?:this|the) command/iu,
         ],

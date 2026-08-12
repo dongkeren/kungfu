@@ -529,6 +529,18 @@ export type ProjectWorkRunPlan = {
       version: string | null;
       error: string | null;
     };
+    projectTrust: {
+      schema: 'kungfu.agent-project-trust/v1';
+      provider: 'codex';
+      workspaceRoot: string;
+      scope: 'single-invocation';
+      allows: [
+        'project-local-config',
+        'project-local-hooks',
+        'project-local-exec-policies',
+      ];
+      persistent: false;
+    } | null;
   };
   effects: Array<{ stage: string; label: string }>;
   skippedEffects: string[];
