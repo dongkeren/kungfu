@@ -229,6 +229,10 @@ test('opened Project Work offers an exact-plan Agent path and recoverable sessio
   );
   assert.match(source, /await projects\.works\(/);
   assert.match(source, /await lab\.resumeProjectWork\(/);
+  assert.match(
+    source,
+    /onContinueRetainedWork=\{async \(receipt\) => \{[\s\S]*?const resumed = await lab\.resumeProjectWork\([\s\S]*?setStarterWorkReceipt\(resumed\.workReceipt \?\? receipt\)/,
+  );
   assert.doesNotMatch(source, /await lab\.resumeStarterProject\(\)/);
 });
 
