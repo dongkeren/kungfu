@@ -144,7 +144,7 @@ test('ready instruction is one idempotent atomic paste and proves no outcome', (
   );
 });
 
-test('Claude instruction submits paste and Enter as separately idempotent writes', () => {
+test('Claude instruction submits paste and Enter as separately idempotent writes', async () => {
   const pauses = [];
   const { authority, child, port, screen } = fixture({
     provider: 'claude',
@@ -153,8 +153,8 @@ test('Claude instruction submits paste and Enter as separately idempotent writes
   });
   screen('❯ Ask about this workspace');
   const request = instruction(authority, 'claude-ready');
-  const first = port.instruct(request);
-  const duplicate = port.instruct(request);
+  const first = await port.instruct(request);
+  const duplicate = await port.instruct(request);
   assert.equal(first.status, 'written');
   assert.equal(duplicate.status, 'duplicate');
   assert.deepEqual(child.writes, [
@@ -168,15 +168,22 @@ test('Claude instruction submits paste and Enter as separately idempotent writes
   );
 });
 
-test('Codex 0.147 submits paste and Enter as separate PTY writes', () => {
+test('Codex 0.147 yields the event loop between paste and Enter', async () => {
   const pauses = [];
   const { authority, child, port, screen } = fixture({
     provider: 'codex',
     version: '0.147.0',
-    pause: (milliseconds) => pauses.push(milliseconds),
+    pause: (milliseconds) => {
+      pauses.push(milliseconds);
+      return Promise.resolve();
+    },
   });
   screen('› Ask about this workspace');
-  const first = port.instruct(instruction(authority, 'codex-147-ready'));
+  const pending = port.instruct(instruction(authority, 'codex-147-ready'));
+  assert.deepEqual(child.writes, [
+    '\u001b[200~instruction codex-147-ready\u001b[201~',
+  ]);
+  const first = await pending;
   assert.equal(first.status, 'written');
   assert.deepEqual(child.writes, [
     '\u001b[200~instruction codex-147-ready\u001b[201~',
