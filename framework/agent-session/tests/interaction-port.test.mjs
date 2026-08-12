@@ -218,6 +218,32 @@ test('Codex 0.147 retries an unacknowledged startup paste before Enter', async (
   ]);
 });
 
+test('Codex 0.147 accepts its collapsed long-paste acknowledgement', async () => {
+  const longInstruction = 'a'.repeat(2248);
+  let acknowledgePaste;
+  const { authority, child, port, screen } = fixture({
+    provider: 'codex',
+    version: '0.147.0',
+    pause: () => {
+      acknowledgePaste?.();
+      acknowledgePaste = null;
+      return Promise.resolve();
+    },
+  });
+  screen('\u203a Ask about this workspace');
+  acknowledgePaste = () => screen('\u203a [Pasted Content 2248 chars]');
+
+  const result = await port.instruct(
+    instruction(authority, 'codex-long-paste', { text: longInstruction }),
+  );
+
+  assert.equal(result.status, 'written');
+  assert.deepEqual(child.writes, [
+    `\u001b[200~${longInstruction}\u001b[201~`,
+    '\r',
+  ]);
+});
+
 test('busy queue flushes only after a supported ready signature', () => {
   const { authority, child, port, screen } = fixture();
   screen('Working (1s • esc to interrupt)');

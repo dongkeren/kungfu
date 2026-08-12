@@ -181,6 +181,14 @@ class ManagedRunCoordinator:
             raise ValueError(
                 "Agent Session requires attention before the initial Work instruction"
             )
+        controller = ready.get("controller") or {}
+        if controller.get("holderId") != "kungfu-project-work":
+            acquired = self.invoke_control(invoke, ref, "acquire-control", {})
+            if acquired.get("status") not in {"granted", "duplicate"}:
+                raise ValueError(
+                    "Agent Session could not acquire control for the initial "
+                    f"Work instruction: {acquired.get('reason') or acquired.get('status')}"
+                )
         before_sequence = int((ready.get("output") or {}).get("nextSequence") or 0)
         delivered = self.invoke_control(invoke, ref, "instruct", {"text": prompt})
         if delivered.get("status") not in {"written", "duplicate"}:

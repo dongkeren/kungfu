@@ -1268,6 +1268,8 @@ def test_project_work_session_yields_at_deterministic_attention(tmp_path):
             return statuses.pop(0) if len(statuses) > 1 else statuses[0]
         if operation == "plan-control":
             return {"root": "sha256:" + "2" * 64}
+        if operation == "acquire-control":
+            return {"status": "granted"}
         if operation == "instruct":
             return {"status": "written"}
         if operation == "snapshot":
@@ -1332,9 +1334,13 @@ def test_project_work_session_yields_at_deterministic_attention(tmp_path):
             {"status": "started"},
         )
     ]
-    assert calls.index(
-        next(call for call in calls if call["operation"] == "start")
-    ) < calls.index(next(call for call in calls if call["operation"] == "instruct"))
+    assert (
+        calls.index(next(call for call in calls if call["operation"] == "start"))
+        < calls.index(
+            next(call for call in calls if call["operation"] == "acquire-control")
+        )
+        < calls.index(next(call for call in calls if call["operation"] == "instruct"))
+    )
     start_input = next(
         call["input"] for call in calls if call["operation"] == "plan-start"
     )

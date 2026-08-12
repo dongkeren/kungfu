@@ -428,8 +428,18 @@ export function createProviderAdapter({ provider, version }) {
       if (!acknowledgedInstructionPaste) return true;
       const firstLine = String(text).split(/\r?\n/u, 1)[0].trim();
       const visiblePrefix = [...firstLine].slice(0, 40).join('');
+      const screen = cleanScreen(lines);
+      const pasteLengths = new Set([
+        String(text).length,
+        [...String(text)].length,
+        Buffer.byteLength(String(text), 'utf8'),
+      ]);
+      const collapsedPasteVisible = [...pasteLengths].some((length) =>
+        screen.includes(`[Pasted Content ${String(length)} chars]`),
+      );
       return (
-        visiblePrefix.length > 0 && cleanScreen(lines).includes(visiblePrefix)
+        collapsedPasteVisible ||
+        (visiblePrefix.length > 0 && screen.includes(visiblePrefix))
       );
     },
     encodeKey(key) {
