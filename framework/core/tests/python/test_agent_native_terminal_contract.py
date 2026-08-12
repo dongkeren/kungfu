@@ -332,8 +332,14 @@ def test_agent_session_default_worker_launch_is_detached(monkeypatch):
     launches = []
 
     class WorkerProcess:
+        returncode = 0
+
         def __init__(self, argv, **options):
             launches.append((argv, options))
+
+        def communicate(self, timeout=None):
+            assert timeout == 20
+            return ("", "")
 
     monkeypatch.setattr(session_surface.subprocess, "Popen", WorkerProcess)
     monkeypatch.setattr(session_surface.sys, "platform", "darwin")
@@ -346,7 +352,8 @@ def test_agent_session_default_worker_launch_is_detached(monkeypatch):
     assert launches[0][1]["start_new_session"] is True
     assert launches[0][1]["stdin"] == session_surface.subprocess.DEVNULL
     assert launches[0][1]["stdout"] == session_surface.subprocess.DEVNULL
-    assert launches[0][1]["stderr"] == session_surface.subprocess.DEVNULL
+    assert launches[0][1]["stderr"] == session_surface.subprocess.PIPE
+    assert launches[0][1]["text"] is True
 
 
 def test_agent_session_waits_for_detached_worker_capabilities(monkeypatch):

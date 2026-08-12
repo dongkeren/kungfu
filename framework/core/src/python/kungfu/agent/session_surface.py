@@ -345,7 +345,8 @@ def _spawn_detached_worker(*argv):
         "env": environment,
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
+        "stderr": subprocess.PIPE,
+        "text": True,
     }
     if sys.platform == "win32":
         options["creationflags"] = getattr(
@@ -353,7 +354,21 @@ def _spawn_detached_worker(*argv):
         ) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
     else:
         options["start_new_session"] = True
-    subprocess.Popen(list(argv), **options)
+    process = subprocess.Popen(list(argv), **options)
+    try:
+        _, stderr = process.communicate(timeout=20)
+    except subprocess.TimeoutExpired as error:
+        process.kill()
+        process.communicate()
+        raise TimeoutError(
+            "native Agent Session bootstrap did not finish within 20 seconds"
+        ) from error
+    if process.returncode != 0:
+        diagnostic = (stderr or "").strip()[-4096:]
+        raise ValueError(
+            diagnostic
+            or f"native Agent Session bootstrap exited with status {process.returncode}"
+        )
     return 0
 
 
