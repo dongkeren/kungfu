@@ -360,7 +360,8 @@ def ensure(runtime_dir, *, runner=None):
             "bundle or set KUNGFU_NATIVE_AGENT_SESSION_ENTRY"
         )
     os.environ["KF_RUNTIME_DIR"] = str(Path(runtime_dir).expanduser().resolve())
-    os.environ["KUNGFU_AGENT_SESSION_EXECUTABLE"] = _resolve_worker_executable()
+    worker_executable = _resolve_worker_executable()
+    os.environ["KUNGFU_AGENT_SESSION_EXECUTABLE"] = worker_executable
     if runner is None:
         import kungfu
 
@@ -369,7 +370,9 @@ def ensure(runtime_dir, *, runner=None):
     # some platforms. Restore the exact caller flags before a provider-native
     # child is launched; otherwise the first provider process starts without a
     # terminal while later attempts (which reuse the worker) happen to work.
-    exit_code = _run_worker_preserving_standard_streams(runner, sys.argv[0], entry)
+    exit_code = _run_worker_preserving_standard_streams(
+        runner, worker_executable, entry
+    )
     if exit_code not in (None, 0):
         raise ValueError(
             f"native Agent Session bridge exited with status {int(exit_code)}"

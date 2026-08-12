@@ -297,8 +297,10 @@ def test_agent_session_worker_launch_restores_standard_stream_inheritance(
         return NATIVE_SURFACE_CAPABILITIES
 
     inheritance = {0: True, 1: False, 2: True}
+    worker_argv = []
 
     def run_worker(*_args):
+        worker_argv.append(_args)
         for descriptor in inheritance:
             inheritance[descriptor] = False
         return 0
@@ -322,6 +324,7 @@ def test_agent_session_worker_launch_restores_standard_stream_inheritance(
     endpoint = session_surface.ensure(tmp_path / "runtime", runner=run_worker)
 
     assert endpoint == session_surface.endpoint_for_runtime(tmp_path / "runtime")
+    assert worker_argv == [("/kungfu", "/entry.mjs")]
     assert inheritance == {0: True, 1: False, 2: True}
 
 
