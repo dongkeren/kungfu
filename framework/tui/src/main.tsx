@@ -74,6 +74,7 @@ import {
   createControlPlaneInputFence,
   directWorkspaceNavigationFromInput,
   initialProductSurface,
+  onboardingContinueSurface,
   quickCommandMatches,
   reduceControlPlaneInput,
   resolveProductStartupSurface,
@@ -1479,16 +1480,19 @@ function ProductHost({
           setSurface('all-work'),
         );
       } else {
-        persistOnboarding(finishKungfuOnboarding(onboardingState), () =>
-          setSurface('all-work'),
-        );
+        persistOnboarding(finishKungfuOnboarding(onboardingState), () => {
+          setSurface(onboardingContinueSurface(firstLaunch));
+          setControlNow({ ...CLOSED_CONTROL_PLANE, focus: 'workspace' });
+        });
       }
     },
     [
       agentFirstEntry.prompt,
       dispatchLabAction,
+      firstLaunch,
       onboardingState,
       persistOnboarding,
+      setControlNow,
       setOnboardingNotice,
       setSurface,
     ],

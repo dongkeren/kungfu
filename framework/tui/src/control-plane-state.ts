@@ -29,6 +29,12 @@ export function initialProductSurface({
   return emptyState ? 'all-work' : 'loading';
 }
 
+export function onboardingContinueSurface(
+  firstLaunch: boolean,
+): ProductSurface {
+  return firstLaunch ? 'projects' : 'all-work';
+}
+
 type SearchableQuickCommand = {
   id: string;
   command: string;
