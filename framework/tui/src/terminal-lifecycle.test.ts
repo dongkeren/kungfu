@@ -29,6 +29,7 @@ import {
 test('child CLI retains installed authority without recursive libnode selection', () => {
   const parent = {
     KUNGFU_AS_VARIANT: 'node',
+    KUNGFU_NODE_VARIANT_ENTRY: '/product/tui/tui.mjs',
     KUNGFU_INSTALL_SOURCE: 'archive',
     KUNGFU_DIR: '/product/runtime',
     KUNGFU_KFX_CONTRACT: '/product/runtime/config/kungfu-kfx.contract.json',
@@ -39,6 +40,7 @@ test('child CLI retains installed authority without recursive libnode selection'
   const child = tuiChildCliEnvironment(parent);
 
   assert.equal(child.KUNGFU_AS_VARIANT, undefined);
+  assert.equal(child.KUNGFU_NODE_VARIANT_ENTRY, undefined);
   assert.equal(child.KUNGFU_INSTALL_SOURCE, 'archive');
   assert.equal(child.KUNGFU_DIR, '/product/runtime');
   assert.equal(
@@ -51,6 +53,7 @@ test('child CLI retains installed authority without recursive libnode selection'
   );
   assert.equal(child.KF_BUNDLED_EXTENSION_ROOT, '/product/extensions');
   assert.equal(parent.KUNGFU_AS_VARIANT, 'node');
+  assert.equal(parent.KUNGFU_NODE_VARIANT_ENTRY, '/product/tui/tui.mjs');
 });
 
 test('installed Agent Session worker uses the Kungfu front door outside embedded Python', () => {

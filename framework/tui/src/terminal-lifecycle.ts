@@ -120,6 +120,10 @@ export function tuiChildCliEnvironment(
   // child CLI needs them to prove that its native binding belongs to the exact
   // Release Manifest selected by the product launcher.
   child.KUNGFU_AS_VARIANT = undefined;
+  // The trunk pins the active embedded-Node entry while the TUI is running.
+  // That pin belongs only to this process: a child CLI must be free to select
+  // its own Agent Session entry instead of recursively entering tui.mjs.
+  child.KUNGFU_NODE_VARIANT_ENTRY = undefined;
   return child;
 }
 

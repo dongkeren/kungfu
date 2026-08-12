@@ -341,6 +341,9 @@ def _spawn_detached_worker(*argv):
     environment = os.environ.copy()
     environment["ELECTRON_RUN_AS_NODE"] = "1"
     environment["KUNGFU_AS_VARIANT"] = "node"
+    # The parent TUI pins its own embedded-Node entry. The Agent Session
+    # bootstrap supplies a different reviewed argv and must not re-enter TUI.
+    environment.pop("KUNGFU_NODE_VARIANT_ENTRY", None)
     options = {
         "env": environment,
         "stdin": subprocess.DEVNULL,

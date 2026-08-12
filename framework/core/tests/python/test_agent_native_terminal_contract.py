@@ -344,11 +344,13 @@ def test_agent_session_default_worker_launch_is_detached(monkeypatch):
     monkeypatch.setattr(session_surface.subprocess, "Popen", WorkerProcess)
     monkeypatch.setattr(session_surface.sys, "platform", "darwin")
     monkeypatch.setenv("KUNGFU_AS_VARIANT", "python")
+    monkeypatch.setenv("KUNGFU_NODE_VARIANT_ENTRY", "/product/tui/tui.mjs")
 
     assert session_surface._spawn_detached_worker("/kungfu", "/entry.mjs") == 0
     assert launches[0][0] == ["/kungfu", "/entry.mjs"]
     assert launches[0][1]["env"]["KUNGFU_AS_VARIANT"] == "node"
     assert launches[0][1]["env"]["ELECTRON_RUN_AS_NODE"] == "1"
+    assert "KUNGFU_NODE_VARIANT_ENTRY" not in launches[0][1]["env"]
     assert launches[0][1]["start_new_session"] is True
     assert launches[0][1]["stdin"] == session_surface.subprocess.DEVNULL
     assert launches[0][1]["stdout"] == session_surface.subprocess.DEVNULL
