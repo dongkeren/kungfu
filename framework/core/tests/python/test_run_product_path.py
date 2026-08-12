@@ -1402,7 +1402,7 @@ def test_codex_project_work_session_carries_confirmed_workspace_write_policy(tmp
         if operation == "plan-control":
             return {"root": "sha256:" + "2" * 64}
         if operation == "instruct":
-            return {"status": "written"}
+            return {"status": "delivered"}
         if operation == "snapshot":
             return {"terminal": {"vt": {"lines": []}}}
         raise AssertionError(operation)

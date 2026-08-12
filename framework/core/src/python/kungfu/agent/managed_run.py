@@ -201,7 +201,7 @@ class ManagedRunCoordinator:
                 )
         before_sequence = int((ready.get("output") or {}).get("nextSequence") or 0)
         delivered = self.invoke_control(invoke, ref, "instruct", {"text": prompt})
-        if delivered.get("status") not in {"written", "duplicate"}:
+        if delivered.get("status") not in {"written", "delivered", "duplicate"}:
             raise ValueError(
                 "Agent Session rejected the Work instruction: "
                 f"{delivered.get('reason')}"
