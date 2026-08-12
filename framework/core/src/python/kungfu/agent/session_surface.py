@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import subprocess
 import sys
 import time
 from typing import Protocol
@@ -336,6 +337,44 @@ def _run_worker_preserving_standard_streams(runner, *argv):
             os.set_inheritable(descriptor, inheritable)
 
 
+def _spawn_detached_worker(*argv):
+    environment = os.environ.copy()
+    environment["ELECTRON_RUN_AS_NODE"] = "1"
+    environment["KUNGFU_AS_VARIANT"] = "node"
+    options = {
+        "env": environment,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        options["creationflags"] = getattr(
+            subprocess, "DETACHED_PROCESS", 0x00000008
+        ) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+    else:
+        options["start_new_session"] = True
+    subprocess.Popen(list(argv), **options)
+    return 0
+
+
+def _await_surface_capabilities(endpoint, timeout=5.0):
+    deadline = _deadline(timeout)
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"Agent Session worker did not become ready at {endpoint}"
+            )
+        try:
+            return invoke(
+                {"operation": "capabilities"},
+                endpoint=endpoint,
+                timeout=min(0.25, remaining),
+            )
+        except (OSError, socket.timeout):
+            time.sleep(min(0.05, remaining))
+
+
 def ensure(runtime_dir, *, runner=None):
     """Ensure and return the runtime-scoped detached Agent Session endpoint."""
 
@@ -363,9 +402,7 @@ def ensure(runtime_dir, *, runner=None):
     worker_executable = _resolve_worker_executable()
     os.environ["KUNGFU_AGENT_SESSION_EXECUTABLE"] = worker_executable
     if runner is None:
-        import kungfu
-
-        runner = kungfu.__binding__.libnode.run
+        runner = _spawn_detached_worker
     # The embedded Node bootstrap marks inherited descriptors close-on-exec on
     # some platforms. Restore the exact caller flags before a provider-native
     # child is launched; otherwise the first provider process starts without a
@@ -377,7 +414,7 @@ def ensure(runtime_dir, *, runner=None):
         raise ValueError(
             f"native Agent Session bridge exited with status {int(exit_code)}"
         )
-    capabilities = invoke({"operation": "capabilities"}, endpoint=endpoint, timeout=5.0)
+    capabilities = _await_surface_capabilities(endpoint)
     _validate_surface_capabilities(capabilities, endpoint=endpoint)
     return endpoint
 
