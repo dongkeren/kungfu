@@ -310,6 +310,8 @@ export function createProviderAdapter({ provider, version }) {
   const separateInstructionSubmit =
     provider === 'claude' ||
     (provider === 'codex' && /^0\.147\.[0-9]+$/u.test(version));
+  const acknowledgedInstructionPaste =
+    provider === 'codex' && /^0\.147\.[0-9]+$/u.test(version);
   return Object.freeze({
     schema: 'kungfu.agent-session.provider-adapter/v1',
     provider,
@@ -320,6 +322,12 @@ export function createProviderAdapter({ provider, version }) {
       : 'inline-enter',
     instructionSubmitData: separateInstructionSubmit ? '\r' : null,
     instructionSubmitDelayMilliseconds: separateInstructionSubmit ? 50 : 0,
+    instructionPasteAcknowledgement: acknowledgedInstructionPaste
+      ? 'first-line-visible'
+      : null,
+    instructionPasteAcknowledgementPollMilliseconds: 25,
+    instructionPasteAcknowledgementRetryMilliseconds: 250,
+    instructionPasteAcknowledgementAttempts: 16,
     compatible,
     tested,
     knownLimits: [
@@ -411,6 +419,14 @@ export function createProviderAdapter({ provider, version }) {
       }
       const submit = separateInstructionSubmit ? '' : '\r';
       return `\u001b[200~${text}\u001b[201~${submit}`;
+    },
+    acknowledgesInstructionPaste({ lines, text }) {
+      if (!acknowledgedInstructionPaste) return true;
+      const firstLine = String(text).split(/\r?\n/u, 1)[0].trim();
+      const visiblePrefix = [...firstLine].slice(0, 40).join('');
+      return (
+        visiblePrefix.length > 0 && cleanScreen(lines).includes(visiblePrefix)
+      );
     },
     encodeKey(key) {
       const sequence = KEY_SEQUENCES[key];

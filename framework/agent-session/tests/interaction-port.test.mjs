@@ -170,15 +170,19 @@ test('Claude instruction submits paste and Enter as separately idempotent writes
 
 test('Codex 0.147 yields the event loop between paste and Enter', async () => {
   const pauses = [];
+  let acknowledgePaste;
   const { authority, child, port, screen } = fixture({
     provider: 'codex',
     version: '0.147.0',
     pause: (milliseconds) => {
       pauses.push(milliseconds);
+      acknowledgePaste?.();
+      acknowledgePaste = null;
       return Promise.resolve();
     },
   });
   screen('› Ask about this workspace');
+  acknowledgePaste = () => screen('› instruction codex-147-ready');
   const pending = port.instruct(instruction(authority, 'codex-147-ready'));
   assert.deepEqual(child.writes, [
     '\u001b[200~instruction codex-147-ready\u001b[201~',
@@ -189,7 +193,29 @@ test('Codex 0.147 yields the event loop between paste and Enter', async () => {
     '\u001b[200~instruction codex-147-ready\u001b[201~',
     '\r',
   ]);
-  assert.deepEqual(pauses, [50]);
+  assert.deepEqual(pauses, [25, 50]);
+});
+
+test('Codex 0.147 retries an unacknowledged startup paste before Enter', async () => {
+  let polls = 0;
+  const { authority, child, port, screen } = fixture({
+    provider: 'codex',
+    version: '0.147.0',
+    pause: () => {
+      polls += 1;
+      if (polls === 11) showAcknowledgement();
+      return Promise.resolve();
+    },
+  });
+  screen('› Ask about this workspace');
+  const showAcknowledgement = () => screen('› instruction codex-retry');
+  const result = await port.instruct(instruction(authority, 'codex-retry'));
+  assert.equal(result.status, 'written');
+  assert.deepEqual(child.writes, [
+    '\u001b[200~instruction codex-retry\u001b[201~',
+    '\u001b[200~instruction codex-retry\u001b[201~',
+    '\r',
+  ]);
 });
 
 test('busy queue flushes only after a supported ready signature', () => {

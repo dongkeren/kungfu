@@ -204,6 +204,20 @@ test('instruction encoding uses each provider bounded paste submit sequence', ()
   assert.equal(codex147.instructionSubmitStrategy, 'separate-enter');
   assert.equal(codex147.instructionSubmitData, '\r');
   assert.equal(codex147.instructionSubmitDelayMilliseconds, 50);
+  assert.equal(
+    codex147.acknowledgesInstructionPaste({
+      lines: ['› inspect the source'],
+      text: 'inspect the source\n\nwith more context',
+    }),
+    true,
+  );
+  assert.equal(
+    codex147.acknowledgesInstructionPaste({
+      lines: ['› Ask about this workspace'],
+      text: 'inspect the source\n\nwith more context',
+    }),
+    false,
+  );
   assert.throws(
     () => codex.encodeInstruction('already submitted\n'),
     /cannot end with Enter/u,

@@ -285,7 +285,6 @@ export class AgentSessionInteractionPort {
 
   #deliverInstruction(request) {
     const data = this.adapter.encodeInstruction(request.text);
-    const pasteReceipt = this.transport.submitInput({ ...request, data });
     const finish = (deliveryReceipt) => ({
       schema: 'kungfu.agent-session.interaction-receipt/v1',
       operation: 'instruct',
@@ -298,6 +297,10 @@ export class AgentSessionInteractionPort {
       deliveredAt: this.now(),
       ...nullOutcome(),
     });
+    if (this.adapter.instructionPasteAcknowledgement) {
+      return this.#deliverAcknowledgedInstruction(request, data, finish);
+    }
+    const pasteReceipt = this.transport.submitInput({ ...request, data });
     if (this.adapter.instructionSubmitStrategy === 'separate-enter') {
       return Promise.resolve(
         this.pause(this.adapter.instructionSubmitDelayMilliseconds),
@@ -313,6 +316,57 @@ export class AgentSessionInteractionPort {
       );
     }
     return finish(pasteReceipt);
+  }
+
+  async #deliverAcknowledgedInstruction(request, data, finish) {
+    const pollMilliseconds =
+      this.adapter.instructionPasteAcknowledgementPollMilliseconds;
+    const pollsPerAttempt = Math.max(
+      1,
+      Math.ceil(
+        this.adapter.instructionPasteAcknowledgementRetryMilliseconds /
+          pollMilliseconds,
+      ),
+    );
+    for (
+      let attempt = 0;
+      attempt < this.adapter.instructionPasteAcknowledgementAttempts;
+      attempt += 1
+    ) {
+      const suffix = attempt === 0 ? '' : `:retry-${String(attempt)}`;
+      this.transport.submitInput({
+        ...request,
+        actionId: `${request.actionId}${suffix}`,
+        inputId: `${request.inputId}${suffix}`,
+        data,
+      });
+      for (let poll = 0; poll < pollsPerAttempt; poll += 1) {
+        await this.pause(pollMilliseconds);
+        const terminal = this.host.snapshot(
+          this.transport.status().output.earliestSequence,
+        );
+        if (
+          this.adapter.acknowledgesInstructionPaste({
+            lines: terminal.vt.lines,
+            text: request.text,
+          })
+        ) {
+          await this.pause(this.adapter.instructionSubmitDelayMilliseconds);
+          return finish(
+            this.transport.submitInput({
+              ...request,
+              actionId: `${request.actionId}:submit`,
+              inputId: `${request.inputId}:submit`,
+              data: this.adapter.instructionSubmitData,
+            }),
+          );
+        }
+      }
+    }
+    throw new InteractionPortError(
+      'instruction_paste_not_acknowledged',
+      'provider did not visibly acknowledge the bounded instruction paste',
+    );
   }
 
   #held(request, reason, operation = 'instruct') {
