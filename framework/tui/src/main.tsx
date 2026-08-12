@@ -1955,6 +1955,7 @@ function ProductHost({
         onOpenProject={openProject}
         onOpenLab={() => setSurface('lab')}
         onSearchDocuments={handleProjectDocuments}
+        onInputModeChange={setWorkspaceInputActive}
         onWorkspacePointer={() =>
           setControlNow({ ...CLOSED_CONTROL_PLANE, focus: 'workspace' })
         }
@@ -2233,7 +2234,9 @@ function ProductHost({
               labOpen
                 ? 'LAB CONTROLS'
                 : surface === 'projects'
-                  ? 'PROJECT CONTROLS'
+                  ? workspaceInputActive
+                    ? 'PROJECT INPUT'
+                    : 'PROJECT CONTROLS'
                   : starterOpen || surface === 'project-work'
                     ? openedProject
                       ? workspaceInputActive
@@ -2246,7 +2249,9 @@ function ProductHost({
               labOpen
                 ? 'd Demo · x Same · m Handoff · Tab Focus'
                 : surface === 'projects'
-                  ? 'Enter Open · /new New Project · /open Open Project · d Remove'
+                  ? workspaceInputActive
+                    ? 'Type in the focused panel · Enter Continue · Esc Cancel'
+                    : 'Enter Open · /new New Project · /open Open Project · d Remove'
                   : starterOpen
                     ? 'j/k Work · Enter Open · /new New Work · p Projects'
                     : surface === 'project-work' && openedProject
