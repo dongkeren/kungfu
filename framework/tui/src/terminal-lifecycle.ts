@@ -123,6 +123,23 @@ export function tuiChildCliEnvironment(
   return child;
 }
 
+export function resolveTuiAgentSessionExecutable({
+  env,
+  cliBin,
+  sourceCliFallback,
+  processExecPath,
+}: {
+  env: NodeJS.ProcessEnv;
+  cliBin: string;
+  sourceCliFallback: boolean;
+  processExecPath: string;
+}): string {
+  return (
+    env.KUNGFU_AGENT_SESSION_EXECUTABLE ||
+    (sourceCliFallback ? processExecPath : cliBin)
+  );
+}
+
 export function resolveTuiAgentSessionPaths({
   env,
   argvEntry,
