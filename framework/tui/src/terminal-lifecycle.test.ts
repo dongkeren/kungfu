@@ -25,19 +25,29 @@ import {
   tuiChildCliEnvironment,
 } from './terminal-lifecycle.js';
 
-test('child CLI retains the packaged KFX root without recursive libnode selection', () => {
+test('child CLI retains installed authority without recursive libnode selection', () => {
   const parent = {
     KUNGFU_AS_VARIANT: 'node',
+    KUNGFU_INSTALL_SOURCE: 'archive',
     KUNGFU_DIR: '/product/runtime',
     KUNGFU_KFX_CONTRACT: '/product/runtime/config/kungfu-kfx.contract.json',
+    KUNGFU_UPGRADE_MANIFEST: '/product/upgrade/kungfu-release-manifest.json',
     KF_BUNDLED_EXTENSION_ROOT: '/product/extensions',
   };
 
   const child = tuiChildCliEnvironment(parent);
 
   assert.equal(child.KUNGFU_AS_VARIANT, undefined);
-  assert.equal(child.KUNGFU_DIR, undefined);
-  assert.equal(child.KUNGFU_KFX_CONTRACT, undefined);
+  assert.equal(child.KUNGFU_INSTALL_SOURCE, 'archive');
+  assert.equal(child.KUNGFU_DIR, '/product/runtime');
+  assert.equal(
+    child.KUNGFU_KFX_CONTRACT,
+    '/product/runtime/config/kungfu-kfx.contract.json',
+  );
+  assert.equal(
+    child.KUNGFU_UPGRADE_MANIFEST,
+    '/product/upgrade/kungfu-release-manifest.json',
+  );
   assert.equal(child.KF_BUNDLED_EXTENSION_ROOT, '/product/extensions');
   assert.equal(parent.KUNGFU_AS_VARIANT, 'node');
 });

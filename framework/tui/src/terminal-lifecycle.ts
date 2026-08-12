@@ -116,10 +116,10 @@ export function tuiChildCliEnvironment(
 ): NodeJS.ProcessEnv {
   const child = { ...env };
   // Re-enter the ordinary CLI instead of recursively selecting embedded
-  // libnode, while retaining the installed KFX authority root.
+  // libnode. Keep the installed runtime and KFX authority roots because the
+  // child CLI needs them to prove that its native binding belongs to the exact
+  // Release Manifest selected by the product launcher.
   child.KUNGFU_AS_VARIANT = undefined;
-  child.KUNGFU_DIR = undefined;
-  child.KUNGFU_KFX_CONTRACT = undefined;
   return child;
 }
 
