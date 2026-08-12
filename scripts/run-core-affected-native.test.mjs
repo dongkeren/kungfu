@@ -52,8 +52,12 @@ test('affected-native diagnostics accepts the declarative signing contract', () 
   const diagnostics = createDiagnosticsArtifact({ cwd: process.cwd() });
   const [cliArtifact] =
     diagnostics.buildchain.config.validation.signing.artifacts;
-  assert.equal(cliArtifact.entitlementsProfile, 'none');
-  assert.deepEqual(cliArtifact.entitlementsPaths, []);
+  assert.equal(cliArtifact.entitlementsProfile, 'jit-executable-v1');
+  assert.deepEqual(cliArtifact.entitlementsPaths, [
+    'kungfu-episodes-cli-darwin-arm64/runtime/kungfu',
+    'kungfu-episodes-cli-darwin-arm64/runtime/python/bin/python3',
+    'kungfu-episodes-cli-darwin-arm64/runtime/python/bin/python3.13',
+  ]);
 });
 
 function affectedNativeWorkflowFixture() {
@@ -121,6 +125,7 @@ test('Qualified Core native consumer changes require the platform matrix', () =>
     'framework/agent-session/tests/runtime-port.native-peer.mjs',
     'framework/agent-session/tests/runtime-port.native.test.mjs',
     '.github/actions/qualified-core-candidate-build/action.yml',
+    'product/scripts/verify-cli-surface-qualification.mjs',
   ]) {
     const plan = planFromChanged(
       [file],
