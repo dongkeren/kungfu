@@ -168,6 +168,23 @@ test('Claude instruction submits paste and Enter as separately idempotent writes
   );
 });
 
+test('Codex 0.147 submits paste and Enter as separate PTY writes', () => {
+  const pauses = [];
+  const { authority, child, port, screen } = fixture({
+    provider: 'codex',
+    version: '0.147.0',
+    pause: (milliseconds) => pauses.push(milliseconds),
+  });
+  screen('› Ask about this workspace');
+  const first = port.instruct(instruction(authority, 'codex-147-ready'));
+  assert.equal(first.status, 'written');
+  assert.deepEqual(child.writes, [
+    '\u001b[200~instruction codex-147-ready\u001b[201~',
+    '\r',
+  ]);
+  assert.deepEqual(pauses, [50]);
+});
+
 test('busy queue flushes only after a supported ready signature', () => {
   const { authority, child, port, screen } = fixture();
   screen('Working (1s • esc to interrupt)');

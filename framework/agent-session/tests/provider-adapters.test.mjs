@@ -175,6 +175,10 @@ test('instruction encoding uses each provider bounded paste submit sequence', ()
     provider: 'codex',
     version: '0.144.3',
   });
+  const codex147 = createProviderAdapter({
+    provider: 'codex',
+    version: '0.147.0',
+  });
   assert.equal(
     codex.encodeInstruction('inspect the source'),
     '\u001b[200~inspect the source\u001b[201~\r',
@@ -193,6 +197,13 @@ test('instruction encoding uses each provider bounded paste submit sequence', ()
   assert.equal(codex.instructionSubmitStrategy, 'inline-enter');
   assert.equal(codex.instructionSubmitData, null);
   assert.equal(codex.instructionSubmitDelayMilliseconds, 0);
+  assert.equal(
+    codex147.encodeInstruction('inspect the source'),
+    '\u001b[200~inspect the source\u001b[201~',
+  );
+  assert.equal(codex147.instructionSubmitStrategy, 'separate-enter');
+  assert.equal(codex147.instructionSubmitData, '\r');
+  assert.equal(codex147.instructionSubmitDelayMilliseconds, 50);
   assert.throws(
     () => codex.encodeInstruction('already submitted\n'),
     /cannot end with Enter/u,

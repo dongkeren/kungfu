@@ -307,15 +307,19 @@ export function createProviderAdapter({ provider, version }) {
   }
   const compatible = profile.supportedVersion.test(version);
   const tested = profile.testedVersions.includes(version);
+  const separateInstructionSubmit =
+    provider === 'claude' ||
+    (provider === 'codex' && /^0\.147\.[0-9]+$/u.test(version));
   return Object.freeze({
     schema: 'kungfu.agent-session.provider-adapter/v1',
     provider,
     providerVersion: version,
     adapterVersion: profile.adapterVersion,
-    instructionSubmitStrategy:
-      provider === 'claude' ? 'separate-enter' : 'inline-enter',
-    instructionSubmitData: provider === 'claude' ? '\r' : null,
-    instructionSubmitDelayMilliseconds: provider === 'claude' ? 50 : 0,
+    instructionSubmitStrategy: separateInstructionSubmit
+      ? 'separate-enter'
+      : 'inline-enter',
+    instructionSubmitData: separateInstructionSubmit ? '\r' : null,
+    instructionSubmitDelayMilliseconds: separateInstructionSubmit ? 50 : 0,
     compatible,
     tested,
     knownLimits: [
@@ -405,7 +409,7 @@ export function createProviderAdapter({ provider, version }) {
       if (Buffer.byteLength(text, 'utf8') > 64 * 1024) {
         throw new Error('instruction exceeds the 64 KiB atomic paste limit');
       }
-      const submit = provider === 'claude' ? '' : '\r';
+      const submit = separateInstructionSubmit ? '' : '\r';
       return `\u001b[200~${text}\u001b[201~${submit}`;
     },
     encodeKey(key) {
