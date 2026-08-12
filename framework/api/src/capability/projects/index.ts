@@ -1029,6 +1029,38 @@ export function openProjects(options: ProjectCommandOptions): Projects {
     }));
     return retainedRuns.find((candidate) => candidate.id === runId) ?? null;
   };
+  const controlActorId = 'kungfu-project-work';
+  const ensureProjectWorkControl = async (
+    ref: ProjectAgentSessionRef,
+  ): Promise<void> => {
+    const status = await sessionInvoke({ operation: 'status', session: ref });
+    const controller = status.controller as
+      | { holderId?: unknown }
+      | null
+      | undefined;
+    if (controller?.holderId === controlActorId) return;
+    const payload = {};
+    const plan = await sessionInvoke({
+      operation: 'plan-control',
+      controlOperation: 'acquire-control',
+      session: ref,
+      payload,
+    });
+    const receipt = await sessionInvoke({
+      operation: 'acquire-control',
+      actorId: controlActorId,
+      client: options.agentSessionClient ?? 'gui',
+      plan,
+      expectedPlanRoot: plan.root,
+      payload,
+      automatic: false,
+    });
+    if (!['granted', 'duplicate'].includes(String(receipt.status))) {
+      throw new Error(
+        `Agent Session control is unavailable: ${String(receipt.reason ?? receipt.status ?? 'controller lease denied')}`,
+      );
+    }
+  };
   const controlRun = async (
     runId: string,
     operation: 'instruct' | 'send-key' | 'respond-control' | 'end',
@@ -1043,6 +1075,7 @@ export function openProjects(options: ProjectCommandOptions): Projects {
       );
     }
     const ref = sessionRef(run);
+    await ensureProjectWorkControl(ref);
     const plan = await sessionInvoke({
       operation: 'plan-control',
       controlOperation: operation,
@@ -1051,7 +1084,7 @@ export function openProjects(options: ProjectCommandOptions): Projects {
     });
     await sessionInvoke({
       operation,
-      actorId: 'kungfu-project-work',
+      actorId: controlActorId,
       client: options.agentSessionClient ?? 'gui',
       plan,
       expectedPlanRoot: plan.root,
