@@ -125,6 +125,7 @@ class ManagedRunCoordinator:
         env: Mapping[str, str],
         prompt: str,
         timeout_seconds: float,
+        permission_mode: str = "workspace-write",
         event_sink: Callable[[Mapping[str, Any]], None] | None = None,
         session_started: Callable[[Mapping[str, str], Mapping[str, Any]], None]
         | None = None,
@@ -147,6 +148,15 @@ class ManagedRunCoordinator:
             "runtimeProfileId": str(selected["id"]),
             "binding": {"kind": "work", "workRef": dict(work)},
         }
+        if provider == "codex":
+            start_input["structured"] = {
+                "threadStartParams": {
+                    "cwd": cwd,
+                    "approvalPolicy": "untrusted",
+                    "approvalsReviewer": "user",
+                    "sandbox": permission_mode,
+                }
+            }
         plan = invoke({"operation": "plan-start", "input": start_input})
         started = invoke(
             {
