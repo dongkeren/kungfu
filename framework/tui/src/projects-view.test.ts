@@ -208,6 +208,14 @@ test('opened Project Work offers an exact-plan Agent path and recoverable sessio
   );
   assert.match(projectWork, /retainedAgentFinished/);
   assert.match(projectWork, /continueRetainedWork/);
+  assert.match(
+    projectWork,
+    /if \(value === '\\r' && retainedAgentReviewable\)[\s\S]*?continueRetainedWork\(\);[\s\S]*?if \(session\?\.controllable === false\) return/,
+  );
+  assert.match(
+    projectWork,
+    /attention\.kind === 'ready-for-review'[\s\S]*?'\[v\/Enter\] review changes'[\s\S]*?session\?\.controllable === false/,
+  );
   assert.doesNotMatch(
     projectWork,
     /'[^']*(?:Initiative|Assignment|Portfolio)[^']*'/,
