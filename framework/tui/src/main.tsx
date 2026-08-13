@@ -184,11 +184,13 @@ function ensureTuiAgentSession(runtimeDir: string): Promise<string> {
   process.env.KUNGFU_AGENT_SESSION_WORKER = workerPath;
   process.env.KUNGFU_MOCK_AGENT_SCRIPT = mockPath;
   process.env.KUNGFU_PROJECT_WORK_AGENT_SESSION = '1';
+  const paths = runtimePaths();
   const host = createDetachedAgentSessionHost({
     runtimeDir: resolvedRuntimeDir,
     executable: resolveTuiAgentSessionExecutable({
-      ...runtimePaths(),
       env: process.env,
+      cliBin: paths.bin,
+      sourceCliFallback: paths.sourceCliFallback,
       processExecPath: process.execPath,
     }),
     workerPath,
