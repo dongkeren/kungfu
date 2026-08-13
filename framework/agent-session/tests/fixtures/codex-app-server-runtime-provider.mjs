@@ -60,7 +60,11 @@ lines.on('line', (line) => {
   }
   if (
     message.method === 'thread/start' &&
-    ['product-route', 'response-first-product-route'].includes(mode)
+    [
+      'product-route',
+      'response-first-product-route',
+      'response-first-slow-terminal-product-route',
+    ].includes(mode)
   ) {
     send({
       method: 'thread/started',
@@ -71,29 +75,39 @@ lines.on('line', (line) => {
   }
   if (message.method === 'turn/start') {
     const threadId = message.params.threadId;
-    if (mode === 'response-first-product-route') {
+    if (
+      mode === 'response-first-product-route' ||
+      mode === 'response-first-slow-terminal-product-route'
+    ) {
       send({ id: message.id, result: { turn: { id: 'turn-authority' } } });
       setTimeout(() => {
         send({
           method: 'turn/started',
           params: { threadId, turn: turn(threadId, 'turn-authority') },
         });
-        send({
-          method: 'item/agentMessage/delta',
-          params: {
-            threadId,
-            turnId: 'turn-authority',
-            itemId: 'message-authority',
-            delta: 'Structured answer retained.',
-          },
-        });
-        send({
-          method: 'turn/completed',
-          params: {
-            threadId,
-            turn: turn(threadId, 'turn-authority', 'completed'),
-          },
-        });
+        const complete = () => {
+          send({
+            method: 'item/agentMessage/delta',
+            params: {
+              threadId,
+              turnId: 'turn-authority',
+              itemId: 'message-authority',
+              delta: 'Structured answer retained.',
+            },
+          });
+          send({
+            method: 'turn/completed',
+            params: {
+              threadId,
+              turn: turn(threadId, 'turn-authority', 'completed'),
+            },
+          });
+        };
+        if (mode === 'response-first-slow-terminal-product-route') {
+          setTimeout(complete, 250);
+        } else {
+          complete();
+        }
       }, 25);
       return;
     }

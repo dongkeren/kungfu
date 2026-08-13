@@ -226,7 +226,7 @@ export class CodexAppServerProductRuntime {
     const state = {
       providerSessionId: null,
       providerTurnId: null,
-      turnBoundarySequence: 0,
+      turnLifecycleSequence: 0,
       lastReceiptRoot: null,
       pendingControls: new Map(),
       agentMessages: new Map(),
@@ -262,8 +262,11 @@ export class CodexAppServerProductRuntime {
       if (receipt.providerMethod === 'turn/started')
         state.providerTurnId = receipt.providerTurnId;
       if (receipt.providerTerminal) state.providerTurnId = null;
-      if (receipt.providerMethod === 'turn/completed') {
-        state.turnBoundarySequence += 1;
+      if (
+        receipt.providerMethod === 'turn/started' ||
+        receipt.providerMethod === 'turn/completed'
+      ) {
+        state.turnLifecycleSequence += 1;
       }
       if (receipt.receiptKind === 'control-request') {
         state.pendingControls.set(String(receipt.providerRequestId), receipt);
@@ -431,7 +434,7 @@ export class CodexAppServerProductRuntime {
     };
     const execute = async (request, operation, params) => {
       if (state.eventFailure) throw state.eventFailure;
-      const priorTurnBoundarySequence = state.turnBoundarySequence;
+      const priorTurnLifecycleSequence = state.turnLifecycleSequence;
       const providerPlan = interaction.planRequest({
         actionId: request.actionId,
         operation,
@@ -446,7 +449,7 @@ export class CodexAppServerProductRuntime {
       if (operation === 'instruct') {
         const deadline = Date.now() + 10_000;
         while (
-          state.turnBoundarySequence === priorTurnBoundarySequence &&
+          state.turnLifecycleSequence === priorTurnLifecycleSequence &&
           state.pendingControls.size === 0 &&
           !state.eventFailure &&
           !runtime.status().exit &&
@@ -457,12 +460,12 @@ export class CodexAppServerProductRuntime {
         }
         if (state.eventFailure) throw state.eventFailure;
         if (
-          state.turnBoundarySequence === priorTurnBoundarySequence &&
+          state.turnLifecycleSequence === priorTurnLifecycleSequence &&
           state.pendingControls.size === 0
         ) {
           throw Object.assign(
             new Error(
-              'Codex turn/start returned before a terminal or control boundary was observed',
+              'Codex turn/start returned before a turn lifecycle or control boundary was observed',
             ),
             { code: 'missing_turn_boundary' },
           );
