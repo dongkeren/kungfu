@@ -297,6 +297,16 @@
     },
     {
       "direction": "server-notification",
+      "method": "turn/diff/updated",
+      "schemaFile": "v2/TurnDiffUpdatedNotification.json",
+      "normalizedSemantic": "turn-diff-observed",
+      "interactionOperation": "status",
+      "requiredPaths": ["/params/threadId", "/params/turnId", "/params/diff"],
+      "rawRetention": "metadata-only",
+      "authority": "turn-diff-observation-not-work-fact"
+    },
+    {
+      "direction": "server-notification",
       "method": "turn/started",
       "schemaFile": "v2/TurnStartedNotification.json",
       "normalizedSemantic": "turn-started",
