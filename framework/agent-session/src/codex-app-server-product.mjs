@@ -262,10 +262,7 @@ export class CodexAppServerProductRuntime {
       if (receipt.providerMethod === 'turn/started')
         state.providerTurnId = receipt.providerTurnId;
       if (receipt.providerTerminal) state.providerTurnId = null;
-      if (
-        receipt.providerMethod === 'turn/started' ||
-        receipt.providerMethod === 'turn/completed'
-      ) {
+      if (receipt.providerMethod === 'turn/completed') {
         state.turnBoundarySequence += 1;
       }
       if (receipt.receiptKind === 'control-request') {
@@ -450,6 +447,7 @@ export class CodexAppServerProductRuntime {
         const deadline = Date.now() + 10_000;
         while (
           state.turnBoundarySequence === priorTurnBoundarySequence &&
+          state.pendingControls.size === 0 &&
           !state.eventFailure &&
           !runtime.status().exit &&
           Date.now() < deadline
@@ -458,10 +456,13 @@ export class CodexAppServerProductRuntime {
           drain();
         }
         if (state.eventFailure) throw state.eventFailure;
-        if (state.turnBoundarySequence === priorTurnBoundarySequence) {
+        if (
+          state.turnBoundarySequence === priorTurnBoundarySequence &&
+          state.pendingControls.size === 0
+        ) {
           throw Object.assign(
             new Error(
-              'Codex turn/start returned before any turn boundary was observed',
+              'Codex turn/start returned before a terminal or control boundary was observed',
             ),
             { code: 'missing_turn_boundary' },
           );
