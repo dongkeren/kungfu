@@ -482,16 +482,20 @@ def _direct_process_transport(
     """Select a portable direct-process prompt transport.
 
     Codex accepts ``-`` as the prompt argument and then reads the complete
-    instruction from stdin.  Keeping the prompt out of argv avoids the Windows
-    command-line length limit without binding Kungfu to any Agent version.
-    Other providers retain their native argv contract.
+    instruction from stdin.  The deterministic Mock Agent accepts the same
+    content as one bracketed-paste frame.  Keeping both prompts out of argv
+    avoids the Windows command-line length limit without binding Kungfu to any
+    Agent version.  Other providers retain their native argv contract.
     """
 
     values = [str(value) for value in argv]
-    if provider != "codex":
+    if provider not in {"codex", "synthetic"}:
         return values, None
     if not values:
-        raise ValueError("Codex direct-process launch argv is required")
+        raise ValueError("direct-process launch argv is required")
+    if provider == "synthetic":
+        prompt = values[-1]
+        return values[:-1], f"\x1b[200~{prompt}\x1b[201~\r"
     return [*values[:-1], "-"], values[-1]
 
 
