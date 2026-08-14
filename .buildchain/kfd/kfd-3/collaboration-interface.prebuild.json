@@ -6,15 +6,15 @@
   "supportLevel": "release",
   "source": {
     "cwd": ".",
-    "sourceSha": "1577c9702fb813146e097c8cc7f24f4eef81803f",
+    "sourceSha": "cc2f6bf1466e14ab1bbcbd0fce2ad9927d999e19",
     "registryPath": ".buildchain/kfd/kfd-3/surfaces.json",
-    "registryDigest": "sha256:dc5dde023f2df200b23ca672b07118781ebf8496d15d226a1c8b6ef13bebf7b6"
+    "registryDigest": "sha256:2912ba2a2b8a5921798f0d844e6367b607725b58a8ec83df99bf9610393f129a"
   },
   "sourceRegistry": {
     "id": "kungfu",
     "path": ".buildchain/kfd/kfd-3/surfaces.json",
-    "sha256": "ab6e22a01ba276e15b775d610a9accf1972299a81f0525906809f1fc5274b8a2",
-    "digest": "sha256:dc5dde023f2df200b23ca672b07118781ebf8496d15d226a1c8b6ef13bebf7b6"
+    "sha256": "17a0dabd86a4dca83f2443dbfac397192e4b4ba7af773ef2e9bfdf73de0e6272",
+    "digest": "sha256:2912ba2a2b8a5921798f0d844e6367b607725b58a8ec83df99bf9610393f129a"
   },
   "upstreamKfd": {
     "aggregatePath": "developer/sdk/kfd/upstream-aggregate.json",
@@ -25,16 +25,16 @@
       "buildchain"
     ],
     "packageVersions": {
-      "kfd": "1.0.0-alpha.53",
+      "kfd": "1.0.0-alpha.65",
       "libnode": "22.22.3-kf.5-alpha.3",
       "buildchain": "3.0.0"
     },
-    "digest": "sha256:5e48c5e15d66dd4ff9c17c7c316467bb57c1507e4571c24c4a258d2296038347"
+    "digest": "sha256:f7fbecb88a2fc7170f69cf75663d7b2cb35499eb6d4952faec255179af350ac8"
   },
   "expectedArtifactVerification": {
     "command": "node scripts/buildchain-kfd-evidence.mjs --artifact-witness --json"
   },
-  "collaborationInterfaceDigest": "sha256:739ba8616ae05cbfb982bc76f708910f30ba9c4026cdd97b4955ebc2b2a8cc8f",
+  "collaborationInterfaceDigest": "sha256:3ad1ce02f8f502c8d860640775c6600e1f5253f2577964a3cf7634b52f45b2e4",
   "collaborationInterface": {
     "schemaVersion": 1,
     "contract": "kungfu-buildchain-kfd-3-surface-registry",
@@ -53,11 +53,11 @@
         "buildchain"
       ],
       "packageVersions": {
-        "kfd": "1.0.0-alpha.53",
+        "kfd": "1.0.0-alpha.65",
         "libnode": "22.22.3-kf.5-alpha.3",
         "buildchain": "3.0.0"
       },
-      "digest": "sha256:5e48c5e15d66dd4ff9c17c7c316467bb57c1507e4571c24c4a258d2296038347"
+      "digest": "sha256:f7fbecb88a2fc7170f69cf75663d7b2cb35499eb6d4952faec255179af350ac8"
     },
     "surfaces": [
       {
