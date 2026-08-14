@@ -538,6 +538,22 @@ test('deterministic Mock onboarding bypasses external Agent discovery', () => {
   );
 });
 
+test('Starter onboarding stabilizes the Agent Session before binding the Work start plan', () => {
+  const source = readFileSync(
+    new URL('./starter-project-view/index.tsx', import.meta.url),
+    'utf8',
+  );
+  const preview = source.slice(
+    source.indexOf('const preview = React.useCallback'),
+    source.indexOf('const start = React.useCallback'),
+  );
+
+  assert.match(
+    preview,
+    /ensureAgentSession\(project\.workspace\.selected\.runtime_dir\)[\s\S]*?\.then\(\(\) => lab\.planStarterWork\(workReference, profile\.id\)\)/u,
+  );
+});
+
 test('retained Agent Session receipts route back to the interactive Project surface', () => {
   const retained = {
     schema: 'kungfu.work-start.receipt/v1',
