@@ -281,6 +281,7 @@ def _status(runtime_dir, initiative_id, assignment_id, now=""):
     return result
 
 
+@profile_sdk.validation_scope()
 def _admit_captured_assignment(
     *,
     request_file,
