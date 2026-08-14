@@ -1148,7 +1148,7 @@ export class AgentSessionProductSurface {
           },
           threadStartParams: input.structured?.threadStartParams ?? {
             ...(input.cwd ? { cwd: input.cwd } : {}),
-            approvalPolicy: 'untrusted',
+            approvalPolicy: 'on-request',
             approvalsReviewer: 'user',
             sandbox: 'read-only',
           },
