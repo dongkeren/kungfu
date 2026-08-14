@@ -119,6 +119,106 @@ def _installed_runtime_entrypoint(binding_file: Path) -> str:
     return "kungfu.exe" if binding_file.suffix.lower() == ".pyd" else "kungfu"
 
 
+def _qualified_core_materialization_proof(
+    checkout: Path,
+    binding_file: Path,
+    build_revision: str,
+    checkout_revision: str,
+) -> dict[str, Any]:
+    """Verify compatible source admission through the canonical JS consumer."""
+
+    target_root = (checkout / "framework" / "core" / "dist" / "kungfu").resolve()
+    verifier = (
+        checkout
+        / "framework"
+        / "assignment-capture"
+        / "qualified-assignment-core-consumer.mjs"
+    )
+    if (
+        not _same_or_descendant(binding_file, target_root)
+        or not verifier.is_file()
+        or not _GIT_REVISION.fullmatch(build_revision)
+        or not _GIT_REVISION.fullmatch(checkout_revision)
+    ):
+        return {}
+    try:
+        completed = subprocess.run(
+            [
+                "node",
+                str(verifier),
+                "verify-materialization",
+                "--repository-root",
+                str(checkout),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        proof = json.loads(completed.stdout)
+        checkout_tree = subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD^{tree}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
+        return {}
+    fields = {
+        "schema",
+        "repository",
+        "consumingCommit",
+        "consumingTree",
+        "producerCommit",
+        "qualifiedTargetCommit",
+        "compatibilityRoot",
+        "objectRoot",
+        "manifestRoot",
+        "artifactRoot",
+        "qualificationReceiptRoot",
+        "promotionAuthorityRoot",
+        "materializationReceiptRoot",
+        "targetRoot",
+        "proofRoot",
+    }
+    root_fields = {
+        "compatibilityRoot",
+        "objectRoot",
+        "manifestRoot",
+        "artifactRoot",
+        "qualificationReceiptRoot",
+        "promotionAuthorityRoot",
+        "materializationReceiptRoot",
+        "proofRoot",
+    }
+    if (
+        not isinstance(proof, dict)
+        or set(proof) != fields
+        or proof.get("schema") != "shifu.qualified-assignment-core-admission-proof/v1"
+        or proof.get("targetRoot") != "framework/core/dist/kungfu"
+        or proof.get("consumingCommit") != checkout_revision
+        or proof.get("consumingTree") != checkout_tree
+        or proof.get("producerCommit") != build_revision
+        or not all(
+            _GIT_REVISION.fullmatch(str(proof.get(field) or ""))
+            for field in (
+                "consumingCommit",
+                "consumingTree",
+                "producerCommit",
+                "qualifiedTargetCommit",
+            )
+        )
+        or not all(
+            re.fullmatch(r"sha256:[0-9a-f]{64}", str(proof.get(field) or ""))
+            for field in root_fields
+        )
+    ):
+        return {}
+    proof_body = {key: value for key, value in proof.items() if key != "proofRoot"}
+    if proof["proofRoot"] != semantic_root(proof_body):
+        return {}
+    return proof
+
+
 def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     """Fail closed unless pykungfu belongs to this source or installed product.
 
@@ -162,6 +262,19 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
         and build_revision == checkout_revision
         and build_info.get("git", {}).get("pristine") is True
     )
+    qualified_core = (
+        _qualified_core_materialization_proof(
+            checkout,
+            binding_file,
+            build_revision,
+            checkout_revision,
+        )
+        if source_layout
+        and not current
+        and build_info.get("git", {}).get("pristine") is True
+        else {}
+    )
+    compatible = bool(qualified_core)
 
     install_source = os.environ.get("KUNGFU_INSTALL_SOURCE", "")
     runtime_value = os.environ.get("KUNGFU_DIR", "")
@@ -195,16 +308,18 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     )
     result = {
         "schema": "kungfu.assignment-orchestration.binding-provenance/v1",
-        "ok": bool(current or installed or override),
+        "ok": bool(current or compatible or installed or override),
         "state": (
             "current-checkout"
             if current
+            else "qualified-core-materialization"
+            if compatible
             else "installed-product"
             if installed
             else "degraded"
         ),
         "binding_file": str(binding_file),
-        "checkout": str(checkout) if current else None,
+        "checkout": str(checkout) if current or compatible else None,
         "compiled": compiled,
         "install_source": install_source or None,
         "runtime_root": str(runtime_root) if installed else None,
@@ -212,9 +327,18 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
         "source_revision": build_revision or None,
         "manifest_root": semantic_root(manifest) if installed else None,
         "build_info_root": semantic_root(build_info) if build_info else None,
-        "override": bool(override and not current and not installed),
-        "fail_closed": not current and not installed and not override,
+        "override": bool(override and not current and not compatible and not installed),
+        "fail_closed": not current
+        and not compatible
+        and not installed
+        and not override,
     }
+    if compatible:
+        result["qualified_core_proof_root"] = qualified_core["proofRoot"]
+        result["materialization_receipt_root"] = qualified_core[
+            "materializationReceiptRoot"
+        ]
+        result["compatibility_root"] = qualified_core["compatibilityRoot"]
     result["provenance_root"] = semantic_root(result)
     return result
 
