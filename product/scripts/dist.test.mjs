@@ -20,6 +20,7 @@ import {
   esbuildPlatformBinaryPath,
   installArgs,
   installedKungfuInvocation,
+  isInstalledKfdBuildClosure,
   isShippedKfdSupport,
   kfxBundleExternalModules,
   listKfxPackages,
@@ -232,6 +233,33 @@ test('installed KFD smoke accepts only release-qualified shipped support', () =>
         status: 'not-qualified',
         shippedSupport: false,
       },
+    }),
+    false,
+  );
+});
+
+test('installed KFD build smoke accepts a governed candidate closure before Passport qualification', () => {
+  const candidate = {
+    status: 'candidate',
+    implementation: { status: 'implemented' },
+    verification: { status: 'passed' },
+    buildchain: { gateStatus: 'manifest-verified' },
+    claimClass: 'standard-adopter-manifest-projection',
+    releaseQualification: { shippedSupport: false },
+    declaration: { state: 'candidate', usage: 'used' },
+  };
+  assert.equal(isInstalledKfdBuildClosure(candidate), true);
+  assert.equal(
+    isInstalledKfdBuildClosure({
+      ...candidate,
+      buildchain: { gateStatus: 'failed' },
+    }),
+    false,
+  );
+  assert.equal(
+    isInstalledKfdBuildClosure({
+      ...candidate,
+      declaration: { state: 'candidate', usage: 'evaluating' },
     }),
     false,
   );

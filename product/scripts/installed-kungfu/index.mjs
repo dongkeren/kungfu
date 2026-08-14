@@ -391,6 +391,20 @@ export function isShippedKfdSupport(standard) {
   );
 }
 
+export function isInstalledKfdBuildClosure(standard) {
+  if (isShippedKfdSupport(standard)) return true;
+  return (
+    standard?.status === 'candidate' &&
+    standard?.implementation?.status === 'implemented' &&
+    standard?.verification?.status === 'passed' &&
+    standard?.buildchain?.gateStatus === 'manifest-verified' &&
+    standard?.claimClass === 'standard-adopter-manifest-projection' &&
+    standard?.releaseQualification?.shippedSupport === false &&
+    standard?.declaration?.state === 'candidate' &&
+    standard?.declaration?.usage === 'used'
+  );
+}
+
 export function runInstalledKungfuKfdSmoke({
   installRoot,
   kungfuBin,
@@ -426,9 +440,9 @@ export function runInstalledKungfuKfdSmoke({
   if (data.contract !== 'kungfu-sdk-kfd-standards-status') {
     throw new Error(`unexpected kfd status contract: ${data.contract}`);
   }
-  if (!isShippedKfdSupport(data.standards?.['kfd-3'])) {
+  if (!isInstalledKfdBuildClosure(data.standards?.['kfd-3'])) {
     throw new Error(
-      'installed kungfu kfd status did not report release-qualified KFD-3 support',
+      'installed kungfu kfd status did not report a governed KFD-3 build closure',
     );
   }
   if (

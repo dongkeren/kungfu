@@ -37,6 +37,7 @@ import {
 } from './installed-kungfu/index.mjs';
 export {
   installedKungfuInvocation,
+  isInstalledKfdBuildClosure,
   isShippedKfdSupport,
   runInstalledCliSemanticSmoke,
   runInstalledEmbeddedNodeAddonSmoke,
