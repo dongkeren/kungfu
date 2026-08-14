@@ -1209,6 +1209,7 @@ test('Project Work restores and controls one retained Agent Session through the 
           interactionState = 'ready';
         }
         if (request.operation === 'end') {
+          await Promise.resolve();
           live = false;
           interactionState = 'ended';
         }

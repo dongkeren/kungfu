@@ -553,10 +553,13 @@ export function agentProfileSourceLabel(
 export function deterministicMockAgentSelection(
   scenario: string,
 ): SelectableAgentProfile {
+  const reviewer = scenario === 'review-fit';
   return {
     schema: 'kungfu.agent-runtime-profile/v1',
     id: `kungfu.mock-agent.${scenario}`,
-    label: `Mock Agent · ${scenario}`,
+    label: reviewer
+      ? 'Mock Reviewer · deterministic-fit'
+      : `Mock Agent · ${scenario}`,
     provider: 'synthetic',
     launch: {
       executable: process.env.KUNGFU_MOCK_AGENT_EXECUTABLE ?? process.execPath,
@@ -571,6 +574,17 @@ export function deterministicMockAgentSelection(
     source: 'qualification',
     lastVerified: null,
   };
+}
+
+export function deterministicMockSelectionForStage(
+  scenario: string | undefined,
+  stage: 'agents' | 'review-agents',
+): SelectableAgentProfile | null {
+  const normalized = scenario?.trim();
+  if (!normalized) return null;
+  return deterministicMockAgentSelection(
+    stage === 'review-agents' ? 'review-fit' : normalized,
+  );
 }
 
 export function projectSectionNavigationAtPoint({
@@ -795,6 +809,21 @@ export function StarterProjectHost({
   );
   const loadAgents = React.useCallback(
     (nextStage: 'agents' | 'review-agents') => {
+      const deterministicMock = deterministicMockSelectionForStage(
+        process.env.KUNGFU_MOCK_AGENT_SCENARIO,
+        nextStage,
+      );
+      if (deterministicMock) {
+        setProfiles([deterministicMock]);
+        setSelectedProfile(0);
+        setProfileSources({
+          [deterministicMock.id]: agentProfileSourceLabel('qualification'),
+        });
+        setError('');
+        setBusy('');
+        setStage(nextStage);
+        return;
+      }
       setBusy('discovering verified Agents');
       setError('');
       void lab
@@ -802,15 +831,6 @@ export function StarterProjectHost({
         .then((catalog) => {
           const available = new Map<string, SelectableAgentProfile>();
           const sources: Record<string, string> = {};
-          const mockScenario =
-            nextStage === 'agents'
-              ? process.env.KUNGFU_MOCK_AGENT_SCENARIO?.trim()
-              : '';
-          if (mockScenario) {
-            const mock = deterministicMockAgentSelection(mockScenario);
-            available.set(mock.id, mock);
-            sources[mock.id] = agentProfileSourceLabel('qualification');
-          }
           for (const row of catalog.discovered) {
             if (row.available) {
               available.set(row.profile.id, row.profile);
@@ -830,9 +850,8 @@ export function StarterProjectHost({
               'No supported Agent is available. Run `kungfu agent runtime discover`.',
             );
           }
-          const preferred = mockScenario
-            ? `kungfu.mock-agent.${mockScenario}`
-            : (catalog.defaultProfileId ?? catalog.recommendedProfileId ?? '');
+          const preferred =
+            catalog.defaultProfileId ?? catalog.recommendedProfileId ?? '';
           setProfiles(values);
           setSelectedProfile(
             Math.max(

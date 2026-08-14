@@ -188,7 +188,10 @@ class ManagedRunCoordinator:
             invoke,
             ref,
             _initial_session_boundary_reached,
-            timeout_seconds=min(timeout_seconds, 30.0),
+            timeout_seconds=(
+                None if provider == "synthetic" else min(timeout_seconds, 30.0)
+            ),
+            event_driven=provider == "synthetic",
         )
         if ready.get("interactionState") != "ready":
             raise ValueError(
@@ -237,7 +240,8 @@ class ManagedRunCoordinator:
             invoke,
             ref,
             completed_turn,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=None if provider == "synthetic" else timeout_seconds,
+            event_driven=provider == "synthetic",
         )
         snapshot = invoke(
             {"operation": "snapshot", "session": dict(ref), "requestedSequence": 0}

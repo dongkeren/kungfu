@@ -20,6 +20,7 @@ const READ_OPERATIONS = new Set([
   'list',
   'show',
   'status',
+  'wait-status-change',
   'snapshot',
 ]);
 
@@ -264,6 +265,7 @@ function publicStatus(session) {
     capsuleGeneration: status.capsuleGeneration,
     coordinatorEpoch: status.coordinatorEpoch,
     sessionStreamEpoch: status.sessionStreamEpoch,
+    changeSequence: status.changeSequence,
     lifecycleState: status.lifecycleState,
     interactionState: status.interactionState,
     inputAdmission: status.inputAdmission,
@@ -493,6 +495,7 @@ export class AgentSessionProductSurface {
         'attach',
         'detach',
         'status',
+        'wait-status-change',
         'snapshot',
         'plan-control',
         'acquire-control',
@@ -671,6 +674,19 @@ export class AgentSessionProductSurface {
       console: projection?.console ?? null,
       attempt: projection?.attempt ?? null,
     };
+  }
+
+  async waitStatusChange({ session: ref, afterChangeSequence }) {
+    const normalized = sessionRef(ref);
+    const session = this.runtime.get(normalized);
+    if (!session || typeof session.waitForStatusChange !== 'function') {
+      throw new AgentSessionSurfaceError(
+        'unsupported_operation',
+        'event-driven status changes are unavailable for this Agent Session',
+      );
+    }
+    await session.waitForStatusChange(afterChangeSequence);
+    return this.show(normalized);
   }
 
   resolveConsole(input) {
@@ -1480,6 +1496,8 @@ export class AgentSessionProductSurface {
       if (operation === 'list') return this.list();
       if (operation === 'show' || operation === 'status')
         return this.show(request.session);
+      if (operation === 'wait-status-change')
+        return this.waitStatusChange(request);
       return this.#session(request.session).port.snapshot({
         requestedSequence: request.requestedSequence ?? 0,
       });

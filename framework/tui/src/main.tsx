@@ -40,6 +40,7 @@ import {
 import { Box, Text, render, useApp } from 'ink';
 import React from 'react';
 import {
+  createAttachedAgentSessionHost,
   createDetachedAgentSessionHost,
   prepareAgentSessionNodePty,
 } from '../../agent-session/src/product-client.mjs';
@@ -152,13 +153,17 @@ import {
 const nodeRequire = createRequire(import.meta.url);
 let tuiAgentSessionEndpoint = '';
 let tuiAgentSessionReady: Promise<string> | undefined;
-let tuiAgentSessionHost: ReturnType<typeof createDetachedAgentSessionHost>;
+let tuiAgentSessionHost:
+  | ReturnType<typeof createAttachedAgentSessionHost>
+  | ReturnType<typeof createDetachedAgentSessionHost>
+  | undefined;
 let tuiAgentSessionRuntimeDir = '';
 function ensureTuiAgentSession(runtimeDir: string): Promise<string> {
   const resolvedRuntimeDir = path.resolve(runtimeDir);
   if (
     tuiAgentSessionReady &&
-    tuiAgentSessionRuntimeDir === resolvedRuntimeDir
+    tuiAgentSessionRuntimeDir === resolvedRuntimeDir &&
+    tuiAgentSessionHost
   ) {
     const host = tuiAgentSessionHost;
     tuiAgentSessionReady = tuiAgentSessionReady.then(async () => {
@@ -196,17 +201,26 @@ function ensureTuiAgentSession(runtimeDir: string): Promise<string> {
   process.env.KUNGFU_MOCK_AGENT_SCRIPT = mockPath;
   process.env.KUNGFU_PROJECT_WORK_AGENT_SESSION = '1';
   const paths = runtimePaths();
-  const host = createDetachedAgentSessionHost({
-    runtimeDir: resolvedRuntimeDir,
-    executable: resolveTuiAgentSessionExecutable({
-      env: process.env,
-      cliBin: paths.bin,
-      sourceCliFallback: paths.sourceCliFallback,
-      processExecPath: process.execPath,
-    }),
-    workerPath,
-    env: process.env,
-  });
+  const deterministicMock = Boolean(
+    process.env.KUNGFU_MOCK_AGENT_SCENARIO?.trim(),
+  );
+  const host = deterministicMock
+    ? createAttachedAgentSessionHost({
+        runtimeDir: resolvedRuntimeDir,
+        ptyModule: process.env.KUNGFU_AGENT_SESSION_NODE_PTY_MODULE,
+        env: process.env,
+      })
+    : createDetachedAgentSessionHost({
+        runtimeDir: resolvedRuntimeDir,
+        executable: resolveTuiAgentSessionExecutable({
+          env: process.env,
+          cliBin: paths.bin,
+          sourceCliFallback: paths.sourceCliFallback,
+          processExecPath: process.execPath,
+        }),
+        workerPath,
+        env: process.env,
+      });
   tuiAgentSessionHost = host;
   tuiAgentSessionRuntimeDir = resolvedRuntimeDir;
   tuiAgentSessionEndpoint = host.endpoint;
@@ -215,6 +229,14 @@ function ensureTuiAgentSession(runtimeDir: string): Promise<string> {
     host.invoke({ operation: 'capabilities' }),
   ).then(() => host.endpoint);
   return tuiAgentSessionReady;
+}
+async function closeTuiAgentSession() {
+  const host = tuiAgentSessionHost;
+  tuiAgentSessionHost = undefined;
+  tuiAgentSessionReady = undefined;
+  tuiAgentSessionEndpoint = '';
+  tuiAgentSessionRuntimeDir = '';
+  if (host && 'close' in host) await host.close();
 }
 async function invokeTuiAgentSession(
   request: Record<string, unknown> & { operation: string },
@@ -2362,48 +2384,52 @@ async function main(): Promise<void> {
   let projectTourResult: ProjectTourResult | undefined;
   let playbackQuit = false;
   let terminating = false;
-  await lifecycle.run(
-    {
-      onExit: (signal) => {
-        terminating = true;
-        if (signal) process.exitCode = 128 + osConstants.signals[signal];
-        instance?.unmount();
-      },
-      onResize: (size) => dimensions.update(size),
-    },
-    async () => {
-      if (terminating) return;
-      instance = render(
-        <ProductHost
-          lab={lab}
-          dimensions={dimensions}
-          autoDemo={autoDemo}
-          projectTourRoot={projectTourRoot}
-          projectTourSpeed={projectTourSpeed}
-          projectTourEpisode={projectTourEpisode}
-          emptyState={emptyState}
-          onAutoDemoSettled={(result) => {
-            autoDemoResult = result;
-          }}
-          onProjectTourSettled={(result) => {
-            projectTourResult = result;
-          }}
-          onPlaybackQuit={() => {
-            playbackQuit = true;
-          }}
-        />,
-        {
-          stdin: process.stdin,
-          stdout: terminalOutput as unknown as NodeJS.WriteStream,
-          stderr: process.stderr,
-          exitOnCtrlC: false,
-          patchConsole: false,
-          debug: true,
+  try {
+    await lifecycle.run(
+      {
+        onExit: (signal) => {
+          terminating = true;
+          if (signal) process.exitCode = 128 + osConstants.signals[signal];
+          instance?.unmount();
         },
-      );
-      await instance.waitUntilExit();
-    },
-  );
+        onResize: (size) => dimensions.update(size),
+      },
+      async () => {
+        if (terminating) return;
+        instance = render(
+          <ProductHost
+            lab={lab}
+            dimensions={dimensions}
+            autoDemo={autoDemo}
+            projectTourRoot={projectTourRoot}
+            projectTourSpeed={projectTourSpeed}
+            projectTourEpisode={projectTourEpisode}
+            emptyState={emptyState}
+            onAutoDemoSettled={(result) => {
+              autoDemoResult = result;
+            }}
+            onProjectTourSettled={(result) => {
+              projectTourResult = result;
+            }}
+            onPlaybackQuit={() => {
+              playbackQuit = true;
+            }}
+          />,
+          {
+            stdin: process.stdin,
+            stdout: terminalOutput as unknown as NodeJS.WriteStream,
+            stderr: process.stderr,
+            exitOnCtrlC: false,
+            patchConsole: false,
+            debug: true,
+          },
+        );
+        await instance.waitUntilExit();
+      },
+    );
+  } finally {
+    await closeTuiAgentSession();
+  }
   if (autoDemo && !playbackQuit) {
     if (!autoDemoResult) {
       throw new Error('Agent Work Lab autoplay exited without a result');
