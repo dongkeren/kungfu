@@ -69,6 +69,23 @@ def test_codex_direct_process_uses_stdin_without_version_assumptions():
     assert run_agent._direct_process_transport("claude", argv) == (argv, None)
 
 
+def test_deterministic_mock_direct_process_keeps_large_prompt_out_of_argv():
+    prompt = "bounded review\n" + ("evidence\n" * 10_000)
+    argv = [
+        "/opt/kungfu/runtime/kungfu",
+        "/opt/kungfu/tui/mock-agent.mjs",
+        "--scenario",
+        "review-fit",
+        prompt,
+    ]
+
+    process_argv, stdin_text = run_agent._direct_process_transport("synthetic", argv)
+
+    assert process_argv == argv[:-1]
+    assert prompt not in process_argv
+    assert stdin_text == f"\x1b[200~{prompt}\x1b[201~\r"
+
+
 def test_deterministic_mock_waits_for_session_events_without_a_deadline(monkeypatch):
     ref = {
         "workConsoleId": "work:mock",
