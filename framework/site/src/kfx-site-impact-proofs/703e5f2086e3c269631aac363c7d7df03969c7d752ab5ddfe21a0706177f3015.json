@@ -1,7 +1,7 @@
 {
   "contract": "kungfu.kfx-site-impact-proof/v1",
   "baseRevision": "0fbacb3dfd48883d9db222f55ce2f57ebdbd9c1b",
-  "changeRoot": "sha256:5d4b8c022fdc7e6cabc4e0c10dd3d784b373a1bb7b2e33abb36906e1c0805b77",
+  "changeRoot": "sha256:4c25d7de385469918bb1eb11dc3890ae17d679e77aa81dfe8ce709e9dd8b90c9",
   "changes": [
     {
       "baseContentRoot": "sha256:e36f382e47ec5d4cd9a3e5087fc0110deab6568ac14c7797abf3759de65d5191",
@@ -17,7 +17,7 @@
     },
     {
       "baseContentRoot": "sha256:d10e34cba79cef01ea5b098d2082d3b2a31058dec354ac42fc37cd1aa4f0a9d4",
-      "contentRoot": "sha256:6f24117a622dbfd7d7f5945a6b0a3e2ec902ad563ba88ebeeb5dfcef3591e84b",
+      "contentRoot": "sha256:3403d0b6ab98dba02044d0b0291c3f225b60a24ad4b0665a11d2c2e4202181cd",
       "path": ".buildchain/kfd/kfd-2/release-claims.json",
       "status": "modified"
     },
@@ -29,7 +29,7 @@
     },
     {
       "baseContentRoot": "sha256:815fceece76ccd6a93f77d5f9522a5b858e803bd6e4fd32325dd5ddb4a078937",
-      "contentRoot": "sha256:6d00fd05df9f965468b0587c095f806e1097fb9037cc2d7c1573cfa1308ef66e",
+      "contentRoot": "sha256:a4e7a86967166b3b0be32508841507f66444b9337dda370578aa31b2bd1840a9",
       "path": ".buildchain/kfd/kfd-3/collaboration-interface.prebuild.json",
       "status": "modified"
     },
@@ -41,7 +41,7 @@
     },
     {
       "baseContentRoot": "sha256:404c3d76a0fa96964f59fa1a157ed1a6bd83f25b29ff1173bf2792eb1b77127a",
-      "contentRoot": "sha256:9eab22ffc72901be8c0879b2847fb1e04b9ce94048ba75d58141dd1d43474912",
+      "contentRoot": "sha256:3668fdefea715364eb9e625dcbd89c7a897447e50798111ee83142bd2a775d47",
       "path": ".buildchain/kfd/support-matrix.json",
       "status": "modified"
     },
@@ -53,7 +53,7 @@
     },
     {
       "baseContentRoot": "sha256:d10e34cba79cef01ea5b098d2082d3b2a31058dec354ac42fc37cd1aa4f0a9d4",
-      "contentRoot": "sha256:6f24117a622dbfd7d7f5945a6b0a3e2ec902ad563ba88ebeeb5dfcef3591e84b",
+      "contentRoot": "sha256:3403d0b6ab98dba02044d0b0291c3f225b60a24ad4b0665a11d2c2e4202181cd",
       "path": "developer/sdk/kfd/kfd-2/release-claims.json",
       "status": "modified"
     },
@@ -65,7 +65,7 @@
     },
     {
       "baseContentRoot": "sha256:404c3d76a0fa96964f59fa1a157ed1a6bd83f25b29ff1173bf2792eb1b77127a",
-      "contentRoot": "sha256:9eab22ffc72901be8c0879b2847fb1e04b9ce94048ba75d58141dd1d43474912",
+      "contentRoot": "sha256:3668fdefea715364eb9e625dcbd89c7a897447e50798111ee83142bd2a775d47",
       "path": "developer/sdk/kfd/support-matrix.json",
       "status": "modified"
     },
@@ -178,8 +178,14 @@
       "status": "modified"
     },
     {
+      "baseContentRoot": "sha256:caa977b8f5a7f07754806f966acf6b496d9f44fe31be8ad194defdd13c35ba5c",
+      "contentRoot": "sha256:b3b4c388da30b4b0f569b495f7f83f87fc125cd5e28611103f419b4cf6a55bbf",
+      "path": "scripts/readonly-agent-bootstrap.test.mjs",
+      "status": "modified"
+    },
+    {
       "baseContentRoot": "sha256:b015a95a8eedf71185a762a3e6e119f07a0c427853cb2229917ba084befc8a2e",
-      "contentRoot": "sha256:9cb943217229e9f241b05dbc9b0feb5e8cc3ac5d8152fb6a729087720e83f22d",
+      "contentRoot": "sha256:9ac4672ac6f2f646810e499d5ad761f840aa0ceb49d5202fd53616fbd52c237e",
       "path": "scripts/verify-kungfu-release-admission.test.mjs",
       "status": "modified"
     },
@@ -207,11 +213,11 @@
     "package-facets",
     "profiles-suites"
   ],
-  "rationale": "KFD product-runtime category admission, KFD65 Agent Hub lock, dependency lock, and release evidence change internal qualification only; no KFX Site Bundle source or public site facet changes.",
+  "rationale": "Extend the cold read-only fixture with the exact published Buildchain and KFD module closure required by the product-runtime category gate; no KFX site bundle source or public surface changes.",
   "attestation": {
     "publicBehaviorUnchanged": true,
     "publicContractUnchanged": true,
     "readerJourneyUnchanged": true
   },
-  "proofRoot": "sha256:ea06b7f84a94877070a7c3cccd73b90267423020ad8b1e800e5951b22a440e67"
+  "proofRoot": "sha256:703e5f2086e3c269631aac363c7d7df03969c7d752ab5ddfe21a0706177f3015"
 }
