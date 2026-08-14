@@ -9,6 +9,7 @@ import { test } from 'node:test';
 
 import {
   buildQualificationEvidence,
+  verifyDarwin,
   verifyWindows,
 } from './run-upgrade-native-qualification.mjs';
 import {
@@ -285,6 +286,56 @@ test('Windows Alpha native evidence accepts exact unsigned PE bytes', () => {
       installer: true,
       executable: true,
       platformCodeSigning: false,
+      artifactIntegrity: 'signed-channel-digest',
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('macOS Alpha native evidence defers final signing to the credential island', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kungfu-deferred-macos-signing-'),
+  );
+  try {
+    const application = path.join(
+      root,
+      'product',
+      'dist',
+      'desktop',
+      'Kungfu Episodes.app',
+      'Contents',
+    );
+    fs.mkdirSync(path.join(application, 'MacOS'), { recursive: true });
+    fs.writeFileSync(path.join(application, 'Info.plist'), '<plist/>');
+    fs.writeFileSync(path.join(application, 'MacOS', 'Kungfu Episodes'), 'bin');
+    const policy = {
+      schema: 'kungfu.macos-credential-island-policy/v1',
+      environment: 'buildchain-artifact-signing',
+      platformId: 'macos-arm64-credential',
+      app: { bundleId: 'com.kungfu.app', architecture: 'arm64' },
+      requiredVerifications: ['codesignStrict', 'appStaple'],
+    };
+    const policyFile = path.join(
+      root,
+      'docs',
+      'qualification',
+      'gates',
+      'macos-credential-island-policy.json',
+    );
+    fs.mkdirSync(path.dirname(policyFile), { recursive: true });
+    fs.writeFileSync(policyFile, JSON.stringify(policy));
+
+    assert.deepEqual(verifyDarwin(root), {
+      kind: 'credential-island-deferred',
+      functionalArtifact: true,
+      finalSignature: 'deferred',
+      finalNotarization: 'deferred',
+      authority: 'buildchain-artifact-signing',
+      platformId: 'macos-arm64-credential',
+      bundleId: 'com.kungfu.app',
+      architecture: 'arm64',
+      requiredFinalVerifications: ['codesignStrict', 'appStaple'],
       artifactIntegrity: 'signed-channel-digest',
     });
   } finally {

@@ -15,6 +15,12 @@ import {
 } from './upgrade-qualification.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const MACOS_CREDENTIAL_ISLAND_POLICY = path.join(
+  'docs',
+  'qualification',
+  'gates',
+  'macos-credential-island-policy.json',
+);
 function evidencePath(root) {
   return path.join(
     root,
@@ -120,25 +126,56 @@ function verifyArtifactBytes(root, manifest) {
   }
 }
 
-function verifyDarwin(root) {
+function readMacosCredentialIslandPolicy(root) {
+  const file = path.join(root, MACOS_CREDENTIAL_ISLAND_POLICY);
+  const policy = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (
+    policy.schema !== 'kungfu.macos-credential-island-policy/v1' ||
+    !policy.environment ||
+    !policy.platformId ||
+    !policy.app?.bundleId ||
+    !['arm64', 'x64'].includes(policy.app?.architecture) ||
+    !Array.isArray(policy.requiredVerifications) ||
+    policy.requiredVerifications.length === 0
+  )
+    fail('macOS credential-island policy is incomplete');
+  return policy;
+}
+
+export function verifyDarwin(root) {
   const app = findExactlyOne(
     path.join(root, 'product', 'dist', 'desktop'),
     (target, entry) => entry.isDirectory() && target.endsWith('.app'),
     'packaged macOS application',
   );
-  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
-  const detail = run('codesign', ['-dv', '--verbose=4', app]);
+  const policy = readMacosCredentialIslandPolicy(root);
+  const infoPlist = path.join(app, 'Contents', 'Info.plist');
+  const executables = path.join(app, 'Contents', 'MacOS');
   if (
-    !/Authority=Developer ID Application:/.test(detail) ||
-    !/flags=.*runtime/.test(detail)
+    !fs.existsSync(infoPlist) ||
+    !fs.statSync(infoPlist).isFile() ||
+    !fs.existsSync(executables) ||
+    !fs.statSync(executables).isDirectory() ||
+    fs.readdirSync(executables).length === 0
   )
-    fail('macOS application is not Developer ID signed with hardened runtime');
-  run('xcrun', ['stapler', 'validate', app]);
-  run('spctl', ['--assess', '--type', 'execute', '--verbose=2', app]);
+    fail('macOS credential-island application structure is incomplete');
+
+  // Functional Alpha qualification runs before Buildchain's protected
+  // credential island. Bind the exact packaged bytes and the authority that
+  // must finish signing/notarization, without claiming those final checks ran
+  // on this credential-free build runner. Publication admission independently
+  // requires the returned signed/notarized payload and receipts.
   return {
-    kind: 'developer-id-notarized',
-    hardenedRuntime: true,
-    stapledTicket: true,
+    kind: 'credential-island-deferred',
+    functionalArtifact: true,
+    finalSignature: 'deferred',
+    finalNotarization: 'deferred',
+    authority: policy.environment,
+    platformId: policy.platformId,
+    bundleId: policy.app.bundleId,
+    architecture: policy.app.architecture,
+    requiredFinalVerifications: [...policy.requiredVerifications],
+    artifactIntegrity: 'signed-channel-digest',
   };
 }
 
