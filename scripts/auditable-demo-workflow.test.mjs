@@ -219,11 +219,13 @@ test('the build fails the real transported binary before either upload path', ()
   assert.equal(workflow.on.workflow_dispatch.inputs.mode.default, 'full');
   assert.equal(
     build.uses,
-    'kungfu-systems/buildchain/.github/workflows/.build.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112',
+    'kungfu-systems/buildchain/.github/workflows/build.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112',
   );
+  assert.equal(build.with['buildchain-channel'], 'alpha');
+  assert.equal(build.with['buildchain-ref'], 'v3-alpha');
   assert.equal(
-    build.with['buildchain-ref'],
-    '17dac3a861c4f06ce777641d7e6b7c3beee8d112',
+    build.with['buildchain-contract-lock-path'],
+    '.buildchain/alpha-contract-lock.json',
   );
   assert.deepEqual(build.permissions, {
     actions: 'read',

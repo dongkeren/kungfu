@@ -40,10 +40,11 @@ jobs:
       contents: read
       issues: write
       id-token: write
-    uses: kungfu-systems/buildchain/.github/workflows/.build.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112
+    uses: kungfu-systems/buildchain/.github/workflows/build.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112
     with:
-      buildchain-ref: 17dac3a861c4f06ce777641d7e6b7c3beee8d112
-      buildchain-contract-lock-path: .buildchain/contract-lock.json
+      buildchain-channel: alpha
+      buildchain-ref: v3-alpha
+      buildchain-contract-lock-path: .buildchain/alpha-contract-lock.json
       buildchain-contract-compatibility-policy: major-compatible
       buildchain-contract-drift-issue-mode: off
       runner-preset: custom
