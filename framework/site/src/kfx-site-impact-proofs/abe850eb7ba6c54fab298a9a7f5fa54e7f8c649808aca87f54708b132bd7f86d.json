@@ -1,7 +1,7 @@
 {
   "contract": "kungfu.kfx-site-impact-proof/v1",
-  "baseRevision": "0fbacb3dfd48883d9db222f55ce2f57ebdbd9c1b",
-  "changeRoot": "sha256:5d4b8c022fdc7e6cabc4e0c10dd3d784b373a1bb7b2e33abb36906e1c0805b77",
+  "baseRevision": "7eb0538031b09ff5ec60824c5e4bbc7432bf0e4a",
+  "changeRoot": "sha256:910927d8d330f8ddfba515bf92a2e863d3a95dcc83acc185add4f3ade88692ca",
   "changes": [
     {
       "baseContentRoot": "sha256:e36f382e47ec5d4cd9a3e5087fc0110deab6568ac14c7797abf3759de65d5191",
@@ -17,7 +17,7 @@
     },
     {
       "baseContentRoot": "sha256:d10e34cba79cef01ea5b098d2082d3b2a31058dec354ac42fc37cd1aa4f0a9d4",
-      "contentRoot": "sha256:6f24117a622dbfd7d7f5945a6b0a3e2ec902ad563ba88ebeeb5dfcef3591e84b",
+      "contentRoot": "sha256:4e476e3d4443c0ff654abeae2cfc6dca30c964eb6f256feb665a03608b3ef8d7",
       "path": ".buildchain/kfd/kfd-2/release-claims.json",
       "status": "modified"
     },
@@ -29,7 +29,7 @@
     },
     {
       "baseContentRoot": "sha256:815fceece76ccd6a93f77d5f9522a5b858e803bd6e4fd32325dd5ddb4a078937",
-      "contentRoot": "sha256:6d00fd05df9f965468b0587c095f806e1097fb9037cc2d7c1573cfa1308ef66e",
+      "contentRoot": "sha256:d88f977fcacd03e144f6879582aea7421678df67f2028aceb6b664c8b6d08cc8",
       "path": ".buildchain/kfd/kfd-3/collaboration-interface.prebuild.json",
       "status": "modified"
     },
@@ -41,7 +41,7 @@
     },
     {
       "baseContentRoot": "sha256:404c3d76a0fa96964f59fa1a157ed1a6bd83f25b29ff1173bf2792eb1b77127a",
-      "contentRoot": "sha256:9eab22ffc72901be8c0879b2847fb1e04b9ce94048ba75d58141dd1d43474912",
+      "contentRoot": "sha256:643ec4ec6b0673bc75f1c28e2390e56a2248a0b5be1b27dbf3560a13a21b2814",
       "path": ".buildchain/kfd/support-matrix.json",
       "status": "modified"
     },
@@ -53,7 +53,7 @@
     },
     {
       "baseContentRoot": "sha256:d10e34cba79cef01ea5b098d2082d3b2a31058dec354ac42fc37cd1aa4f0a9d4",
-      "contentRoot": "sha256:6f24117a622dbfd7d7f5945a6b0a3e2ec902ad563ba88ebeeb5dfcef3591e84b",
+      "contentRoot": "sha256:4e476e3d4443c0ff654abeae2cfc6dca30c964eb6f256feb665a03608b3ef8d7",
       "path": "developer/sdk/kfd/kfd-2/release-claims.json",
       "status": "modified"
     },
@@ -65,7 +65,7 @@
     },
     {
       "baseContentRoot": "sha256:404c3d76a0fa96964f59fa1a157ed1a6bd83f25b29ff1173bf2792eb1b77127a",
-      "contentRoot": "sha256:9eab22ffc72901be8c0879b2847fb1e04b9ce94048ba75d58141dd1d43474912",
+      "contentRoot": "sha256:643ec4ec6b0673bc75f1c28e2390e56a2248a0b5be1b27dbf3560a13a21b2814",
       "path": "developer/sdk/kfd/support-matrix.json",
       "status": "modified"
     },
@@ -142,8 +142,8 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:2896666292fa67af46f14272f62166763266f40e64bb3445e263af977871916d",
-      "contentRoot": "sha256:7f3c1ad5bcc34c516dd1316ad509dc702031885b55148377cf11427e9cce51ab",
+      "baseContentRoot": "sha256:84ca33bdbae03e402f4c07eb6ce60efa65b244584369ca229190b4a062150f7f",
+      "contentRoot": "sha256:bfc1ba913618e1125715df4aadb0e00ad1a0f5ffd12768e1f1635bfb2a0d7df7",
       "path": "framework/release/publication-surfaces.json",
       "status": "modified"
     },
@@ -178,8 +178,14 @@
       "status": "modified"
     },
     {
+      "baseContentRoot": "sha256:caa977b8f5a7f07754806f966acf6b496d9f44fe31be8ad194defdd13c35ba5c",
+      "contentRoot": "sha256:b3b4c388da30b4b0f569b495f7f83f87fc125cd5e28611103f419b4cf6a55bbf",
+      "path": "scripts/readonly-agent-bootstrap.test.mjs",
+      "status": "modified"
+    },
+    {
       "baseContentRoot": "sha256:b015a95a8eedf71185a762a3e6e119f07a0c427853cb2229917ba084befc8a2e",
-      "contentRoot": "sha256:9cb943217229e9f241b05dbc9b0feb5e8cc3ac5d8152fb6a729087720e83f22d",
+      "contentRoot": "sha256:9ac4672ac6f2f646810e499d5ad761f840aa0ceb49d5202fd53616fbd52c237e",
       "path": "scripts/verify-kungfu-release-admission.test.mjs",
       "status": "modified"
     },
@@ -207,11 +213,11 @@
     "package-facets",
     "profiles-suites"
   ],
-  "rationale": "KFD product-runtime category admission, KFD65 Agent Hub lock, dependency lock, and release evidence change internal qualification only; no KFX Site Bundle source or public site facet changes.",
+  "rationale": "Extend the cold read-only fixture with the exact published Buildchain and KFD module closure required by the product-runtime category gate; no KFX site bundle source or public surface changes.",
   "attestation": {
     "publicBehaviorUnchanged": true,
     "publicContractUnchanged": true,
     "readerJourneyUnchanged": true
   },
-  "proofRoot": "sha256:ea06b7f84a94877070a7c3cccd73b90267423020ad8b1e800e5951b22a440e67"
+  "proofRoot": "sha256:abe850eb7ba6c54fab298a9a7f5fa54e7f8c649808aca87f54708b132bd7f86d"
 }
