@@ -15,6 +15,7 @@ import { renderProfileShellSnapshot } from './profile-shell.js';
 import {
   agentProfileSourceLabel,
   deterministicMockAgentSelection,
+  deterministicMockSelectionForStage,
   openedProjectWorkReference,
   openedProjectWorks,
   projectSectionNavigationAtPoint,
@@ -496,6 +497,45 @@ test('deterministic Mock Agent selection binds the requested scenario', () => {
   assert.equal(profile.label, 'Mock Agent · approval');
   assert.equal(profile.provider, 'synthetic');
   assert.equal(profile.source, 'qualification');
+});
+
+test('deterministic Mock onboarding owns execution and review stages', () => {
+  const execution = deterministicMockSelectionForStage(
+    'recovery-story',
+    'agents',
+  );
+  const review = deterministicMockSelectionForStage(
+    'recovery-story',
+    'review-agents',
+  );
+
+  assert.equal(execution?.id, 'kungfu.mock-agent.recovery-story');
+  assert.equal(execution?.label, 'Mock Agent · recovery-story');
+  assert.equal(review?.id, 'kungfu.mock-agent.review-fit');
+  assert.equal(review?.label, 'Mock Reviewer · deterministic-fit');
+  assert.equal(deterministicMockSelectionForStage('  ', 'agents'), null);
+  assert.equal(deterministicMockSelectionForStage(undefined, 'agents'), null);
+});
+
+test('deterministic Mock onboarding bypasses external Agent discovery', () => {
+  const source = readFileSync(
+    new URL('./starter-project-view/index.tsx', import.meta.url),
+    'utf8',
+  );
+  const host = source.slice(
+    source.indexOf('export function StarterProjectHost'),
+  );
+  const deterministicBranch = host.indexOf(
+    'const deterministicMock = deterministicMockSelectionForStage',
+  );
+  const externalDiscovery = host.indexOf('.discoverAgents()');
+
+  assert.ok(deterministicBranch >= 0);
+  assert.ok(externalDiscovery > deterministicBranch);
+  assert.match(
+    host.slice(deterministicBranch, externalDiscovery),
+    /if \(deterministicMock\)[\s\S]*?setProfiles\(\[deterministicMock\]\)[\s\S]*?return;/u,
+  );
 });
 
 test('retained Agent Session receipts route back to the interactive Project surface', () => {

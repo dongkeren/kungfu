@@ -76,6 +76,24 @@ test('cached Agent Session readiness is revalidated before reuse', () => {
   );
 });
 
+test('deterministic Mock onboarding owns an attached Session host', () => {
+  const source = fs.readFileSync(
+    new URL('./main.tsx', import.meta.url),
+    'utf8',
+  );
+  const ensureSession = source.slice(
+    source.indexOf('function ensureTuiAgentSession'),
+    source.indexOf('async function invokeTuiAgentSession'),
+  );
+
+  assert.match(
+    ensureSession,
+    /KUNGFU_MOCK_AGENT_SCENARIO[\s\S]*createAttachedAgentSessionHost/u,
+  );
+  assert.match(ensureSession, /async function closeTuiAgentSession/u);
+  assert.match(source, /finally \{\s*await closeTuiAgentSession\(\);\s*\}/u);
+});
+
 test('child CLI retains installed authority without recursive libnode selection', () => {
   const parent = {
     KUNGFU_AS_VARIANT: 'node',
