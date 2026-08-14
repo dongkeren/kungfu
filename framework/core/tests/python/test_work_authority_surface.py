@@ -11,7 +11,7 @@ from kungfu import assignment_close, assignment_evidence, assignment_review_life
 from kungfu.cli.commands import __registry__  # noqa: F401
 from kungfu.cli.commands import assignment_review
 from kungfu.cli.commands import kfc
-from kungfu.agent import run_agent
+from kungfu.agent import run_agent, session_evidence
 
 
 def test_click_tree_exposes_one_work_family_and_no_assignment_alias():
@@ -238,6 +238,34 @@ def test_session_finalization_retains_a_new_exact_root_without_rewriting_source(
     assert final["sessionFinalization"]["sourceReportRoot"] == source["reportRoot"]
     assert final_path.is_file()
     assert (final_path.parent / "manifest.json").is_file()
+
+
+def test_session_finalization_accepts_retained_structured_agent_output():
+    assert (
+        session_evidence._final_observation_text(
+            {
+                "schema": "kungfu.agent-session.structured-snapshot/v1",
+                "agentText": "  structured Codex result  ",
+                "retainedAgentResponse": True,
+                "retainedTranscript": False,
+            }
+        )
+        == "structured Codex result"
+    )
+
+
+def test_session_finalization_rejects_unretained_structured_agent_output():
+    assert (
+        session_evidence._final_observation_text(
+            {
+                "schema": "kungfu.agent-session.structured-snapshot/v1",
+                "agentText": "not retained",
+                "retainedAgentResponse": False,
+                "retainedTranscript": False,
+            }
+        )
+        == ""
+    )
 
 
 def test_atlas_bridge_has_no_work_mutation_aliases():

@@ -18,6 +18,18 @@ from kungfu.rewind import bundle
 JsonObject = dict[str, Any]
 
 
+def _final_observation_text(snapshot: JsonObject) -> str:
+    """Return only output retained by the final native Session snapshot."""
+
+    if snapshot.get("retainedAgentResponse") is True:
+        agent_text = str(snapshot.get("agentText") or "").strip()
+        if agent_text:
+            return agent_text
+    terminal = snapshot.get("terminal") or {}
+    vt = terminal.get("vt") or {}
+    return "\n".join(str(line) for line in vt.get("lines") or []).strip()
+
+
 def load_execution_agent_report(
     path: str | Path,
     runtime_dir: str | Path,
@@ -95,10 +107,7 @@ def finalize_session_agent_report(
             "requestedSequence": 0,
         }
     )
-    terminal = snapshot.get("terminal") or {}
-    vt = terminal.get("vt") or {}
-    lines = [str(line) for line in vt.get("lines") or []]
-    observation_text = "\n".join(lines).strip()
+    observation_text = _final_observation_text(snapshot)
     if not observation_text:
         raise ValueError("Agent Session final snapshot contains no observable output")
 
