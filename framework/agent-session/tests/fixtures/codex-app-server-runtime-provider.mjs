@@ -24,6 +24,8 @@ lines.on('line', (line) => {
       process.stdout.write('{not-json}\n');
     } else if (mode === 'unknown-method') {
       send({ method: 'provider/unknown', params: {} });
+    } else if (mode === 'unknown-request') {
+      send({ id: 'future-request-1', method: 'provider/unknown', params: {} });
     } else if (mode === 'burst') {
       for (let index = 0; index < 32; index += 1) {
         send({
