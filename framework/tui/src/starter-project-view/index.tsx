@@ -882,8 +882,8 @@ export function StarterProjectHost({
     if (!profile) return;
     setBusy('verifying exact Work start plan');
     setError('');
-    void lab
-      .planStarterWork(workReference, profile.id)
+    void ensureAgentSession(project.workspace.selected.runtime_dir)
+      .then(() => lab.planStarterWork(workReference, profile.id))
       .then((value) => {
         setPlan(value);
         setStage('preview');
@@ -892,7 +892,14 @@ export function StarterProjectHost({
         setError(reason instanceof Error ? reason.message : String(reason)),
       )
       .finally(() => setBusy(''));
-  }, [lab, profiles, selectedProfile, workReference]);
+  }, [
+    ensureAgentSession,
+    lab,
+    profiles,
+    project,
+    selectedProfile,
+    workReference,
+  ]);
   const start = React.useCallback(() => {
     if (!plan) return;
     setEvents([]);
