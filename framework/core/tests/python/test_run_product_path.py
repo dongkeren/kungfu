@@ -368,7 +368,7 @@ def test_resumed_authority_writes_remain_visible_when_run_gate_fails(
     monkeypatch.setattr(
         assignment.run_agent.session_surface,
         "ensure",
-        lambda *_args: "session-endpoint",
+        lambda *_args, **_kwargs: "session-endpoint",
     )
 
     def start_bound_session(**kwargs):
