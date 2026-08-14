@@ -569,6 +569,13 @@ test('publication admission verifies a complete four-platform CLI payload plus a
       true,
     );
     assert.equal(
+      admitted.manifests.every(
+        ({ manifest }) =>
+          manifest?.schema === 'kungfu.product-upgrade.manifest/v1',
+      ),
+      true,
+    );
+    assert.equal(
       admitted.credentialIsland.platformId,
       'macos-arm64-credential',
     );

@@ -1637,6 +1637,7 @@ export function verifyUpgradePublicationAdmission({
       platform: entry.platform,
       architecture: entry.architecture,
       manifestPath,
+      manifest,
       evidenceRef: evidence.evidenceRef,
       updateCampaigns: projectUpdateCampaigns(
         manifest.platform,
@@ -1729,11 +1730,14 @@ export function verifyUpgradePublicationAdmission({
   }
   return {
     ...receipt.admission,
-    manifests: manifests.map(({ platform, architecture, manifestPath }) => ({
-      platform,
-      architecture,
-      manifestPath,
-    })),
+    manifests: manifests.map(
+      ({ platform, architecture, manifestPath, manifest }) => ({
+        platform,
+        architecture,
+        manifestPath,
+        manifest,
+      }),
+    ),
     version: receipt.identity.version,
     receiptRoot: receipt.receiptRoot,
     capsuleRoot: capsule.capsuleRoot,

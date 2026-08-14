@@ -493,7 +493,7 @@
           "require-install": true,
           "require-build": true,
           "require-verify": true,
-          "verify-command": "node scripts/run-shifu-lifecycle.mjs cache-apply-command node scripts/run-release-qualification.mjs --execution-profile ${{ startsWith(github.base_ref, 'release/') && 'release-candidate' || 'alpha' }} --native-upgrade-policy skip --source-only-receipt-root ${{ needs.preflight.outputs.receipt-root }} --source-only-source-tree ${{ needs.preflight.outputs.source-tree }} --source-only-policy-root ${{ needs.preflight.outputs.policy-root }}",
+      "verify-command": "node scripts/run-shifu-lifecycle.mjs cache-apply-command node scripts/run-release-qualification.mjs --execution-profile ${{ startsWith(github.base_ref, 'release/') && 'release-candidate' || 'alpha' }} --native-upgrade-policy required --source-only-receipt-root ${{ needs.preflight.outputs.receipt-root }} --source-only-source-tree ${{ needs.preflight.outputs.source-tree }} --source-only-policy-root ${{ needs.preflight.outputs.policy-root }}",
           "verify-substage-evidence-path": "product/release/qualification/layer-qualification-summary.json",
           "release-candidate": true,
           "publish-channel": "${{ (fromJSON(inputs.macos-overflow-request-json || '{}').mode == 'self-hosted' || fromJSON(inputs.macos-overflow-request-json || '{}').mode == 'github-hosted') && 'none' || (github.event_name == 'pull_request' && (startsWith(github.base_ref, 'release/') && 'release' || 'alpha') || 'none') }}",
@@ -688,7 +688,7 @@
           "release-passport-evidence-command": "",
           "release-passport-evidence-path": ".buildchain/release-evidence/ungfu-public-use.json",
           "release-passport-invariant-passport-command": "node scripts/kungfu-invariant.mjs --collect-evidence . --passport product/release/qualification/invariant-passport.json --json",
-          "github-artifact-attestation-policy-json": "",
+      "github-artifact-attestation-policy-json": "auto",
           "github-artifact-attestation-environment": "buildchain-artifact-attestation",
           "dry-run": false
         }
