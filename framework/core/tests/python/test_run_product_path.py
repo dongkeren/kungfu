@@ -1617,6 +1617,30 @@ def test_terminal_mock_scenarios_ignore_ready_echo_until_the_process_ends():
         )
         is True
     )
+    ready_after_fast_turn = {
+        **ready_after_echo,
+        "workAgent": {"attention": {"kind": "ready-for-review"}},
+    }
+    assert (
+        managed_run._session_boundary_reached(
+            ready_after_fast_turn,
+            before_sequence=10,
+            terminal_mock=False,
+        )
+        is True
+    )
+    needs_answer_after_fast_turn = {
+        **ready_after_echo,
+        "workAgent": {"attention": {"kind": "needs-answer"}},
+    }
+    assert (
+        managed_run._session_boundary_reached(
+            needs_answer_after_fast_turn,
+            before_sequence=10,
+            terminal_mock=False,
+        )
+        is True
+    )
     assert (
         managed_run._session_boundary_reached(
             {
