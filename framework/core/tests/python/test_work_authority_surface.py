@@ -240,6 +240,34 @@ def test_session_finalization_retains_a_new_exact_root_without_rewriting_source(
     assert (final_path.parent / "manifest.json").is_file()
 
 
+def test_session_finalization_accepts_retained_structured_agent_output():
+    assert (
+        assignment_evidence._final_observation_text(
+            {
+                "schema": "kungfu.agent-session.structured-snapshot/v1",
+                "agentText": "  structured Codex result  ",
+                "retainedAgentResponse": True,
+                "retainedTranscript": False,
+            }
+        )
+        == "structured Codex result"
+    )
+
+
+def test_session_finalization_rejects_unretained_structured_agent_output():
+    assert (
+        assignment_evidence._final_observation_text(
+            {
+                "schema": "kungfu.agent-session.structured-snapshot/v1",
+                "agentText": "not retained",
+                "retainedAgentResponse": False,
+                "retainedTranscript": False,
+            }
+        )
+        == ""
+    )
+
+
 def test_atlas_bridge_has_no_work_mutation_aliases():
     atlas_commands = set(kfc.commands["atlas"].commands)
     assert atlas_commands.isdisjoint(
