@@ -524,6 +524,7 @@ export function starterProjectOverviewEnterStage(
 ): 'detail' | 'result' | 'review' | 'review-result' | 'close-result' {
   if (closeReceipt) return 'close-result';
   if (reviewReceiptCanResume(reviewReceipt)) return 'review';
+  if (reviewReceipt?.status === 'revision-required') return 'detail';
   if (reviewReceipt) return 'review-result';
   if (workReceipt?.status === 'agent-finished') return 'review';
   return workReceipt ? 'result' : 'detail';
@@ -637,6 +638,7 @@ function StarterWorkPanel({
 export function StarterProjectHost({
   project,
   lab,
+  ensureAgentSession,
   dimensions,
   isInputCaptured,
   onOpenLab,
@@ -650,6 +652,7 @@ export function StarterProjectHost({
 }: {
   project: OpenedStarterProject;
   lab: AgentWorkLab;
+  ensureAgentSession: (runtimeDir: string) => Promise<string>;
   dimensions: DimensionSource;
   isInputCaptured: () => boolean;
   onOpenLab: () => void;
@@ -878,9 +881,11 @@ export function StarterProjectHost({
     setError('');
     setBusy('starting governed Work');
     setStage('running');
-    void lab
-      .startStarterWork(plan, (event) =>
-        setEvents((current) => [...current, event]),
+    void ensureAgentSession(project.workspace.selected.runtime_dir)
+      .then(() =>
+        lab.startStarterWork(plan, (event) =>
+          setEvents((current) => [...current, event]),
+        ),
       )
       .then((receipt) => {
         setWorkReceipt(receipt);
@@ -895,7 +900,7 @@ export function StarterProjectHost({
         setStage('result');
       })
       .finally(() => setBusy(''));
-  }, [lab, onRetainedAgentSession, plan]);
+  }, [ensureAgentSession, lab, onRetainedAgentSession, plan, project]);
   const previewReview = React.useCallback(() => {
     const profile = profiles[selectedProfile];
     if (!profile || !workReceipt) return;
@@ -1021,6 +1026,12 @@ export function StarterProjectHost({
         return;
       }
       if (stage === 'review') {
+        if (input === 'a') {
+          setReviewPlan(undefined);
+          setReviewReceipt(undefined);
+          setError('');
+          return setStage('detail');
+        }
         if (enter || input === 'r') return openReviewAgents();
         if (back) {
           setError('');
@@ -1060,6 +1071,12 @@ export function StarterProjectHost({
         }
         if (enter && reviewReceipt?.status === 'review-passed') {
           return previewClose();
+        }
+        if (enter && reviewReceipt?.status === 'revision-required') {
+          setReviewPlan(undefined);
+          setReviewReceipt(undefined);
+          setError('');
+          return setStage('detail');
         }
         if (enter || back) {
           setError('');
@@ -1397,8 +1414,8 @@ export function StarterProjectHost({
         }
         footer={
           resuming
-            ? '[Enter/r] verify retained reviewer · [Esc/b] project overview · [q] quit'
-            : '[Enter/r] choose a fresh reviewer · [Esc/b] project overview · [q] quit'
+            ? '[Enter/r] verify retained reviewer · [a] revise with fresh Agent · [Esc/b] project overview · [q] quit'
+            : '[Enter/r] choose a fresh reviewer · [a] revise with fresh Agent · [Esc/b] project overview · [q] quit'
         }
       >
         <Box
