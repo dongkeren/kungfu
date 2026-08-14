@@ -234,8 +234,7 @@ export function buildQualificationEvidence({
   campaigns,
   generatedAt = new Date().toISOString(),
 }) {
-  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
-  const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' });
+  const artifacts = signedArtifactEvidence(manifest);
   const evidence = {
     schema: contract.evidenceSchema,
     evidenceRef: manifest.qualificationEvidenceRef,
@@ -252,26 +251,70 @@ export function buildQualificationEvidence({
     ),
     campaigns,
     nativeSigning,
-    artifacts: manifest.artifacts.map((artifact) => ({
-      kind: artifact.kind,
-      digest: artifact.digest,
-      size: artifact.size,
-      signatureEvidenceRef: artifact.signature,
-      algorithm: 'ed25519',
-      publicKeyPem,
-      signature: sign(
-        null,
-        artifactSignatureStatement(
-          manifest,
-          artifact,
-          manifest.qualificationEvidenceRef,
-        ),
-        privateKey,
-      ).toString('base64'),
-    })),
+    artifacts,
   };
   verifyUpgradeQualificationEvidence(manifest, evidence, 'desktop', contract);
   verifyUpgradeQualificationEvidence(manifest, evidence, 'cli', contract);
+  return evidence;
+}
+
+function signedArtifactEvidence(manifest) {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' });
+  return manifest.artifacts.map((artifact) => ({
+    kind: artifact.kind,
+    digest: artifact.digest,
+    size: artifact.size,
+    signatureEvidenceRef: artifact.signature,
+    algorithm: 'ed25519',
+    publicKeyPem,
+    signature: sign(
+      null,
+      artifactSignatureStatement(
+        manifest,
+        artifact,
+        manifest.qualificationEvidenceRef,
+      ),
+      privateKey,
+    ).toString('base64'),
+  }));
+}
+
+export function buildUnadvertisedQualificationEvidence({
+  manifest,
+  contract,
+  nativeSigning,
+  generatedAt = new Date().toISOString(),
+}) {
+  const claim = contract.currentClaims?.[manifest.platform];
+  if (claim?.advertised !== false || claim?.promotionEligible !== false)
+    fail('unadvertised qualification evidence requires an explicit non-claim');
+  const evidence = {
+    schema: contract.evidenceSchema,
+    evidenceRef: manifest.qualificationEvidenceRef,
+    generatedAt,
+    sourceCommit: manifest.sourceCommit,
+    productVersion: manifest.productVersion,
+    platform: manifest.platform,
+    architecture: manifest.architecture,
+    tier: claim.tier,
+    surfaces: ['runtime', 'desktop', 'cli'],
+    runtimeChurnIterations: contract.minimumRuntimeChurnIterations,
+    checks: Object.fromEntries(
+      contract.requiredChecks.map((name) => [
+        name,
+        name !== 'oneCommandUpdate',
+      ]),
+    ),
+    campaigns: [],
+    nativeSigning,
+    promotion: {
+      advertised: false,
+      promotionEligible: false,
+      blocker: claim.blocker,
+    },
+    artifacts: signedArtifactEvidence(manifest),
+  };
   return evidence;
 }
 
@@ -308,30 +351,40 @@ export function runUpgradeNativeQualification(
       : platform === 'win32'
         ? verifyWindows(root, manifest)
         : verifyLinux(root, manifest);
-  const campaignFile = campaignEvidencePath(root, contract);
-  if (!fs.existsSync(campaignFile))
-    fail(
-      `native qualification requires retained one-command campaigns at ${campaignFile}`,
+  const claim = contract.currentClaims?.[manifest.platform];
+  let evidence;
+  if (claim?.advertised === false && claim?.promotionEligible === false) {
+    evidence = buildUnadvertisedQualificationEvidence({
+      manifest,
+      contract,
+      nativeSigning,
+    });
+  } else {
+    const campaignFile = campaignEvidencePath(root, contract);
+    if (!fs.existsSync(campaignFile))
+      fail(
+        `native qualification requires retained one-command campaigns at ${campaignFile}`,
+      );
+    const campaignSet = JSON.parse(fs.readFileSync(campaignFile, 'utf8'));
+    if (
+      campaignSet.schema !== contract.campaignSetSchema ||
+      !Array.isArray(campaignSet.campaigns)
+    )
+      fail('retained one-command campaign set is invalid');
+    const campaigns = campaignSet.campaigns.filter(
+      (campaign) =>
+        campaign.platform === manifest.platform &&
+        campaign.architecture === manifest.architecture &&
+        campaign.candidate?.sourceCommit === manifest.sourceCommit &&
+        campaign.candidate?.productVersion === manifest.productVersion,
     );
-  const campaignSet = JSON.parse(fs.readFileSync(campaignFile, 'utf8'));
-  if (
-    campaignSet.schema !== contract.campaignSetSchema ||
-    !Array.isArray(campaignSet.campaigns)
-  )
-    fail('retained one-command campaign set is invalid');
-  const campaigns = campaignSet.campaigns.filter(
-    (campaign) =>
-      campaign.platform === manifest.platform &&
-      campaign.architecture === manifest.architecture &&
-      campaign.candidate?.sourceCommit === manifest.sourceCommit &&
-      campaign.candidate?.productVersion === manifest.productVersion,
-  );
-  const evidence = buildQualificationEvidence({
-    manifest,
-    contract,
-    nativeSigning,
-    campaigns,
-  });
+    evidence = buildQualificationEvidence({
+      manifest,
+      contract,
+      nativeSigning,
+      campaigns,
+    });
+  }
   const output = evidencePath(root);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify(evidence, null, 2)}\n`);

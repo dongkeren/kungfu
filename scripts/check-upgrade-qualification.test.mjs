@@ -9,6 +9,7 @@ import { test } from 'node:test';
 
 import {
   buildQualificationEvidence,
+  buildUnadvertisedQualificationEvidence,
   verifyDarwin,
   verifyWindows,
 } from './run-upgrade-native-qualification.mjs';
@@ -379,6 +380,36 @@ test('native campaign evidence signs every retained artifact without persisting 
   assert.equal(
     verifyUpgradeQualificationEvidence(manifest, evidence, 'cli', CONTRACT),
     evidence,
+  );
+});
+
+test('unadvertised platforms retain signed artifact evidence without inventing update campaigns', () => {
+  const { manifest } = signedFixture();
+  const evidence = buildUnadvertisedQualificationEvidence({
+    manifest,
+    contract: CONTRACT,
+    nativeSigning: { kind: 'credential-island-deferred' },
+    generatedAt: '2026-07-15T00:00:00.000Z',
+  });
+  assert.equal(evidence.tier, 'source-fixture');
+  assert.deepEqual(evidence.campaigns, []);
+  assert.equal(evidence.checks.oneCommandUpdate, false);
+  assert.deepEqual(evidence.promotion, {
+    advertised: false,
+    promotionEligible: false,
+    blocker:
+      'signed and notarized old-to-new archive and package-manager campaigns are not retained',
+  });
+  assert.equal(evidence.artifacts.length, manifest.artifacts.length);
+  assert.throws(
+    () =>
+      verifyUpgradeQualificationEvidence(
+        manifest,
+        evidence,
+        'desktop',
+        CONTRACT,
+      ),
+    (error) => error.code === 'qualification-tier-insufficient',
   );
 });
 
