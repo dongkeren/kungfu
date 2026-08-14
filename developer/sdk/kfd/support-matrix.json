@@ -4,11 +4,11 @@
   "authority": {
     "path": ".buildchain/kfd/adopter-manifest.json",
     "contract": "kfd.adopter-conformance-manifest/v1",
-    "root": "sha256:219bfb700067ea61dbbd450120f5d7fc49ae7b3cf9e98eedf4c5403886231f36",
-    "gateRoot": "sha256:5ed1c1d259461a5ad5666de2aa15229397162ae2fa69df577f982d20ce8c962f",
+    "root": "sha256:b281f7255f330f52f88f31dc4df43feaa6769dd700fe4d92fef3ab71587a5d99",
+    "gateRoot": "sha256:80a7d8761cc6cd23a852a4fdd799e6763b7633ed79d4eed824fb955740842f2b",
     "adopterId": "kungfu-systems/kungfu",
     "sourceRepository": "kungfu-systems/kungfu",
-    "sourceSha": "c26fcb355d04398fb5173bde1fd6ad3e66a46b09"
+    "sourceSha": "fc07c8198eb729ca5b97428c2c841234f9c6faa2"
   },
   "upstream": {
     "package": "@kungfu-tech/kfd",
@@ -84,7 +84,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "used",
-        "root": "sha256:87ca097a81654b2cc036ba898c75a969d1cec2f64ecb8dc2bbece76d8284cdca"
+        "root": "sha256:b5b351be9eeaa6d5792d2b7355895fbaab8ff77abeb8d9d65e32d59b05c1b634"
       }
     },
     {
@@ -152,7 +152,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "used",
-        "root": "sha256:47e22f1a0473ab00f7fe54683acd45f91a8275226d719a6568f6695dd18e9aee"
+        "root": "sha256:27c78dc49b58ef0ad334f774e7cbd46f5484c6bd72affc8b659e8397248b2ec6"
       }
     },
     {
@@ -186,7 +186,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "evaluating",
-        "root": "sha256:d6b2ccdc774c60096f6b29d8d2cc99868c157e0b8552bfc017ee471f54b8e459"
+        "root": "sha256:7434e3ec7c5ae845cd3a789a4bc5ee79a350fde0477a36c1b68ed1b339f8f5d4"
       }
     },
     {
@@ -254,7 +254,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "used",
-        "root": "sha256:b8ca53e300b01336054654993d774ce3312fb0dff4d8871c8626a497c4becda0"
+        "root": "sha256:3320db629da27ff2077db981d48232f1a9fe6d0957a9819da8871e3576c246be"
       }
     },
     {

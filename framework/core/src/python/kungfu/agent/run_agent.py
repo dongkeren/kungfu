@@ -925,13 +925,13 @@ def _wait_for_session(
     if timeout_seconds is None:
         raise ValueError("Non-Mock Agent Session wait requires a timeout")
     deadline = time.monotonic() + timeout_seconds
-    latest: Mapping[str, Any] | None = None
+    latest_status: Mapping[str, Any] | None = None
     while time.monotonic() < deadline:
-        latest = invoke({"operation": "status", "session": dict(ref)})
-        if predicate(latest):
-            return latest
+        latest_status = invoke({"operation": "status", "session": dict(ref)})
+        if predicate(latest_status):
+            return latest_status
         time.sleep(0.05)
-    state = (latest or {}).get("interactionState") or "unavailable"
+    state = (latest_status or {}).get("interactionState") or "unavailable"
     raise ValueError(f"Agent Session did not reach a safe boundary: {state}")
 
 
