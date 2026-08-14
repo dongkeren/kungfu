@@ -4,16 +4,16 @@
   "authority": {
     "path": ".buildchain/kfd/adopter-manifest.json",
     "contract": "kfd.adopter-conformance-manifest/v1",
-    "root": "sha256:b281f7255f330f52f88f31dc4df43feaa6769dd700fe4d92fef3ab71587a5d99",
-    "gateRoot": "sha256:80a7d8761cc6cd23a852a4fdd799e6763b7633ed79d4eed824fb955740842f2b",
+    "root": "sha256:f3b33fc61bc21f8ae369c8b023fe024223256c870fcb8176515a85819017f5bf",
+    "gateRoot": "sha256:e2d7081038a661502317579b9b5df5f9c5b6de4f260ee2b7d64613786f7f6b15",
     "adopterId": "kungfu-systems/kungfu",
     "sourceRepository": "kungfu-systems/kungfu",
-    "sourceSha": "fc07c8198eb729ca5b97428c2c841234f9c6faa2"
+    "sourceSha": "9332353f8a7c7294fd162d26606df372424e7f8f"
   },
   "upstream": {
     "package": "@kungfu-tech/kfd",
-    "version": "1.0.0-alpha.60",
-    "artifactRoot": "sha256:07bea3dacab8cba10901539a5acb958db1ee09738fd424c9933f9baa2187675b",
+    "version": "1.0.0-alpha.62",
+    "artifactRoot": "sha256:539d68720e26545fa42ad36fa0d716806a83f446d7b2710f0b9b410fa420c08c",
     "registryRoot": "sha256:8ab283dd225e8940a4f9d92eca7d59fff6e8d29e66275c03baa923ad2ff63298",
     "verifierSetRoot": "sha256:aad9b4193e965b68e465bbe4e648e5a03c3d78a6575dfda1d5e90943404779f4",
     "standardsSha256": "sha256:4cc77b8364fa5d4f158933ee3c89640b9ef1e2979c45c2fd9e7d69060258255e"
@@ -84,7 +84,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "used",
-        "root": "sha256:b5b351be9eeaa6d5792d2b7355895fbaab8ff77abeb8d9d65e32d59b05c1b634"
+        "root": "sha256:4f329ce05e1bedddfebe2c3e570ec7658eac11a8f7905f09204fc79e2606e83f"
       }
     },
     {
@@ -152,7 +152,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "used",
-        "root": "sha256:27c78dc49b58ef0ad334f774e7cbd46f5484c6bd72affc8b659e8397248b2ec6"
+        "root": "sha256:2d5bae9d255dc9b0967e84ba622cbbc44c15cd3eb6dec76f795a21ff80eea242"
       }
     },
     {
@@ -186,7 +186,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "evaluating",
-        "root": "sha256:7434e3ec7c5ae845cd3a789a4bc5ee79a350fde0477a36c1b68ed1b339f8f5d4"
+        "root": "sha256:4092e5a221b510e5df83ccbb728caf9572fec751a3f2601ba4e6677bed391a66"
       }
     },
     {
@@ -254,7 +254,7 @@
       "declaration": {
         "state": "candidate",
         "usage": "used",
-        "root": "sha256:3320db629da27ff2077db981d48232f1a9fe6d0957a9819da8871e3576c246be"
+        "root": "sha256:d8b07b9de94962af9234b624db83291a84e5ba7da870766b10ce38ba35e9791d"
       }
     },
     {

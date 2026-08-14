@@ -482,6 +482,7 @@ jobs:
         .buildchain/kfd/kfd-3/collaboration-interface.prebuild.json
       release-passport-kfd-3-artifact-verify-command: node scripts/buildchain-kfd-evidence.mjs --artifact-witness --json
       release-passport-kfd-adopter-manifest-json: .buildchain/kfd/adopter-manifest.json
+      release-passport-kfd-adopter-manifest-gate-json: .buildchain/kfd/adopter-manifest-gate.json
       release-passport-kfd-support-matrix-json: .buildchain/kfd/support-matrix.json
       release-passport-kfd-product-gate-jsons: |
         .buildchain/runtime/kfd-product-gates/kfd-4/gate.json
@@ -587,6 +588,7 @@ jobs:
         .buildchain/kfd/kfd-3/collaboration-interface.prebuild.json
       release-passport-kfd-3-artifact-verify-command: node "$GITHUB_WORKSPACE/.buildchain/publication-controller/scripts/buildchain-kfd-evidence.mjs" --write --json >/dev/null && node "$GITHUB_WORKSPACE/.buildchain/publication-controller/scripts/buildchain-kfd-evidence.mjs" --artifact-witness --json
       release-passport-kfd-adopter-manifest-json: .buildchain/kfd/adopter-manifest.json
+      release-passport-kfd-adopter-manifest-gate-json: .buildchain/kfd/adopter-manifest-gate.json
       release-passport-kfd-support-matrix-json: .buildchain/kfd/support-matrix.json
       release-passport-kfd-product-gate-jsons: |
         .buildchain/runtime/kfd-product-gates/kfd-4/gate.json
