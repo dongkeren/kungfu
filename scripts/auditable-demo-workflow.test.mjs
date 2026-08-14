@@ -219,11 +219,11 @@ test('the build fails the real transported binary before either upload path', ()
   assert.equal(workflow.on.workflow_dispatch.inputs.mode.default, 'full');
   assert.equal(
     build.uses,
-    'kungfu-systems/buildchain/.github/workflows/.build.yml@41d4dce2f38aa4821c794b49dcfb2bcf59d0984a',
+    'kungfu-systems/buildchain/.github/workflows/.build.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112',
   );
   assert.equal(
     build.with['buildchain-ref'],
-    '41d4dce2f38aa4821c794b49dcfb2bcf59d0984a',
+    '17dac3a861c4f06ce777641d7e6b7c3beee8d112',
   );
   assert.deepEqual(build.permissions, {
     actions: 'read',
@@ -233,7 +233,7 @@ test('the build fails the real transported binary before either upload path', ()
   });
   assert.equal(
     demo.uses,
-    'kungfu-systems/buildchain/.github/workflows/.declarative-auditable-demo.yml@41d4dce2f38aa4821c794b49dcfb2bcf59d0984a',
+    'kungfu-systems/buildchain/.github/workflows/.declarative-auditable-demo.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112',
   );
   assert.equal(
     build.with['pre-upload-transport-smoke-scenario-path'],
