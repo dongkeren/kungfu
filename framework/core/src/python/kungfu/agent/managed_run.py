@@ -90,9 +90,10 @@ def _session_boundary_reached(
         return interaction == "ended" and status.get("live") is not True
     if interaction in {"approval-needed", "unknown", "ended"}:
         return True
+    attention = ((status.get("workAgent") or {}).get("attention") or {}).get("kind")
     return (
         interaction == "ready"
-        and observed_busy
+        and (observed_busy or attention in {"needs-answer", "ready-for-review"})
         and int((status.get("output") or {}).get("nextSequence") or 0) > before_sequence
     )
 

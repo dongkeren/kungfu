@@ -37,6 +37,7 @@ export {
   buildTuiProductSearchDocuments,
   initialProductSurface,
   onboardingContinueSurface,
+  projectWorkOwnsInput,
   quickCommandMatches,
   reduceControlPlaneInput,
   resolveProductStartupSurface,
@@ -1759,15 +1760,18 @@ export function ControlPlaneBar({
   resultCount,
   controlsLabel = 'VIEW CONTROLS',
   controlsHint = 'Workspace shortcuts active',
+  workspaceInputActive = false,
 }: {
   dimensions: TerminalDimensions;
   state: ControlPlaneState;
   resultCount: number;
   controlsLabel?: string;
   controlsHint?: string;
+  workspaceInputActive?: boolean;
 }) {
   const modalOpen = state.mode !== 'closed';
-  const inputFocused = modalOpen || state.focus === 'input';
+  const inputFocused =
+    !workspaceInputActive && (modalOpen || state.focus === 'input');
   const acceptsText =
     state.mode === 'closed' ||
     state.mode === 'commands' ||
@@ -1776,25 +1780,27 @@ export function ControlPlaneBar({
     state.mode === 'commands' || state.mode === 'search' || !modalOpen
       ? state.query
       : '';
-  const prompt =
-    state.mode === 'help'
+  const prompt = workspaceInputActive
+    ? 'Focused panel accepts text'
+    : state.mode === 'help'
       ? 'Help open'
       : state.mode === 'detail'
         ? 'Details open'
         : value || (!modalOpen && !inputFocused ? 'Press i to type' : '');
   const modeLabel = modalOpen ? state.mode.toUpperCase() : controlsLabel;
-  const hint =
-    state.notice ??
-    (state.mode === 'commands'
-      ? `${resultCount} action${resultCount === 1 ? '' : 's'} · Enter Run · Esc Close`
-      : state.mode === 'search'
-        ? `${resultCount} result${resultCount === 1 ? '' : 's'} · Enter Open · Esc Close`
-        : state.mode === 'help' || state.mode === 'detail'
-          ? 'Esc Back'
-          : state.focus === 'workspace'
-            ? `${controlsHint} · i Input`
-            : 'Esc Controls · ? Help · / Actions · Ctrl+K Search');
-  const tone = inputFocused ? 'cyan' : 'gray';
+  const hint = workspaceInputActive
+    ? controlsHint
+    : (state.notice ??
+      (state.mode === 'commands'
+        ? `${resultCount} action${resultCount === 1 ? '' : 's'} · Enter Run · Esc Close`
+        : state.mode === 'search'
+          ? `${resultCount} result${resultCount === 1 ? '' : 's'} · Enter Open · Esc Close`
+          : state.mode === 'help' || state.mode === 'detail'
+            ? 'Esc Back'
+            : state.focus === 'workspace'
+              ? `${controlsHint} · i Input`
+              : 'Esc Controls · ? Help · / Actions · Ctrl+K Search'));
+  const tone = inputFocused || workspaceInputActive ? 'cyan' : 'gray';
   return (
     <Box
       position="absolute"
@@ -1818,9 +1824,13 @@ export function ControlPlaneBar({
             {hint}
           </Text>,
           <Text key="prompt" color={tone} wrap="truncate-end">
-            <Text bold>{inputFocused ? '›' : '◇'}</Text>
+            <Text bold>
+              {workspaceInputActive ? '◆' : inputFocused ? '›' : '◇'}
+            </Text>
             {prompt ? ` ${prompt}` : ' '}
-            {acceptsText ? <BlinkingInputCursor active={inputFocused} /> : null}
+            {acceptsText && !workspaceInputActive ? (
+              <BlinkingInputCursor active={inputFocused} />
+            ) : null}
           </Text>,
         ]}
       />

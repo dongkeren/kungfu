@@ -317,6 +317,19 @@ export function directWorkspaceNavigationFromInput(
   return null;
 }
 
+export function projectWorkOwnsInput(
+  current: ControlPlaneState,
+  input: string,
+  surface: string,
+): boolean {
+  return (
+    surface === 'project-work' &&
+    current.mode === 'closed' &&
+    current.focus === 'workspace' &&
+    input === 'i'
+  );
+}
+
 export function quickCommandMatches(
   query: string,
   commands: QuickCommand[] = QUICK_COMMANDS,

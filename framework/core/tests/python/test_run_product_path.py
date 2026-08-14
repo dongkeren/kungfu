@@ -1583,6 +1583,17 @@ def test_terminal_mock_scenarios_ignore_ready_echo_until_the_process_ends():
     )
     assert (
         managed_run._session_boundary_reached(
+            {
+                **ready_after_echo,
+                "workAgent": {"attention": {"kind": "needs-answer"}},
+            },
+            before_sequence=10,
+            terminal_mock=False,
+        )
+        is True
+    )
+    assert (
+        managed_run._session_boundary_reached(
             ended,
             before_sequence=10,
             terminal_mock=True,
