@@ -703,6 +703,52 @@ test('publication admission keeps exact installer bytes while omitting unadverti
   });
 });
 
+test('candidate finalization honors explicit unadvertised upgrade qualification claims', () => {
+  withFixture((value) => {
+    for (const platform of Object.values(value.platforms)) {
+      fs.rmSync(platform.evidencePath);
+    }
+    writeJson(
+      path.join(
+        value.platforms.darwin.bundleRoot,
+        '.buildchain',
+        'signing',
+        'credential-island-evidence.json',
+      ),
+      { retainedCopy: true },
+    );
+    const manifestOnlyRoot = path.join(
+      value.payloadRoot,
+      'kungfu-credential-manifest-macos',
+    );
+    fs.mkdirSync(manifestOnlyRoot, { recursive: true });
+    fs.copyFileSync(
+      value.credential.manifestPath,
+      path.join(manifestOnlyRoot, 'manifest.json'),
+    );
+    const outputRoot = path.join(
+      value.payloadRoot,
+      `kungfu-product-admission-${SOURCE}`,
+    );
+    const written = writeUpgradePublicationAdmission({
+      payloadRoot: value.payloadRoot,
+      releaseCandidatePassportPath: value.passportPath,
+      expectedVersion: VERSION,
+      outputPath: path.join(
+        outputRoot,
+        PRODUCT_UPGRADE_PUBLICATION_ADMISSION_FILE,
+      ),
+      capsulePath: path.join(
+        outputRoot,
+        PRODUCT_UPGRADE_PUBLICATION_CAPSULE_FILE,
+      ),
+    });
+    assert.deepEqual(written.receipt.admission.evidenceRefs, []);
+    assert.deepEqual(written.receipt.admission.campaignRoots, []);
+    assert.deepEqual(written.receipt.admission.updateCampaigns, []);
+  });
+});
+
 test('publication admission still requires evidence for every advertised upgrade platform', () => {
   withFixture((value) => {
     fs.rmSync(value.platforms.linux.evidencePath);
@@ -1202,7 +1248,7 @@ test('sealed product admission rejects semantically forged campaign roots after 
       capsulePath,
     });
     const receipt = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-    receipt.admission.updateCampaigns[0].targetVersion = '4.0.0-forged';
+    receipt.admission.updateCampaigns = [{ targetVersion: '4.0.0-forged' }];
     receipt.roots.campaign = contentRoot(receipt.admission.updateCampaigns);
     const { receiptRoot: _oldReceiptRoot, ...receiptBody } = receipt;
     receipt.receiptRoot = contentRoot(receiptBody);

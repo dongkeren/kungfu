@@ -1347,6 +1347,7 @@ export function createUpgradePublicationAdmission({
     releaseCandidatePassportPath: resolvedPassportPath,
     expectedVersion,
     expectedPlatforms,
+    qualificationPlatforms: promotableUpgradePlatforms(),
   });
   const passport = readJson(resolvedPassportPath, 'release-candidate passport');
   const sources = [...releaseCandidateSources(passport)].sort();
@@ -1602,6 +1603,7 @@ export function verifyUpgradePublicationAdmission({
       'upgrade qualification contract has no publication evidence file name',
     );
   }
+  const qualificationPlatforms = new Set(promotableUpgradePlatforms());
   const manifests = (receipt.admission?.manifests || []).map((entry) => {
     const manifestPath = admittedFile(
       resolvedPayloadRoot,
@@ -1620,30 +1622,36 @@ export function verifyUpgradePublicationAdmission({
     }
     const bundleName = entry.path.split('/')[0];
     const bundleRoot = path.join(resolvedPayloadRoot, bundleName);
-    const evidencePath = findExactlyOne(
-      bundleRoot,
-      evidenceFileName,
-      'admitted upgrade evidence',
-    );
-    const evidence = readJson(evidencePath, 'admitted upgrade evidence');
-    if (
-      evidence.evidenceRef !== manifest.qualificationEvidenceRef ||
-      evidence.platform !== manifest.platform ||
-      evidence.architecture !== manifest.architecture
-    ) {
-      throw new Error('admitted upgrade evidence identity drift');
+    let evidenceRef = null;
+    let updateCampaigns = [];
+    if (qualificationPlatforms.has(manifest.platform)) {
+      const evidencePath = findExactlyOne(
+        bundleRoot,
+        evidenceFileName,
+        'admitted upgrade evidence',
+      );
+      const evidence = readJson(evidencePath, 'admitted upgrade evidence');
+      if (
+        evidence.evidenceRef !== manifest.qualificationEvidenceRef ||
+        evidence.platform !== manifest.platform ||
+        evidence.architecture !== manifest.architecture
+      ) {
+        throw new Error('admitted upgrade evidence identity drift');
+      }
+      evidenceRef = evidence.evidenceRef;
+      updateCampaigns = projectUpdateCampaigns(
+        manifest.platform,
+        manifest.architecture,
+        evidence.campaigns || [],
+      );
     }
     return {
       platform: entry.platform,
       architecture: entry.architecture,
       manifestPath,
       manifest,
-      evidenceRef: evidence.evidenceRef,
-      updateCampaigns: projectUpdateCampaigns(
-        manifest.platform,
-        manifest.architecture,
-        evidence.campaigns || [],
-      ),
+      evidenceRef,
+      updateCampaigns,
       bundleName,
     };
   });
@@ -1669,7 +1677,10 @@ export function verifyUpgradePublicationAdmission({
   const channelIndexRoots = [
     ...new Set(updateCampaigns.map((campaign) => campaign.channelIndexRoot)),
   ].sort();
-  const evidenceRefs = manifests.map((manifest) => manifest.evidenceRef).sort();
+  const evidenceRefs = manifests
+    .map((manifest) => manifest.evidenceRef)
+    .filter(Boolean)
+    .sort();
   const platforms = manifests
     .map((manifest) => `${manifest.platform}-${manifest.architecture}`)
     .sort();
