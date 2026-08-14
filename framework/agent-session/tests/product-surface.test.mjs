@@ -1122,7 +1122,7 @@ test('approval state holds shared automatic instruction and stale plans fail clo
   );
 });
 
-test('the product runtime executes a reviewed plan through the real Capsule host', () => {
+test('the product runtime executes a reviewed plan through the real Capsule host', async () => {
   const child = new FakePtyProcess(9001);
   const spawns = [];
   const runtime = new InProcessAgentSessionProductRuntime({
@@ -1176,6 +1176,23 @@ test('the product runtime executes a reviewed plan through the real Capsule host
     },
   });
   assert.equal(runtime.list()[0].host.status().lifecycleState, 'ready');
+
+  const session = {
+    workConsoleId: input.workConsoleId,
+    sessionAttemptId: input.sessionAttemptId,
+  };
+  const endPlan = client.planControl('end', session, {});
+  const ending = client.control(endPlan, {});
+  child.emit('exit', { exitCode: 1, signal: 0 });
+  await ending;
+
+  const ended = client.show(session);
+  assert.equal(ended.exit.exitCode, 1);
+  assert.deepEqual(ended.exit.controlRequest, {
+    operation: 'end',
+    signal: 'SIGTERM',
+  });
+  assert.equal(ended.workAgent.attention.kind, 'ready-for-review');
 });
 
 test('the local product RPC preserves the same action and error envelopes', async (t) => {

@@ -254,6 +254,10 @@ function publicStatus(session) {
   const controller = status.controllerLease;
   const live =
     status.lifecycleState !== 'ended' && status.inputAdmission !== 'closed';
+  const exit =
+    status.exit && session.endControl
+      ? { ...status.exit, controlRequest: { ...session.endControl } }
+      : status.exit;
   const statusProjection = {
     schema: 'kungfu.agent-session.surface-status/v1',
     live,
@@ -271,7 +275,7 @@ function publicStatus(session) {
     inputAdmission: status.inputAdmission,
     foreground: status.foreground,
     output: status.output,
-    exit: status.exit,
+    exit,
     providerAdapter: status.providerAdapter,
     queuedInstructions: status.queuedInstructions,
     binding: session.binding,

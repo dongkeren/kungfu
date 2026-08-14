@@ -160,11 +160,20 @@ export class InProcessAgentSessionProductRuntime {
       waitForStatusChange(afterChangeSequence) {
         return host.waitForChange(afterChangeSequence);
       },
+      endControl: null,
       async end(request) {
-        const controlReceipt = transport.submitSignal({
-          ...request,
-          signal: 'SIGTERM',
-        });
+        const controlRequest = { operation: 'end', signal: 'SIGTERM' };
+        session.endControl = controlRequest;
+        let controlReceipt;
+        try {
+          controlReceipt = transport.submitSignal({
+            ...request,
+            signal: controlRequest.signal,
+          });
+        } catch (error) {
+          session.endControl = null;
+          throw error;
+        }
         const boundaryStatus = await host.waitForExit();
         return {
           status: controlReceipt.status,
