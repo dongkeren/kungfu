@@ -13,7 +13,7 @@ import tempfile
 import unicodedata
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from kungfu import initiative_family
 from kungfu.initiative_family import canonical as assignment_canonical
@@ -115,7 +115,6 @@ def _same_or_descendant(path: Path, root: Path) -> bool:
 
 def _installed_runtime_entrypoint(binding_file: Path) -> str:
     """Bind the manifest entrypoint to the packaged native runtime platform."""
-
     return "kungfu.exe" if binding_file.suffix.lower() == ".pyd" else "kungfu"
 
 
@@ -126,14 +125,9 @@ def _qualified_core_materialization_proof(
     checkout_revision: str,
 ) -> dict[str, Any]:
     """Verify compatible source admission through the canonical JS consumer."""
-
     target_root = (checkout / "framework" / "core" / "dist" / "kungfu").resolve()
-    verifier = (
-        checkout
-        / "framework"
-        / "assignment-capture"
-        / "qualified-assignment-core-consumer.mjs"
-    )
+    verifier = checkout / "framework/assignment-capture"
+    verifier /= "qualified-assignment-core-consumer.mjs"
     if (
         not _same_or_descendant(binding_file, target_root)
         or not verifier.is_file()
@@ -142,81 +136,41 @@ def _qualified_core_materialization_proof(
     ):
         return {}
     try:
-        completed = subprocess.run(
-            [
-                "node",
-                str(verifier),
-                "verify-materialization",
-                "--repository-root",
-                str(checkout),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        proof = json.loads(completed.stdout)
-        checkout_tree = subprocess.run(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD^{tree}"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        command = ["node", str(verifier)]
+        command += ["verify-materialization", "--repository-root", str(checkout)]
+        proof = json.loads(subprocess.check_output(command, text=True))
+        git_command = ("git", "-C", str(checkout), "rev-parse", "HEAD^{tree}")
+        checkout_tree = subprocess.check_output(git_command, text=True).strip()
     except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
         return {}
-    fields = {
-        "schema",
-        "repository",
-        "consumingCommit",
-        "consumingTree",
-        "producerCommit",
-        "qualifiedTargetCommit",
-        "compatibilityRoot",
-        "objectRoot",
-        "manifestRoot",
-        "artifactRoot",
-        "qualificationReceiptRoot",
-        "promotionAuthorityRoot",
-        "materializationReceiptRoot",
-        "targetRoot",
-        "proofRoot",
+    expected = {
+        "schema": "shifu.qualified-assignment-core-admission-proof/v1",
+        "targetRoot": "framework/core/dist/kungfu",
+        "consumingCommit": checkout_revision,
+        "consumingTree": checkout_tree,
+        "producerCommit": build_revision,
     }
-    root_fields = {
-        "compatibilityRoot",
-        "objectRoot",
-        "manifestRoot",
-        "artifactRoot",
-        "qualificationReceiptRoot",
-        "promotionAuthorityRoot",
-        "materializationReceiptRoot",
-        "proofRoot",
-    }
+    revision_fields = {*expected} - {"schema", "targetRoot"}
+    revision_fields.add("qualifiedTargetCommit")
+    root_fields = (
+        "compatibilityRoot objectRoot manifestRoot artifactRoot qualificationReceiptRoot "
+        "promotionAuthorityRoot materializationReceiptRoot proofRoot"
+    ).split()
+    fields = {*expected, "repository", "qualifiedTargetCommit", *root_fields}
+
+    def matches(names: Iterable[str], pattern: re.Pattern[str]) -> bool:
+        return all(pattern.fullmatch(str(proof.get(name) or "")) for name in names)
+
     if (
         not isinstance(proof, dict)
         or set(proof) != fields
-        or proof.get("schema") != "shifu.qualified-assignment-core-admission-proof/v1"
-        or proof.get("targetRoot") != "framework/core/dist/kungfu"
-        or proof.get("consumingCommit") != checkout_revision
-        or proof.get("consumingTree") != checkout_tree
-        or proof.get("producerCommit") != build_revision
-        or not all(
-            _GIT_REVISION.fullmatch(str(proof.get(field) or ""))
-            for field in (
-                "consumingCommit",
-                "consumingTree",
-                "producerCommit",
-                "qualifiedTargetCommit",
-            )
-        )
-        or not all(
-            re.fullmatch(r"sha256:[0-9a-f]{64}", str(proof.get(field) or ""))
-            for field in root_fields
-        )
+        or any(proof.get(field) != value for field, value in expected.items())
+        or not matches(revision_fields, _GIT_REVISION)
+        or not matches(root_fields, re.compile(r"sha256:[0-9a-f]{64}"))
     ):
         return {}
-    proof_body = {key: value for key, value in proof.items() if key != "proofRoot"}
-    if proof["proofRoot"] != semantic_root(proof_body):
-        return {}
-    return proof
+    body = {key: value for key, value in proof.items() if key != "proofRoot"}
+    return proof if proof["proofRoot"] == semantic_root(body) else {}
 
 
 def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
@@ -228,7 +182,6 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     source checkout.  The two paths are explicit peers; a foreign binding is
     never silently upgraded to either authority.
     """
-
     import kungfu
 
     binding_file = Path(str(getattr(kungfu.__binding__, "__file__", ""))).resolve()
@@ -244,38 +197,22 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         build_info = {}
     build_revision = str(build_info.get("git", {}).get("revision") or "")
+    pristine = build_info.get("git", {}).get("pristine") is True
     source_layout = compiled and any(
         binding_file == root or root in binding_file.parents for root in allowed_roots
     )
     try:
-        checkout_revision = subprocess.run(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        git_command = ("git", "-C", str(checkout), "rev-parse", "HEAD")
+        checkout_revision = subprocess.check_output(git_command, text=True).strip()
     except (OSError, subprocess.CalledProcessError):
         checkout_revision = ""
-    current = bool(
-        source_layout
-        and _GIT_REVISION.fullmatch(build_revision)
-        and build_revision == checkout_revision
-        and build_info.get("git", {}).get("pristine") is True
-    )
-    qualified_core = (
-        _qualified_core_materialization_proof(
-            checkout,
-            binding_file,
-            build_revision,
-            checkout_revision,
+    current = bool(source_layout and pristine and build_revision == checkout_revision)
+    qualified_core = {}
+    if source_layout and not current and pristine:
+        qualified_core = _qualified_core_materialization_proof(
+            checkout, binding_file, build_revision, checkout_revision
         )
-        if source_layout
-        and not current
-        and build_info.get("git", {}).get("pristine") is True
-        else {}
-    )
     compatible = bool(qualified_core)
-
     install_source = os.environ.get("KUNGFU_INSTALL_SOURCE", "")
     runtime_value = os.environ.get("KUNGFU_DIR", "")
     manifest_value = os.environ.get("KUNGFU_UPGRADE_MANIFEST", "")
@@ -328,16 +265,12 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
         "manifest_root": semantic_root(manifest) if installed else None,
         "build_info_root": semantic_root(build_info) if build_info else None,
         "override": bool(override and not current and not compatible and not installed),
-        "fail_closed": not current
-        and not compatible
-        and not installed
-        and not override,
+        "fail_closed": not (current or compatible or installed or override),
     }
     if compatible:
         result["qualified_core_proof_root"] = qualified_core["proofRoot"]
-        result["materialization_receipt_root"] = qualified_core[
-            "materializationReceiptRoot"
-        ]
+        receipt_root = qualified_core["materializationReceiptRoot"]
+        result["materialization_receipt_root"] = receipt_root
         result["compatibility_root"] = qualified_core["compatibilityRoot"]
     result["provenance_root"] = semantic_root(result)
     return result
