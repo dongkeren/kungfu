@@ -22,7 +22,7 @@ test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs',
   const reusableRef = workflow.match(
     /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@([0-9a-f]{40})/u,
   )?.[1];
-  assert.equal(reusableRef, 'fefb02fbb874bf4bc86dc3fd4a707a9468e14718');
+  assert.equal(reusableRef, 'f4a53d55990c51afae0922ef4c680e66534ddb2f');
   assert.match(workflow, new RegExp(`buildchain-ref: ${reusableRef}`, 'u'));
   assert.match(workflow, /workflow_run:[\s\S]*Core affected native/u);
   assert.match(
@@ -196,22 +196,22 @@ test('Dev auto-merge waits for PR checks and lands through the native queue', ()
   assert.doesNotMatch(workflow, /gh pr merge|npm publish|git tag/iu);
 });
 
-test('Dev delivery reuses only an exact verified semantic native proof', () => {
+test('Dev delivery fails closed to fenced native execution without a v3 receipt', () => {
   assert.match(
     workflow,
     /Resolve optional exact native proof artifact[\s\S]*core-dev-delivery-source-proof-\$EXPECTED_HEAD[\s\S]*actions\/runs\/\$SOURCE_RUN_ID\/artifacts/u,
   );
   assert.match(
     workflow,
-    /Materialize optional reusable semantic native proof[\s\S]*dev-delivery-proof\.mjs verify-source[\s\S]*sourceIdentityRoot == \$input\[0\]\.sourceIdentityRoot[\s\S]*toolchainRoot == \$input\[0\]\.toolchainRoot[\s\S]*affectedPaths == \$input\[0\]\.affectedPaths/u,
+    /Materialize optional reusable semantic native proof[\s\S]*Source qualification is not native-execution authority[\s\S]*dev-delivery-proof\.mjs verify-source[\s\S]*sourceIdentityRoot == \$input\[0\]\.sourceIdentityRoot[\s\S]*toolchainRoot == \$input\[0\]\.toolchainRoot[\s\S]*affectedPaths == \$input\[0\]\.affectedPaths/u,
   );
   assert.match(
     workflow,
-    /dev-delivery-proof\.mjs native[\s\S]*--qualified-base[\s\S]*--shard-evidence-roots-json[\s\S]*dev-delivery-proof\.mjs verify-native[\s\S]*native-proof-json<<BUILDCHAIN_NATIVE_PROOF_EOF/u,
+    /Native Qualification Proof v3 must bind the exact environment before[\s\S]*native-proof-json=/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     workflow,
-    /Older retained artifacts predate Native Qualification Proof projection[\s\S]*native-proof-json=/u,
+    /dev-delivery-proof\.mjs native[\s\S]*--environment-root/u,
   );
 });
 
@@ -222,7 +222,7 @@ test('Dev behind admission produces and forwards an exact Project Cut replay pro
   );
   assert.match(
     workflow,
-    /Check out exact Buildchain delivery runtime[\s\S]*ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /Check out exact Buildchain delivery runtime[\s\S]*ref: f4a53d55990c51afae0922ef4c680e66534ddb2f/u,
   );
   assert.match(
     workflow,
@@ -483,7 +483,7 @@ test('the completed migration has no bootstrap bypass around Warrant admission',
   assert.match(sourceWorkflow, /Check out exact Buildchain Warrant runtime/u);
   assert.match(
     sourceWorkflow,
-    /ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /ref: f4a53d55990c51afae0922ef4c680e66534ddb2f/u,
   );
   assert.doesNotMatch(
     sourceWorkflow,
@@ -496,14 +496,14 @@ test('native execution uses one exact protected runtime and continuous fence wra
     '.github/actions/native-execution-under-warrant/action.yml',
     'utf8',
   );
-  assert.match(action, /ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u);
+  assert.match(action, /ref: f4a53d55990c51afae0922ef4c680e66534ddb2f/u);
   assert.match(
     action,
-    /test "\$\(git rev-parse HEAD\)" = fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /test "\$\(git rev-parse HEAD\)" = f4a53d55990c51afae0922ef4c680e66534ddb2f/u,
   );
   assert.match(
     action,
-    /native-execution-under-warrant\.mjs[\s\S]*--heartbeat-seconds 300[\s\S]*--lease-seconds 5400/u,
+    /native-execution-under-warrant\.mjs[\s\S]*--qualified-base[\s\S]*--toolchain-root[\s\S]*--environment-root[\s\S]*--heartbeat-seconds 300[\s\S]*--lease-seconds 5400/u,
   );
 });
 
