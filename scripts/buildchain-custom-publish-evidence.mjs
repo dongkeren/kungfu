@@ -91,6 +91,10 @@ function main() {
     expectedSourceSha: requireEnv('BUILDCHAIN_SOURCE_SHA'),
     recoveryReceiptPath:
       process.env.BUILDCHAIN_RELEASE_CANDIDATE_RECOVERY_RECEIPT_PATH || '',
+    publicationGateAggregateJson:
+      process.env.INPUT_PUBLICATION_GATE_AGGREGATE_JSON || '',
+    expectedControllerRepository: requireEnv('GITHUB_REPOSITORY'),
+    expectedControllerSha: requireEnv('GITHUB_SHA'),
   });
   console.log(
     `buildchain custom publish verified sealed upgrade admission ${upgradeAdmission.receiptRoot} for ${upgradeAdmission.platforms.join(', ')}`,

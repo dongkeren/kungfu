@@ -17,6 +17,8 @@ const RELEASE_CANDIDATE_CONTRACT =
   'kungfu-buildchain-release-candidate-passport';
 const RELEASE_CANDIDATE_RECOVERY_CONTRACT =
   'kungfu-buildchain-release-candidate-recovery';
+const RELEASE_PROMOTION_GATE_AGGREGATE_CONTRACT =
+  'buildchain.shifu-gate-aggregate/v1';
 const CREDENTIAL_POLICY_PATH =
   'docs/qualification/gates/macos-credential-island-policy.json';
 const CREDENTIAL_EVIDENCE_FILE = 'credential-island-evidence.json';
@@ -990,7 +992,7 @@ function verifyRecoveryPromotionSource({
   acceptedSources,
 }) {
   if (!recoveryReceiptPath || !fs.existsSync(recoveryReceiptPath)) {
-    return false;
+    return null;
   }
   const recovery = readJson(
     recoveryReceiptPath,
@@ -1019,6 +1021,46 @@ function verifyRecoveryPromotionSource({
   ) {
     throw new Error(
       'release-candidate recovery receipt does not bind the promotion source',
+    );
+  }
+  return recovery;
+}
+
+function verifyRecoveryController({
+  publicationGateAggregateJson,
+  expectedSourceSha,
+  expectedControllerRepository,
+  expectedControllerSha,
+  recovery,
+}) {
+  if (!publicationGateAggregateJson || !recovery) return false;
+  let aggregate;
+  try {
+    aggregate = JSON.parse(publicationGateAggregateJson);
+  } catch (error) {
+    throw new Error(
+      `release promotion gate aggregate is invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const { digest, ...body } = aggregate;
+  if (
+    aggregate.contract !== RELEASE_PROMOTION_GATE_AGGREGATE_CONTRACT ||
+    aggregate.status !== 'pass' ||
+    aggregate.ok !== true ||
+    aggregate.qualifying !== true ||
+    exactRoot(digest, 'release promotion gate aggregate root') !==
+      contentRoot(body) ||
+    aggregate.sourceSha !== expectedSourceSha ||
+    aggregate.candidateReuse?.action !== 'reused' ||
+    aggregate.candidateReuse?.sourceTreeSha !== recovery.target.tree ||
+    aggregate.consumerGateController?.repository !==
+      expectedControllerRepository ||
+    aggregate.consumerGateController?.sha !== expectedControllerSha ||
+    !SHA1_PATTERN.test(expectedControllerSha || '') ||
+    !SHA256_PATTERN.test(aggregate.consumerGateController?.commandDigest || '')
+  ) {
+    throw new Error(
+      'release promotion gate aggregate does not bind the recovery controller',
     );
   }
   return true;
@@ -1505,6 +1547,9 @@ export function verifyUpgradePublicationAdmission({
   expectedVersion,
   expectedSourceSha,
   recoveryReceiptPath,
+  publicationGateAggregateJson,
+  expectedControllerRepository,
+  expectedControllerSha,
   receiptPath,
   capsulePath,
 } = {}) {
@@ -1569,6 +1614,24 @@ export function verifyUpgradePublicationAdmission({
   const passportByteRoot = fileRoot(resolvedPassportPath);
   const passport = readJson(resolvedPassportPath, 'release-candidate passport');
   const sources = [...releaseCandidateSources(passport)].sort();
+  const recoveredPromotion =
+    expectedSourceSha && !sources.includes(expectedSourceSha)
+      ? verifyRecoveryPromotionSource({
+          recoveryReceiptPath,
+          expectedSourceSha,
+          expectedVersion: receipt.identity?.version,
+          acceptedSources: new Set(sources),
+        })
+      : null;
+  const controlledToolingRepair =
+    recoveredPromotion &&
+    verifyRecoveryController({
+      publicationGateAggregateJson,
+      expectedSourceSha,
+      expectedControllerRepository,
+      expectedControllerSha,
+      recovery: recoveredPromotion,
+    });
   const expectedCandidateRoot = contentRoot({
     artifactRoot: artifacts.root,
     passportRoot: passportByteRoot,
@@ -1584,6 +1647,7 @@ export function verifyUpgradePublicationAdmission({
   };
   for (const [name, current] of Object.entries(currentRoots)) {
     if (receipt.roots?.[name] !== current) {
+      if (name === 'tooling' && controlledToolingRepair) continue;
       throw new Error(`product admission ${name} root drift`);
     }
   }
@@ -1637,12 +1701,7 @@ export function verifyUpgradePublicationAdmission({
   if (
     expectedSourceSha &&
     !receipt.identity?.sources?.includes(expectedSourceSha) &&
-    !verifyRecoveryPromotionSource({
-      recoveryReceiptPath,
-      expectedSourceSha,
-      expectedVersion: receipt.identity?.version,
-      acceptedSources: new Set(sources),
-    })
+    !recoveredPromotion
   ) {
     throw new Error('product admission source is stale');
   }

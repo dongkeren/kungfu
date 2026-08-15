@@ -996,6 +996,69 @@ test('sealed product admission accepts a same-tree recovery promotion source', (
     });
     assert.equal(verified.receiptRoot.startsWith('sha256:'), true);
 
+    const receiptPath = path.join(
+      outputRoot,
+      PRODUCT_UPGRADE_PUBLICATION_ADMISSION_FILE,
+    );
+    const capsulePath = path.join(
+      outputRoot,
+      PRODUCT_UPGRADE_PUBLICATION_CAPSULE_FILE,
+    );
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+    receipt.roots.tooling = `sha256:${'1'.repeat(64)}`;
+    Reflect.deleteProperty(receipt, 'receiptRoot');
+    receipt.receiptRoot = contentRoot(receipt);
+    writeJson(receiptPath, receipt);
+    const capsule = JSON.parse(fs.readFileSync(capsulePath, 'utf8'));
+    capsule.admission.receiptRoot = receipt.receiptRoot;
+    capsule.admission.fileRoot = `sha256:${sha256(fs.readFileSync(receiptPath))}`;
+    Reflect.deleteProperty(capsule, 'capsuleRoot');
+    capsule.capsuleRoot = contentRoot(capsule);
+    writeJson(capsulePath, capsule);
+
+    const controllerSha = '2'.repeat(40);
+    const gateAggregate = {
+      contract: 'buildchain.shifu-gate-aggregate/v1',
+      profile: 'release-promotion',
+      sourceSha: promotedSource,
+      status: 'pass',
+      ok: true,
+      qualifying: true,
+      candidateReuse: { action: 'reused', sourceTreeSha: sourceTree },
+      consumerGateController: {
+        repository: 'kungfu-systems/kungfu',
+        sha: controllerSha,
+        commandDigest: `sha256:${'3'.repeat(64)}`,
+      },
+    };
+    gateAggregate.digest = contentRoot(gateAggregate);
+    const repaired = verifyUpgradePublicationAdmission({
+      payloadRoot: value.payloadRoot,
+      releaseCandidatePassportPath: value.passportPath,
+      expectedVersion: VERSION,
+      expectedSourceSha: promotedSource,
+      recoveryReceiptPath,
+      publicationGateAggregateJson: JSON.stringify(gateAggregate),
+      expectedControllerRepository: 'kungfu-systems/kungfu',
+      expectedControllerSha: controllerSha,
+    });
+    assert.equal(repaired.receiptRoot, receipt.receiptRoot);
+
+    assert.throws(
+      () =>
+        verifyUpgradePublicationAdmission({
+          payloadRoot: value.payloadRoot,
+          releaseCandidatePassportPath: value.passportPath,
+          expectedVersion: VERSION,
+          expectedSourceSha: promotedSource,
+          recoveryReceiptPath,
+          publicationGateAggregateJson: JSON.stringify(gateAggregate),
+          expectedControllerRepository: 'kungfu-systems/kungfu',
+          expectedControllerSha: '4'.repeat(40),
+        }),
+      /does not bind the recovery controller/,
+    );
+
     recovery.target.tree = 'f'.repeat(40);
     Reflect.deleteProperty(recovery, 'root');
     recovery.root = contentRoot(recovery);
