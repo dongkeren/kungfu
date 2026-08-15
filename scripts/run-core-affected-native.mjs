@@ -628,6 +628,7 @@ export function planFromChanged(
     '.github/workflows/affected-native-pr.yml',
     'framework/release/qualified-assignment-core-artifact.mjs',
     'framework/assignment-capture/qualified-assignment-core-consumer.mjs',
+    'product/scripts/verify-cli-surface-qualification.mjs',
     'scripts/check-shifu-cache-contract.mjs',
     'docs/shifu/artifact-contract.json',
     'docs/shifu/cache-contract.json',
@@ -844,6 +845,17 @@ function git(...args) {
   return result.stdout.trim();
 }
 
+export function changedPathsBetween(base, head, runGit = git) {
+  return runGit(
+    'diff',
+    '--name-only',
+    '--diff-filter=ACDMRTUXB',
+    `${base}...${head}`,
+  )
+    .split('\n')
+    .filter(Boolean);
+}
+
 function parseArgs(argv) {
   const options = {
     base: process.env.GITHUB_BASE_SHA || devMergeBaseCandidates()[0],
@@ -930,7 +942,7 @@ export function partitionAffectedNativePlan(plan, count = 1, index = 0) {
   };
 }
 
-function verifyPlan(plan) {
+export function verifyAffectedNativePlan(plan) {
   if (plan.schema !== 'kungfu.core-affected-native-plan/v1') {
     throw new Error('unsupported affected-native plan schema');
   }
@@ -963,8 +975,8 @@ function writePlan(plan, output) {
 
 async function loadBuildchainToolkit() {
   const [diagnostics, logging] = await Promise.all([
-    import('@kungfu-tech/buildchain/diagnostics'),
-    import('@kungfu-tech/buildchain/logging'),
+    import('@kungfu-tech/buildchain-alpha/diagnostics'),
+    import('@kungfu-tech/buildchain-alpha/logging'),
   ]);
   return { ...diagnostics, ...logging };
 }
@@ -1303,7 +1315,7 @@ async function execute(plan, receiptPath, partitionCount, partitionIndex) {
   return receipt;
 }
 
-function verifyReceipt(receipt) {
+export function verifyAffectedNativeReceipt(receipt) {
   if (receipt.schema !== 'kungfu.core-affected-native-receipt/v1') {
     throw new Error('unsupported affected-native receipt schema');
   }
@@ -1853,7 +1865,7 @@ function selfTest(authority, buildAuthority) {
         plan: { ...first, planDigest: `sha256:${'0'.repeat(64)}` },
         planDigest: first.planDigest,
       };
-      verifyReceipt(receipt);
+      verifyAffectedNativeReceipt(receipt);
     },
     /plan digest drift/,
   );
@@ -1861,7 +1873,7 @@ function selfTest(authority, buildAuthority) {
     'receipt partition drift fails closed',
     () => {
       const executionPartition = partitionAffectedNativePlan(first, 2, 0);
-      verifyReceipt({
+      verifyAffectedNativeReceipt({
         schema: 'kungfu.core-affected-native-receipt/v1',
         status: 'passed',
         plan: first,
@@ -1882,11 +1894,11 @@ function selfTest(authority, buildAuthority) {
     git('rev-parse', 'HEAD'),
   );
   expect('source-bound plan verifies before execution', () => {
-    verifyPlan(sourceBoundPlan);
+    verifyAffectedNativePlan(sourceBoundPlan);
   });
   expect(
     'source-bound plan digest drift fails closed',
-    () => verifyPlan({ ...sourceBoundPlan, profile: 'full' }),
+    () => verifyAffectedNativePlan({ ...sourceBoundPlan, profile: 'full' }),
     /plan digest drift/,
   );
   console.log(`[core-affected] ${passed} negative/determinism fixtures passed`);
@@ -1898,25 +1910,20 @@ async function main() {
   const buildAuthority = readJson(buildPath);
   if (options.selfTest) return selfTest(authority, buildAuthority);
   if (options.verifyReceipt) {
-    verifyReceipt(readJson(path.resolve(root, options.verifyReceipt)));
+    verifyAffectedNativeReceipt(
+      readJson(path.resolve(root, options.verifyReceipt)),
+    );
     console.log('[core-affected] receipt verified');
     return;
   }
   const plan = options.planInput
-    ? verifyPlan(readJson(path.resolve(root, options.planInput)))
+    ? verifyAffectedNativePlan(readJson(path.resolve(root, options.planInput)))
     : (() => {
         const base = git('rev-parse', options.base);
         const head = git('rev-parse', options.head);
         const changedFiles = options.changedFiles.length
           ? options.changedFiles
-          : git(
-              'diff',
-              '--name-only',
-              '--diff-filter=ACMRTUXB',
-              `${base}...${head}`,
-            )
-              .split('\n')
-              .filter(Boolean);
+          : changedPathsBetween(base, head);
         return planFromChanged(
           changedFiles,
           authority,

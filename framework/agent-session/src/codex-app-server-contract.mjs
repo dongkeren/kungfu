@@ -256,13 +256,10 @@ export function createCodexAppServerContractGate({
     );
   }
   const verified = verifyCodexAppServerSchemaManifest(manifest);
-  if (
-    cliVersion !== contract.surfacePin.cliVersion ||
-    manifest.cliVersion !== cliVersion
-  ) {
+  if (manifest.cliVersion !== contract.surfacePin.cliVersion) {
     fail(
-      'cli-version-drift',
-      'Codex CLI version does not match the qualified adapter contract',
+      'qualification-source-version-drift',
+      'Codex schema qualification source does not match the adapter contract',
     );
   }
   if (
@@ -394,6 +391,20 @@ export function createCodexAppServerContractGate({
       }
       const mapping = mappingByKey.get(`${direction}:${message.method}`);
       if (!mapping) {
+        if (direction === 'server-notification') {
+          return Object.freeze({
+            schema: 'kungfu.codex-app-server.normalization-plan/v1',
+            provider: 'codex',
+            providerMethod: message.method,
+            providerSchemaFile: null,
+            direction,
+            normalizedSemantic: 'provider-notification-unclassified',
+            interactionOperation: null,
+            rawRetention: 'metadata-only',
+            authority: 'provider-diagnostic-not-work-fact',
+            rawPointerRequired: true,
+          });
+        }
         fail(
           'unknown-method',
           `Codex App Server method is not admitted: ${direction}:${message.method}`,

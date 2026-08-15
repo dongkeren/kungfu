@@ -32,24 +32,87 @@ import {
   gateDigest,
 } from './shifu-gate-runtime.mjs';
 import {
+  temporalAdmissionFactProjection,
   validatePrimitiveCatalogPromotion,
   verifyKungfuReleaseAdmission,
 } from './verify-kungfu-release-admission.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_SHA = '1'.repeat(40);
-const RUNTIME_SHA = '2e7e07902ac28d8f3edcfb81098ef9ebc7a91878';
-const STABLE_RUNTIME_SHA = '9e904de2c85dbea7c799780ee166510b3336d812';
+const RELEASE_POLICY = JSON.parse(
+  fs.readFileSync(
+    path.join(ROOT, 'docs/qualification/gates/release-admission-policy.json'),
+    'utf8',
+  ),
+);
+const RUNTIME_SHA = RELEASE_POLICY.buildchain.runtimes.alpha.runtimeSha;
+const PUBLICATION_RUNTIME_SHA =
+  RELEASE_POLICY.buildchain.runtimes.alpha.publicationRuntimeSha;
+const RETIRED_PUBLICATION_RUNTIME_SHA =
+  '21030efd277301d642fd9baaa1bd75f02dd3ddc6';
+const STABLE_RUNTIME_SHA =
+  RELEASE_POLICY.buildchain.runtimes.release.runtimeSha;
 const SOURCE_TREE_SHA = 'a'.repeat(40);
 const CONTRACT_DIGEST =
-  '5a6dc69d8905ed852260076da13d3aa3fa63533007dba706c164fe86f8b8f1e6';
+  RELEASE_POLICY.buildchain.runtimes.alpha.contractDigest.replace(
+    /^sha256:/u,
+    '',
+  );
+const RECOVERED_CONTRACT_DIGEST =
+  RELEASE_POLICY.buildchain.runtimes.alpha.publicationContractDigests[1].replace(
+    /^sha256:/u,
+    '',
+  );
 const STABLE_CONTRACT_DIGEST =
-  '914720131f07664cd187a1033f357c4952ef1008f5553cb6b285a75f786a7fbc';
+  RELEASE_POLICY.buildchain.runtimes.release.contractDigest.replace(
+    /^sha256:/u,
+    '',
+  );
 const PREDICATE_COMMAND = 'node scripts/kungfu-release-qualification.mjs';
 const PREDICATE_DIGEST = crypto
   .createHash('sha256')
   .update(PREDICATE_COMMAND)
   .digest('hex');
+
+function readJson(relative) {
+  return JSON.parse(fs.readFileSync(path.join(ROOT, relative), 'utf8'));
+}
+
+test('temporal release admission has exact legacy/proof parity and protected proof evidence', () => {
+  const contract = readJson(
+    'framework/release/kungfu-temporal-release-admission.contract.json',
+  );
+  const factProjection = temporalAdmissionFactProjection(ROOT, RELEASE_POLICY);
+  for (const channel of RELEASE_POLICY.publication.channels) {
+    assert.deepEqual(
+      factProjection.channels[channel],
+      [
+        ...RELEASE_POLICY.buildchain.runtimes[channel]
+          .publicationContractDigests,
+      ].sort(),
+    );
+  }
+  const projection = readJson(
+    'docs/qualification/evidence/buildchain-compatibility-proof-projection.json',
+  );
+  assert.equal(contract.maximumPathDepth, 2);
+  assert.equal(contract.rollbackMode, 'legacy-exact');
+  assert.equal(
+    contract.factAuthority.admittedDigests,
+    'derived-from-active-proof-records',
+  );
+  assert.equal(contract.safety.realPublicationRequired, false);
+  assert.equal(
+    projection.source.sourceCommit,
+    '913b5d3fc486e225cf19f6e677129434db4850a6',
+  );
+  assert.equal(
+    projection.source.mergeCommit,
+    '10745d50aa93192c06b13f76942c4c291b482518',
+  );
+  assert.equal(projection.proofs.length, 3);
+  assert.equal(new Set(projection.registry.proofRoots).size, 5);
+});
 
 test('release admission denies promoted primitive without complete receipts', () => {
   const languageStates = Object.fromEntries(
@@ -89,11 +152,17 @@ function manifestSummaryDigest(files) {
   return hash.digest('hex');
 }
 
-function fixture({
-  channel = 'alpha',
-  runtimeSha = RUNTIME_SHA,
-  contractDigest = CONTRACT_DIGEST,
-} = {}) {
+function fixture(options = {}) {
+  const channel = options.channel || 'alpha';
+  const runtimeSha =
+    options.runtimeSha ||
+    (channel === 'alpha' ? RUNTIME_SHA : STABLE_RUNTIME_SHA);
+  const publicationRuntimeSha =
+    options.publicationRuntimeSha ||
+    (channel === 'alpha' ? PUBLICATION_RUNTIME_SHA : STABLE_RUNTIME_SHA);
+  const contractDigest =
+    options.contractDigest ||
+    (channel === 'alpha' ? CONTRACT_DIGEST : STABLE_CONTRACT_DIGEST);
   const registry = JSON.parse(
     fs.readFileSync(path.join(ROOT, 'shifu.gates.json'), 'utf8'),
   );
@@ -166,7 +235,7 @@ function fixture({
   });
   const controlPlaneAudit = createPublicationControlPlaneAudit({
     repository: 'kungfu-systems/kungfu',
-    workflowPath: '.github/workflows/release-candidate-promote.yml',
+    workflowPath: '.github/workflows/.release-candidate-promote.yml',
     publisherWorkflowPath: '.github/workflows/release-new-version.yml',
     environment: 'none',
     facts: [
@@ -311,16 +380,18 @@ function fixture({
       fs.readFileSync(
         path.join(
           ROOT,
-          'node_modules/@kungfu-tech/buildchain/dist/site/publication-authority-registry.json',
+          channel === 'alpha'
+            ? 'node_modules/@kungfu-tech/buildchain/dist/site/publication-authority-registry.json'
+            : 'node_modules/@kungfu-tech/buildchain-stable/dist/site/publication-authority-registry.json',
         ),
         'utf8',
       ),
     ).registryDigest,
-    workflowPath: '.github/workflows/release-candidate-promote.yml',
+    workflowPath: '.github/workflows/.release-candidate-promote.yml',
     publisherWorkflowPath: '.github/workflows/release-new-version.yml',
     repository: 'kungfu-systems/kungfu',
     sourceSha: SOURCE_SHA,
-    runtimeSha,
+    runtimeSha: publicationRuntimeSha,
     contractDigest,
     policyDigest: matrixDigest,
     gateRegistryDigest: registryDigest,
@@ -368,22 +439,47 @@ function fixture({
     controlPlaneAudit,
     publicationEvidence,
     expected,
+    temporalAdmission: {
+      releaseProvenance: { objectRoot: `sha256:${'9'.repeat(64)}` },
+      promotionSha: SOURCE_SHA,
+      qualificationRoot: `sha256:${'6'.repeat(64)}`,
+      authorityRoot: `sha256:${'5'.repeat(64)}`,
+    },
+    temporalVerifier: ({ expected: observed, temporalAdmission }) => {
+      assert.equal(observed.sourceSha, SOURCE_SHA);
+      assert.match(temporalAdmission.releaseProvenance.objectRoot, /^sha256:/u);
+      return {
+        schema: 'kungfu.temporal-release-admission-receipt/v1',
+        status: 'accepted',
+        pathKind:
+          observed.contractDigest === RECOVERED_CONTRACT_DIGEST
+            ? 'composed'
+            : 'direct',
+        containsPrivatePayload: false,
+        receiptRoot: `sha256:${'4'.repeat(64)}`,
+      };
+    },
     now: new Date('2026-07-15T00:05:00.000Z'),
   };
 }
 
-test('Kungfu independently accepts only a current sealed qualifying capability', async () => {
+test('Kungfu independently accepts only a durable sealed qualifying capability', async () => {
   const result = await verifyKungfuReleaseAdmission(fixture());
   assert.equal(result.qualifying, true);
   assert.equal(result.capability.decision, 'allow');
-  assert.equal(result.capability.runtimeSha, RUNTIME_SHA);
+  assert.equal(result.capability.runtimeSha, PUBLICATION_RUNTIME_SHA);
   assert.match(result.consumerPolicyDigest, /^[0-9a-f]{64}$/);
+  assert.equal(result.temporalAdmissionReceipt.status, 'accepted');
+
+  const recovered = await verifyKungfuReleaseAdmission(
+    fixture({ contractDigest: RECOVERED_CONTRACT_DIGEST }),
+  );
+  assert.equal(recovered.capability.contractDigest, RECOVERED_CONTRACT_DIGEST);
 
   const stable = await verifyKungfuReleaseAdmission(
     fixture({
       channel: 'release',
-      runtimeSha: STABLE_RUNTIME_SHA,
-      contractDigest: STABLE_CONTRACT_DIGEST,
+      publicationRuntimeSha: STABLE_RUNTIME_SHA,
     }),
   );
   assert.equal(stable.capability.runtimeSha, STABLE_RUNTIME_SHA);
@@ -393,11 +489,15 @@ test('Kungfu independently accepts only a current sealed qualifying capability',
       verifyKungfuReleaseAdmission(
         fixture({
           channel: 'alpha',
-          runtimeSha: STABLE_RUNTIME_SHA,
-          contractDigest: STABLE_CONTRACT_DIGEST,
+          publicationRuntimeSha: RETIRED_PUBLICATION_RUNTIME_SHA,
         }),
       ),
     /runtimeSha policy mismatch/,
+  );
+  await assert.rejects(
+    async () =>
+      verifyKungfuReleaseAdmission(fixture({ contractDigest: 'f'.repeat(64) })),
+    /contractDigest policy mismatch/,
   );
 });
 
@@ -457,7 +557,7 @@ test('Kungfu rejects policy, runner, control-plane, and artifact substitution', 
 });
 
 test('Kungfu consumer qualification seals only an exact current handoff', async () => {
-  const input = fixture();
+  const input = fixture({ contractDigest: RECOVERED_CONTRACT_DIGEST });
   const capability = (await verifyKungfuReleaseAdmission(input)).capability;
   const gateAggregate = input.publicationEvidence.gateAggregate;
   const decision = await createKungfuConsumerPublicationDecision({
@@ -473,6 +573,22 @@ test('Kungfu consumer qualification seals only an exact current handoff', async 
   assert.equal(decision.sourceSha, SOURCE_SHA);
   assert.equal(decision.artifactDigest, capability.artifactDigest);
 
+  const unlistedContract = structuredClone(capability);
+  unlistedContract.contractDigest = 'f'.repeat(64);
+  await assert.rejects(
+    async () =>
+      createKungfuConsumerPublicationDecision({
+        root: ROOT,
+        capability: unlistedContract,
+        gateAggregate,
+        predicateId: KUNGFU_PUBLICATION_PREDICATE_ID,
+        predicateDigest: PREDICATE_DIGEST,
+        createDecision: createConsumerPublicationDecision,
+        now: input.now,
+      }),
+    /Buildchain contract digest policy mismatch/,
+  );
+
   const receipt = createPublicationQualificationReceipt({
     capability,
     gateAggregate,
@@ -485,7 +601,7 @@ test('Kungfu consumer qualification seals only an exact current handoff', async 
     gateAggregate,
     expected: {
       sourceSha: SOURCE_SHA,
-      runtimeSha: RUNTIME_SHA,
+      runtimeSha: PUBLICATION_RUNTIME_SHA,
       artifactDigest: capability.artifactDigest,
       version: capability.version,
       channel: capability.channel,

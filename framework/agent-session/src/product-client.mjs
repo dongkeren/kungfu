@@ -11,12 +11,21 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { createCapsuleNodePtyLoader } from './capsule-transport-runtime.mjs';
 import { ensurePrivateRuntimeDirectory } from './private-runtime-directory.mjs';
-import { invokeAgentSessionSurfaceRpc } from './product-rpc.mjs';
+import {
+  bindAgentSessionSurfaceRpc,
+  invokeAgentSessionSurfaceRpc,
+} from './product-rpc.mjs';
+import { InProcessAgentSessionProductRuntime } from './product-runtime.mjs';
+import { AgentSessionProductSurface } from './product-surface.mjs';
+import {
+  JsonFileWorkConsoleRegistryStore,
+  WorkConsoleRegistry,
+} from './work-console-registry.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -107,7 +116,7 @@ export function detachedAgentSessionPaths(runtimeDir) {
     process.platform === 'win32'
       ? null
       : path.join(
-          process.platform === 'darwin' ? '/tmp' : os.tmpdir(),
+          '/tmp',
           `kungfu-agent-session-${process.getuid?.() ?? 'user'}`,
         );
   return {
@@ -229,19 +238,24 @@ export function createDetachedAgentSessionHost({
             if (!transientConnection(error)) throw error;
           }
           clearStaleSocket(paths.endpoint);
+          const workerEnv = {
+            ...env,
+            ELECTRON_RUN_AS_NODE: '1',
+            KUNGFU_AS_VARIANT: 'node',
+            KUNGFU_AGENT_SESSION_ENDPOINT: paths.endpoint,
+            KUNGFU_AGENT_SESSION_METADATA: paths.metadata,
+            KUNGFU_AGENT_SESSION_REGISTRY: paths.registry,
+            KUNGFU_AGENT_SESSION_STARTED_AT: String(now()),
+          };
+          // KUNGFU_NODE_VARIANT_ENTRY pins the current embedded-Node program
+          // (for example tui.mjs). It must never override the reviewed worker
+          // argv in a detached child.
+          workerEnv.KUNGFU_NODE_VARIANT_ENTRY = undefined;
           const child = spawnProcess(executable, [workerPath], {
             detached: true,
             stdio: 'ignore',
             windowsHide: true,
-            env: {
-              ...env,
-              ELECTRON_RUN_AS_NODE: '1',
-              KUNGFU_AS_VARIANT: 'node',
-              KUNGFU_AGENT_SESSION_ENDPOINT: paths.endpoint,
-              KUNGFU_AGENT_SESSION_METADATA: paths.metadata,
-              KUNGFU_AGENT_SESSION_REGISTRY: paths.registry,
-              KUNGFU_AGENT_SESSION_STARTED_AT: String(now()),
-            },
+            env: workerEnv,
           });
           if (unrefWorker) child.unref?.();
           const workerDeadline = now() + CONNECT_TIMEOUT_MS;
@@ -277,6 +291,70 @@ export function createDetachedAgentSessionHost({
         if (!transientConnection(error)) throw error;
         await ensureWorker();
         return await call(request);
+      }
+    },
+  });
+}
+
+/**
+ * Own an Agent Session surface inside the calling product process.
+ *
+ * Deterministic Mock onboarding uses this host so readiness and retirement are
+ * exact process-lifecycle events.  It deliberately has no startup deadline,
+ * stale-lock heuristic, retry interval, or idle timer.  The public RPC endpoint
+ * remains available to the bundled CLI subprocesses for the lifetime of the
+ * TUI, and close() retires it when that owner exits.
+ */
+export function createAttachedAgentSessionHost({
+  runtimeDir,
+  pty = null,
+  ptyModule,
+  env = process.env,
+} = {}) {
+  const scope = `${process.pid}-${randomUUID()}`;
+  const paths = detachedAgentSessionPaths(
+    path.join(canonicalRuntimeDir(runtimeDir), 'attached', scope),
+  );
+  ensurePrivateRuntimeDirectory(paths.directory);
+  if (paths.socketDirectory) {
+    ensurePrivateRuntimeDirectory(paths.socketDirectory);
+  }
+  const runtime = new InProcessAgentSessionProductRuntime({
+    pty,
+    loadPty: createCapsuleNodePtyLoader({
+      modulePath: ptyModule,
+      registryPath: paths.registry,
+    }),
+    baseEnv: env,
+  });
+  const registry = new WorkConsoleRegistry({
+    store: new JsonFileWorkConsoleRegistryStore(paths.registry),
+  });
+  const surface = new AgentSessionProductSurface({ runtime, registry });
+  const server = bindAgentSessionSurfaceRpc({
+    endpoint: paths.endpoint,
+    invoke: (request) => surface.invoke(request),
+  });
+  let closed = false;
+
+  return Object.freeze({
+    ...paths,
+    ready: server.ready,
+    async invoke(request) {
+      await server.ready;
+      return surface.invoke(request);
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      runtime.shutdown();
+      await server.close();
+      if (process.platform !== 'win32') {
+        try {
+          unlinkSync(paths.endpoint);
+        } catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
+        }
       }
     },
   });

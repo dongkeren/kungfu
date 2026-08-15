@@ -15,11 +15,11 @@
   },
   "requiredContext": "Queue admission lease",
   "authority": {
-    "pullRequestHead": "atlas-serialized-wrapper",
+    "pullRequestHead": "buildchain-serialized-pr-head",
     "mergeGroup": ".github/workflows/queue-admission-lease.yml",
     "dequeueRevocation": ".github/workflows/cancel-dequeued-merge-group.yml",
     "dequeueControllerSource": "current-protected-pull-request-base-ref",
-    "queueAndWarrant": "kungfu-systems/buildchain@ed978d70b246fcfdb5e80009d58e1ce4926ad593",
+    "queueAndWarrant": "kungfu-systems/buildchain@fefb02fbb874bf4bc86dc3fd4a707a9468e14718",
     "stateRefPattern": "buildchain/dev-delivery-warrant/dev-vN-vN.N"
   },
   "admission": {
@@ -29,6 +29,10 @@
     "leaseAfterReplay": true,
     "exactQueueRevisionRequired": true,
     "exactWarrantFenceRequired": true,
+    "activeWarrantNonPreemptive": true,
+    "transientDequeueNonTerminal": true,
+    "continuousNativeHeartbeat": true,
+    "fenceLossStopsWorker": true,
     "sourceQualificationProofRequired": true,
     "integrationDeliveryProofRequired": true
   },

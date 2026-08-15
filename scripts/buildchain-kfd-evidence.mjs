@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
 // @ts-check
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -20,9 +20,18 @@ import {
   BUILDCHAIN_KFD2_REGISTRY_PATH,
   BUILDCHAIN_KFD3_DIR,
   KFD3_DEFAULT_REGISTRY_PATH,
+  KFD_ADOPTER_MANIFEST_GATE_PATH,
+  KFD_ADOPTER_MANIFEST_PATH,
+  KFD_SUPPORT_MATRIX_PATH as KFD_SUPPORT_MATRIX_RELATIVE_PATH,
+  assertKungfuKfdAdopterClosureCurrent,
   checkColdBuildchainKfd,
+  gitValue,
   loadBuildchainKfdRuntime,
+  loadSealedKfdUpstreamAggregate,
+  releaseCandidateKfdRoot,
   renderKfdJson,
+  resolveGitBoundKfdEvidenceSourceSha,
+  resolveKungfuKfdAdopterClosure,
 } from '../framework/release/buildchain-kfd-runtime.mjs';
 import { prepareGateMeasurementHistory } from './prepare-gate-measurement-history.mjs';
 import {
@@ -35,7 +44,10 @@ let runtime;
 const KFD3_SURFACE_REGISTRY_CONTRACT =
   'kungfu-buildchain-kfd-3-surface-registry';
 const __filename = fileURLToPath(import.meta.url);
-const ROOT = path.resolve(path.dirname(__filename), '..');
+const ROOT = releaseCandidateKfdRoot({
+  defaultRoot: path.resolve(path.dirname(__filename), '..'),
+  receiptPath: process.env.BUILDCHAIN_RELEASE_CANDIDATE_RECOVERY_RECEIPT_PATH,
+});
 const BUILDCHAIN_DIR = path.join(ROOT, '.buildchain');
 const KFD1_WITNESS_PATH = path.join(
   ROOT,
@@ -90,9 +102,8 @@ const KFD3_ARTIFACT_WITNESS_PATH = path.join(
 );
 const KFD3_QUERY_PATH = path.join(KFD3_OUTPUT_DIR, 'capability-query.json');
 const KFD_SUPPORT_MATRIX_PATH = path.join(
-  BUILDCHAIN_DIR,
-  'kfd',
-  'support-matrix.json',
+  ROOT,
+  KFD_SUPPORT_MATRIX_RELATIVE_PATH,
 );
 const KFD_PRODUCT_GATE_RUNTIME_DIR = path.join(
   BUILDCHAIN_DIR,
@@ -176,8 +187,6 @@ const CORE_PACKAGE_PATH = path.join(ROOT, 'framework', 'core', 'package.json');
 const ARTIFACT_VERIFY_COMMAND =
   'node scripts/buildchain-kfd-evidence.mjs --artifact-witness --json';
 const STRICT_KFD3_MODE = 'strict-buildchain-managed-registry';
-const KFD_EVIDENCE_SOURCE_SHA =
-  process.env.KUNGFU_KFD_SOURCE_SHA || 'local-dev-snapshot';
 function usage() {
   return `Usage:
   node scripts/buildchain-kfd-evidence.mjs --check [--json]
@@ -402,7 +411,15 @@ function buildOwnKfdFacts() {
     },
   };
 }
-function buildUpstreamKfdAggregate() {
+function buildUpstreamKfdAggregate({ quiet = false } = {}) {
+  const sealedAggregate = loadSealedKfdUpstreamAggregate({
+    receiptPath: process.env.BUILDCHAIN_RELEASE_CANDIDATE_RECOVERY_RECEIPT_PATH,
+    aggregatePath: SDK_KFD_UPSTREAM_AGGREGATE_PATH,
+    displayPath: rel(SDK_KFD_UPSTREAM_AGGREGATE_PATH),
+    quiet,
+    readAggregate: readJson,
+  });
+  if (sealedAggregate) return sealedAggregate;
   const kfdPackage = packageJson('@kungfu-tech/kfd', SDK_CLI_PATH);
   const libnodePackage = packageJson('@kungfu-tech/libnode', CORE_PACKAGE_PATH);
   const buildchainPackage = packageJson(
@@ -544,43 +561,19 @@ function buildUpstreamKfdAggregate() {
     },
   };
 }
-function gitValue(args) {
-  try {
-    return execFileSync('git', args, {
-      cwd: ROOT,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return '';
-  }
-}
-function isGitAncestor(sourceSha, headSha) {
-  return (
-    spawnSync('git', ['merge-base', '--is-ancestor', sourceSha, headSha], {
-      cwd: ROOT,
-      stdio: 'ignore',
-    }).status === 0
-  );
-}
 function resolveKfdEvidenceSourceSha({ write }) {
   const committed = write
     ? ''
     : String(readJson(KFD3_PREBUILD_WITNESS_PATH).source?.sourceSha || '');
-  if (!write)
-    prepareGateMeasurementHistory(ROOT, { requiredCommit: committed });
-  const headSha = gitValue(['rev-parse', 'HEAD']);
-  const configured =
-    process.env.BUILDCHAIN_SOURCE_SHA || process.env.KUNGFU_KFD_SOURCE_SHA;
-  return assertKfdEvidenceSourceBinding({
-    sourceSha: selectKfdEvidenceSourceSha({
-      write,
-      configured,
-      committed,
-      headSha,
-    }),
-    headSha,
-    isAncestor: isGitAncestor,
+  return resolveGitBoundKfdEvidenceSourceSha({
+    root: ROOT,
+    write,
+    committed,
+    configured:
+      process.env.BUILDCHAIN_SOURCE_SHA || process.env.KUNGFU_KFD_SOURCE_SHA,
+    prepareHistory: prepareGateMeasurementHistory,
+    assertBinding: assertKfdEvidenceSourceBinding,
+    selectSourceSha: selectKfdEvidenceSourceSha,
     findTreeEquivalentAncestor: findGitTreeEquivalentAncestor,
   });
 }
@@ -1128,17 +1121,17 @@ function buildKfd1VerifyResult(kfd1Gate) {
   };
 }
 
-function buildKfd2Claims({ write, outputDir = KFD2_OUTPUT_DIR }) {
+function buildKfd2Claims({ write, sourceSha, outputDir = KFD2_OUTPUT_DIR }) {
   const result = write
     ? runtime.kfd2.writeProductClaimOutputs({
         cwd: ROOT,
         outputDir: rel(outputDir),
-        sourceSha: KFD_EVIDENCE_SOURCE_SHA,
+        sourceSha,
       })
     : runtime.kfd2.checkProductClaimOutputs({
         cwd: ROOT,
         outputDir: rel(outputDir),
-        sourceSha: KFD_EVIDENCE_SOURCE_SHA,
+        sourceSha,
       });
   if (!result.ok) {
     throw new Error(
@@ -1164,13 +1157,13 @@ function buildKfd2Claims({ write, outputDir = KFD2_OUTPUT_DIR }) {
   };
 }
 
-function writeKfd2PackagedOutputs(outputDir) {
-  return buildKfd2Claims({ write: true, outputDir });
+function writeKfd2PackagedOutputs(outputDir, sourceSha) {
+  return buildKfd2Claims({ write: true, outputDir, sourceSha });
 }
 
-function assertCurrentKfd2Output(outputDir, label) {
+function assertCurrentKfd2Output(outputDir, label, sourceSha) {
   try {
-    return buildKfd2Claims({ write: false, outputDir });
+    return buildKfd2Claims({ write: false, outputDir, sourceSha });
   } catch (error) {
     throw new Error(
       `${label}: ${error instanceof Error ? error.message : error}`,
@@ -1663,31 +1656,22 @@ async function buildProductGates({ write, sourceSha, checkedAt }) {
         );
       }
     }
-    const matrix = readJson(KFD_SUPPORT_MATRIX_PATH);
-    const projection = runtime.productGates.createKfdSupportProjection({
-      matrix,
-      matrixRoot: `sha256:${sha256File(KFD_SUPPORT_MATRIX_PATH)}`,
-      gateResults: gates,
-      expectedSourceSha: sourceSha,
+    const closure = resolveKungfuKfdAdopterClosure({
+      root: ROOT,
+      sourceSha,
       checkedAt,
+      gates,
+      write,
     });
-    const projectionValidation =
-      runtime.productGates.validateKfdSupportProjection(projection, {
-        expectedSourceSha: sourceSha,
-        checkedAt,
-      });
-    if (!projectionValidation.valid) {
-      throw new Error(
-        `KFD support projection is invalid: ${JSON.stringify(projectionValidation.issues)}`,
-      );
-    }
-    if (write) writeJson(KFD_SUPPORT_PROJECTION_PATH, projection);
+    if (write) writeJson(KFD_SUPPORT_PROJECTION_PATH, closure.projection);
     return {
       sourceSha,
       checkedAt,
       inputs,
       gates,
-      projection,
+      manifest: closure.manifest,
+      manifestGate: closure.gate,
+      projection: closure.projection,
     };
   } finally {
     if (!write) fs.rmSync(workspace, { recursive: true, force: true });
@@ -1722,6 +1706,7 @@ function buildSummary({
         ),
         kfd3PrebuildWitnessJsons: [rel(KFD3_PREBUILD_WITNESS_PATH)],
         kfd3ArtifactVerifyCommand: ARTIFACT_VERIFY_COMMAND,
+        kfdAdopterManifestJson: KFD_ADOPTER_MANIFEST_PATH,
         kfdSupportMatrixJson: rel(KFD_SUPPORT_MATRIX_PATH),
         kfdProductGateJsons: KFD_PRODUCT_GATE_PATHS.map(rel),
       },
@@ -1769,9 +1754,11 @@ function buildSummary({
     },
     productGates: {
       sourceSha: productGates.sourceSha,
+      manifestRoot: productGates.manifestGate.authority.manifestRoot,
+      manifestGateRoot: productGates.manifestGate.gateRoot,
       projection: rel(KFD_SUPPORT_PROJECTION_PATH),
-      projectionRoot: productGates.projection.projectionRoot,
-      status: productGates.projection.status,
+      projectionRoot: `sha256:${sha256RenderedJson(productGates.projection)}`,
+      status: productGates.manifestGate.status,
       gates: productGates.gates.map((gate) => ({
         standard: gate.standard,
         status: gate.status,
@@ -1785,7 +1772,7 @@ function buildSummary({
 }
 
 async function runArtifactWitness(options) {
-  const upstreamAggregate = buildUpstreamKfdAggregate();
+  const upstreamAggregate = buildUpstreamKfdAggregate({ quiet: options.json });
   const registry = buildKfd3Registry(upstreamAggregate);
   assertCurrent(KFD3_REGISTRY_PATH, registry, 'Buildchain KFD-3 registry');
   assertStrictBuildchainAudit(buildStrictBuildchainAudit(registry));
@@ -1798,7 +1785,7 @@ async function runArtifactWitness(options) {
 }
 
 async function runCheckOrWrite(options) {
-  const upstreamAggregate = buildUpstreamKfdAggregate();
+  const upstreamAggregate = buildUpstreamKfdAggregate({ quiet: options.json });
   const registry = buildKfd3Registry(upstreamAggregate);
   const kfd1Witness = buildKfd1Witness();
   const kfd1Gate = buildKfd1ReleaseGate(kfd1Witness);
@@ -1810,9 +1797,14 @@ async function runCheckOrWrite(options) {
         .join('\n')}`,
     );
   }
+  const sourceSha = resolveKfdEvidenceSourceSha({ write: options.write });
   const kfd2Summary = options.write
-    ? writeKfd2PackagedOutputs(KFD2_OUTPUT_DIR)
-    : assertCurrentKfd2Output(KFD2_OUTPUT_DIR, 'Buildchain KFD-2 output');
+    ? writeKfd2PackagedOutputs(KFD2_OUTPUT_DIR, sourceSha)
+    : assertCurrentKfd2Output(
+        KFD2_OUTPUT_DIR,
+        'Buildchain KFD-2 output',
+        sourceSha,
+      );
   if (options.write) {
     writeIfChanged(KFD3_REGISTRY_PATH, registry);
     writeIfChanged(SDK_KFD3_CANONICAL_REGISTRY_PATH, registry);
@@ -1820,7 +1812,7 @@ async function runCheckOrWrite(options) {
     writeJson(SDK_KFD1_WITNESS_PATH, kfd1Witness);
     writeJson(SDK_KFD1_RELEASE_GATE_PATH, kfd1Gate);
     writeJson(SDK_KFD1_VERIFY_RESULT_PATH, kfd1VerifyResult);
-    writeKfd2PackagedOutputs(SDK_KFD2_OUTPUT_DIR);
+    writeKfd2PackagedOutputs(SDK_KFD2_OUTPUT_DIR, sourceSha);
   } else {
     assertCurrent(KFD3_REGISTRY_PATH, registry, 'Buildchain KFD-3 registry');
     assertCurrent(
@@ -1859,18 +1851,24 @@ async function runCheckOrWrite(options) {
       kfd1VerifyResult,
       'SDK packaged KFD-1 verify result',
     );
-    assertCurrentKfd2Output(SDK_KFD2_OUTPUT_DIR, 'SDK packaged KFD-2 output');
+    assertCurrentKfd2Output(
+      SDK_KFD2_OUTPUT_DIR,
+      'SDK packaged KFD-2 output',
+      sourceSha,
+    );
   }
   const strictAudit = buildStrictBuildchainAudit(registry);
   assertStrictBuildchainAudit(strictAudit);
-  const sourceSha = resolveKfdEvidenceSourceSha({ write: options.write });
   const checkedAt = resolveKfdProductGateCheckedAt({
     write: options.write,
     now: () => new Date().toISOString(),
-    retainedGateResults: KFD_PRODUCT_GATE_PATHS.map(readOptionalJson),
+    retainedGateResults: [
+      readOptionalJson(KFD_ADOPTER_MANIFEST_GATE_PATH),
+      ...KFD_PRODUCT_GATE_PATHS.map(readOptionalJson),
+    ],
     sourceSha,
     commitTimestamp: (commit) =>
-      gitValue(['show', '-s', '--format=%cI', commit]),
+      gitValue(ROOT, ['show', '-s', '--format=%cI', commit]),
   });
   const prebuildWitness = buildKfd3PrebuildWitness(registry, sourceSha);
   const artifactWitness = buildKfd3ArtifactWitness(registry, {
@@ -1931,6 +1929,7 @@ async function runCheckOrWrite(options) {
       productGates.projection,
       'Buildchain KFD support projection',
     );
+    assertKungfuKfdAdopterClosureCurrent(ROOT, productGates, assertCurrent);
     assertCurrentIfPresent(
       SUMMARY_PATH,
       summary,
@@ -1961,7 +1960,7 @@ async function runCheckOrWrite(options) {
     );
 }
 async function runQuery(options) {
-  const upstreamAggregate = buildUpstreamKfdAggregate();
+  const upstreamAggregate = buildUpstreamKfdAggregate({ quiet: options.json });
   const registry = buildKfd3Registry(upstreamAggregate);
   const query = await buildQuery(registry);
   if (options.json) process.stdout.write(renderJson(query));

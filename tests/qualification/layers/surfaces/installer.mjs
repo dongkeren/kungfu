@@ -13,13 +13,47 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
     encoding: 'utf8',
+    timeout: options.timeout,
     windowsHide: true,
   });
-  if (result.error || result.status !== 0)
-    fail(
+  if (result.error || result.status !== 0) {
+    const error = new Error(
       `${command} ${args.join(' ')} failed (status=${result.status}):\n${result.stderr || result.error?.message || ''}`,
     );
+    error.code = result.error?.code || 'ECHILD';
+    throw error;
+  }
   return result.stdout || '';
+}
+
+export const NSIS_INSTALL_TIMEOUT_MS = 300_000;
+
+export function installNsisArtifact(
+  installer,
+  installRoot,
+  {
+    runCommand = run,
+    filesystem = fs,
+    timeoutMs = NSIS_INSTALL_TIMEOUT_MS,
+  } = {},
+) {
+  const args = ['/S', `/D=${installRoot}`];
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      runCommand(installer, args, { timeout: timeoutMs });
+      return;
+    } catch (error) {
+      if (error?.code !== 'ETIMEDOUT' || attempt === 2) throw error;
+      const entries = filesystem.existsSync(installRoot)
+        ? filesystem.readdirSync(installRoot)
+        : [];
+      if (entries.length !== 0)
+        fail(
+          `NSIS timed out after partially installing ${installRoot}; refusing to retry`,
+        );
+      if (filesystem.existsSync(installRoot)) filesystem.rmdirSync(installRoot);
+    }
+  }
 }
 
 export function findOne(root, predicate, label) {
@@ -159,23 +193,35 @@ export function pathRemovalDiagnostics(
   return diagnostics;
 }
 
-export function removeEmptyDirectoryShells(target) {
-  if (!fs.existsSync(target)) return true;
-  const stat = fs.lstatSync(target);
+export function removeEmptyDirectoryShells(target, filesystem = fs) {
+  let stat;
+  try {
+    stat = filesystem.lstatSync(target);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return true;
+    throw error;
+  }
   if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
 
-  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = filesystem.readdirSync(target, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return true;
+    throw error;
+  }
+  for (const entry of entries) {
     const child = path.join(target, entry.name);
     if (
       entry.isSymbolicLink() ||
       !entry.isDirectory() ||
-      !removeEmptyDirectoryShells(child)
+      !removeEmptyDirectoryShells(child, filesystem)
     )
       return false;
   }
 
   try {
-    fs.rmdirSync(target);
+    filesystem.rmdirSync(target);
   } catch (error) {
     if (error?.code === 'ENOENT') return true;
     if (
@@ -186,7 +232,7 @@ export function removeEmptyDirectoryShells(target) {
       return false;
     throw error;
   }
-  return !fs.existsSync(target);
+  return !filesystem.existsSync(target);
 }
 
 export async function waitForPathRemoval(
@@ -242,7 +288,7 @@ export function installDesktopArtifact(installer, tempRoot) {
     fs.mkdirSync(installRoot, { recursive: true });
     run(installer, ['--appimage-extract'], { cwd: installRoot });
   } else {
-    run(installer, ['/S', `/D=${installRoot}`]);
+    installNsisArtifact(installer, installRoot);
     if (!fs.existsSync(installRoot))
       fail('NSIS did not create the install root');
   }

@@ -123,6 +123,75 @@ export function runInstalledTuiBootstrapSmoke(
   }
 }
 
+export function runInstalledEmbeddedNodeAddonSmoke(
+  { installRoot, runtimeEntry, env },
+  { spawn = spawnSync } = {},
+) {
+  const nodePtyEntry = path.join(
+    installRoot,
+    'tui',
+    'node_modules',
+    'node-pty',
+    'lib',
+    'index.js',
+  );
+  assertFile(nodePtyEntry, 'installed node-pty entry');
+  const result = spawn(
+    runtimeEntry,
+    [
+      '-e',
+      [
+        'const nodePty = require(process.env.KUNGFU_NODE_PTY_ENTRY);',
+        "if (typeof nodePty.spawn !== 'function') process.exit(42);",
+        "const token = 'KUNGFU_NODE_PTY_CHILD_READY';",
+        "const child = nodePty.spawn(process.execPath, ['-e', `process.stdout.write('${token}\\\\n')`], {name: 'xterm-color', cols: 80, rows: 24, cwd: process.cwd(), env: process.env});",
+        "let output = '';",
+        'child.onData((data) => { output += data; });',
+        'const timeout = setTimeout(() => { child.kill(); process.exit(43); }, 10000);',
+        'child.onExit(({exitCode}) => {',
+        '  if (exitCode !== 0 || !output.includes(token)) process.exit(44);',
+        "  const fs = require('node:fs');",
+        "  const os = require('node:os');",
+        "  const path = require('node:path');",
+        "  const {fork} = require('node:child_process');",
+        "  const forkRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-embedded-node-fork-'));",
+        "  const forkEntry = path.join(forkRoot, 'probe.cjs');",
+        '  fs.writeFileSync(forkEntry, "process.send?.(\'KUNGFU_EMBEDDED_FORK_READY\'); process.disconnect?.();\\n");',
+        "  const forked = fork(forkEntry, [], {stdio: ['ignore', 'pipe', 'pipe', 'ipc']});",
+        '  let forkReady = false;',
+        "  forked.on('message', (message) => { forkReady = message === 'KUNGFU_EMBEDDED_FORK_READY'; });",
+        "  forked.on('exit', (code) => { clearTimeout(timeout); fs.rmSync(forkRoot, {recursive: true, force: true}); if (code !== 0 || !forkReady) process.exit(45); fs.writeSync(1, 'KUNGFU_NODE_PTY_READY\\n'); process.exit(0); });",
+        '});',
+      ].join(''),
+    ],
+    {
+      cwd: installRoot,
+      env: {
+        ...env,
+        KUNGFU_AS_VARIANT: 'node',
+        KUNGFU_NODE_PTY_ENTRY: nodePtyEntry,
+      },
+      encoding: 'utf8',
+      timeout: 30000,
+    },
+  );
+  if (
+    result.status !== 0 ||
+    !(result.stdout || '').includes('KUNGFU_NODE_PTY_READY')
+  ) {
+    throw new Error(
+      [
+        `installed embedded Node could not spawn through node-pty (exit ${exitLabel(result.status, result.signal)})`,
+        result.error?.message ? `error: ${result.error.message}` : '',
+        result.stdout?.trim() ? `stdout:\n${result.stdout.trim()}` : '',
+        result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+}
+
 export function runInstalledKungfu({
   kungfuBin,
   installRoot,
@@ -322,6 +391,20 @@ export function isShippedKfdSupport(standard) {
   );
 }
 
+export function isInstalledKfdBuildClosure(standard) {
+  if (isShippedKfdSupport(standard)) return true;
+  return (
+    standard?.status === 'candidate' &&
+    standard?.implementation?.status === 'implemented' &&
+    standard?.verification?.status === 'passed' &&
+    standard?.buildchain?.gateStatus === 'manifest-verified' &&
+    standard?.claimClass === 'standard-adopter-manifest-projection' &&
+    standard?.releaseQualification?.shippedSupport === false &&
+    standard?.declaration?.state === 'candidate' &&
+    standard?.declaration?.usage === 'used'
+  );
+}
+
 export function runInstalledKungfuKfdSmoke({
   installRoot,
   kungfuBin,
@@ -357,9 +440,9 @@ export function runInstalledKungfuKfdSmoke({
   if (data.contract !== 'kungfu-sdk-kfd-standards-status') {
     throw new Error(`unexpected kfd status contract: ${data.contract}`);
   }
-  if (!isShippedKfdSupport(data.standards?.['kfd-3'])) {
+  if (!isInstalledKfdBuildClosure(data.standards?.['kfd-3'])) {
     throw new Error(
-      'installed kungfu kfd status did not report release-qualified KFD-3 support',
+      'installed kungfu kfd status did not report a governed KFD-3 build closure',
     );
   }
   if (

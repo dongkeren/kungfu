@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { readElectronBuilderProjection } from '../../framework/maintainability/semantic-amplification.mjs';
 import { cliLauncherContent } from './cli-launcher.mjs';
 import { isPythonBytecodePath, sha256Tree } from './compatibility.mjs';
@@ -18,8 +20,10 @@ import {
   esbuildPlatformBinaryPath,
   installArgs,
   installedKungfuInvocation,
+  isInstalledKfdBuildClosure,
   isShippedKfdSupport,
   kfxBundleExternalModules,
+  listKfxPackages,
   materializeProductRuntimeEntrypoints,
   requiresManagedEsbuildPlatform,
   runInstalledKungfuAgentHubSmoke,
@@ -27,6 +31,7 @@ import {
   runInstalledKungfuCommand,
   runInstalledTuiBootstrapSmoke,
   stageNodePtyForCli,
+  stageProductTrunkEntrypoints,
   stageXinfaContract,
   verifyProductObservabilityEvents,
   writeAuditableDemoBinaryMetadata,
@@ -53,6 +58,52 @@ const {
   esmEntrypointArgs,
   toEsmEntrypointSpecifier,
 } = require('../../framework/gui/scripts/before-pack.cjs');
+
+test('product trunk staging refreshes both Windows runtime entry aliases', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-trunk-stage-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, 'rebuilt-kungfu-trunk.exe');
+  const runtime = path.join(root, 'runtime');
+  fs.mkdirSync(runtime);
+  fs.writeFileSync(source, 'rebuilt Windows Rust trunk');
+  fs.writeFileSync(path.join(runtime, 'kungfu.exe'), 'stale first build');
+
+  stageProductTrunkEntrypoints(source, runtime, 'win32');
+
+  assert.deepEqual(
+    fs.readFileSync(path.join(runtime, 'kungfu.exe')),
+    fs.readFileSync(source),
+  );
+  assert.deepEqual(
+    fs.readFileSync(path.join(runtime, 'kungfu-trunk.exe')),
+    fs.readFileSync(source),
+  );
+});
+
+test('reference-only KFX suites stay outside product assembly', () => {
+  const packageNames = listKfxPackages().map((pkg) => pkg.name);
+  assert.ok(packageNames.includes('@kungfu-tech/kfx-suite-agent-work-lab'));
+  assert.ok(
+    packageNames.every((name) => !name.includes('github-webhook')),
+    packageNames.join(', '),
+  );
+  assert.ok(!packageNames.includes('@kungfu-kfx/github-dogfood-bridge'));
+});
+
+test('root build uses the same reference-only product assembly policy', () => {
+  const root = fileURLToPath(new URL('../..', import.meta.url));
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL('../../scripts/build.mjs', import.meta.url)),
+      '--dry-run',
+    ],
+    { cwd: root, encoding: 'utf8' },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /product-bundled KFX packages: \d+/u);
+  assert.doesNotMatch(result.stdout, /github-webhook|github-dogfood-bridge/u);
+});
 
 test('Intel macOS is rejected by the product-wide host policy', () => {
   for (const architecture of ['x64', 'x86_64']) {
@@ -209,6 +260,33 @@ test('installed KFD smoke accepts only release-qualified shipped support', () =>
   );
 });
 
+test('installed KFD build smoke accepts a governed candidate closure before Passport qualification', () => {
+  const candidate = {
+    status: 'candidate',
+    implementation: { status: 'implemented' },
+    verification: { status: 'passed' },
+    buildchain: { gateStatus: 'manifest-verified' },
+    claimClass: 'standard-adopter-manifest-projection',
+    releaseQualification: { shippedSupport: false },
+    declaration: { state: 'candidate', usage: 'used' },
+  };
+  assert.equal(isInstalledKfdBuildClosure(candidate), true);
+  assert.equal(
+    isInstalledKfdBuildClosure({
+      ...candidate,
+      buildchain: { gateStatus: 'failed' },
+    }),
+    false,
+  );
+  assert.equal(
+    isInstalledKfdBuildClosure({
+      ...candidate,
+      declaration: { state: 'candidate', usage: 'evaluating' },
+    }),
+    false,
+  );
+});
+
 test('CLI authoring runtime resolves the exact Agent Hub KFD package', () => {
   const packageJson = require.resolve('@kungfu-tech/kfd/package.json', {
     paths: [path.resolve('developer/sdk')],
@@ -330,6 +408,8 @@ test('CLI product materializes symlinked demo executables as regular files', (t)
   assert.equal(fs.lstatSync(python).isSymbolicLink(), false);
   assert.equal(fs.readFileSync(python, 'utf8'), 'python\n');
   assert.notEqual(fs.statSync(python).mode & 0o111, 0);
+  assert.equal(fs.statSync(python).ino, fs.statSync(pythonTarget).ino);
+  assert.equal(fs.statSync(python).nlink, 2);
 });
 
 test('CLI runtime identity is stable after demo executable metadata', (t) => {
@@ -448,9 +528,10 @@ test('Linux CLI staging restores only the exact node-pty native runtime closure'
   const source = path.join(parent, 'source');
   const target = path.join(parent, 'target');
   for (const [relative, content] of [
-    ['package.json', '{}\n'],
+    ['package.json', '{"name":"node-pty","version":"1.1.0"}\n'],
     ['index.js', 'export {};\n'],
     ['build/Release/pty.node', 'native-addon\n'],
+    ['build/Release/spawn-helper', 'native-helper\n'],
     ['build/Debug/pty.node', 'debug-addon\n'],
     ['build/Release/obj.target/unshipped.o', 'object\n'],
   ]) {
@@ -486,8 +567,17 @@ test('Darwin CLI staging preserves the prebuilt node-pty helper contract', (t) =
   const target = path.join(parent, 'target');
   const prebuild = path.join(source, 'prebuilds', 'darwin-arm64');
   fs.mkdirSync(prebuild, { recursive: true });
+  fs.writeFileSync(
+    path.join(source, 'package.json'),
+    '{"name":"node-pty","version":"1.1.0"}\n',
+  );
   fs.writeFileSync(path.join(prebuild, 'pty.node'), 'native-addon\n');
   fs.writeFileSync(path.join(prebuild, 'spawn-helper'), 'native-helper\n');
+  fs.mkdirSync(path.join(source, 'prebuilds', 'darwin-x64'));
+  fs.writeFileSync(
+    path.join(source, 'prebuilds', 'darwin-x64', 'pty.node'),
+    'foreign-native-addon\n',
+  );
   fs.chmodSync(path.join(prebuild, 'spawn-helper'), 0o644);
   stageNodePtyForCli(source, target, 'darwin', 'arm64');
   const addon = path.join(target, 'prebuilds/darwin-arm64/pty.node');
@@ -495,6 +585,9 @@ test('Darwin CLI staging preserves the prebuilt node-pty helper contract', (t) =
   const helper = path.join(target, 'prebuilds/darwin-arm64/spawn-helper');
   assert.equal(fs.readFileSync(helper, 'utf8'), 'native-helper\n');
   assert.notEqual(fs.statSync(helper).mode & 0o111, 0);
+  assert.deepEqual(fs.readdirSync(path.join(target, 'prebuilds')), [
+    'darwin-arm64',
+  ]);
 });
 
 test('Linux CLI staging fails closed when the node-pty native addon is missing', (t) => {
@@ -503,11 +596,14 @@ test('Linux CLI staging fails closed when the node-pty native addon is missing',
   const source = path.join(parent, 'source');
   const target = path.join(parent, 'target');
   fs.mkdirSync(path.join(source, 'build', 'Release'), { recursive: true });
-  fs.writeFileSync(path.join(source, 'package.json'), '{}\n');
+  fs.writeFileSync(
+    path.join(source, 'package.json'),
+    '{"name":"node-pty","version":"1.1.0"}\n',
+  );
 
   assert.throws(
     () => stageNodePtyForCli(source, target, 'linux', 'x64'),
-    /required Linux node-pty runtime not found/u,
+    /required node-pty runtime file not found/u,
   );
 });
 
@@ -771,6 +867,9 @@ test('Assignment admission smoke isolates the operator Workspace Catalog', (t) =
       path.join(installRoot, '.assignment-admission-user-home'),
     );
     assert.equal(invocation.env.USERPROFILE, invocation.env.HOME);
+    assert.equal(invocation.env.KUNGFU_INSTALL_SOURCE, undefined);
+    assert.equal(invocation.env.KUNGFU_DIR, undefined);
+    assert.equal(invocation.env.KUNGFU_UPGRADE_MANIFEST, undefined);
   }
   const isolatedCatalog = path.join(
     installRoot,

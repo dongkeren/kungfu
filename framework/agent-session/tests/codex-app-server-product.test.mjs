@@ -55,12 +55,12 @@ function input(overrides = {}) {
   };
 }
 
-function runtime({ structured = true } = {}) {
+function runtime({ structured = true, structuredMode = 'product-route' } = {}) {
   return new InProcessAgentSessionProductRuntime({
     pty: { spawn: () => new FakePtyProcess() },
     structuredRuntime: structured
       ? new CodexAppServerProductRuntime({
-          appServerArgv: [provider, 'product-route'],
+          appServerArgv: [provider, structuredMode],
         })
       : null,
   });
@@ -75,6 +75,155 @@ function surface(options = {}) {
   });
 }
 
+test('structured instruction waits for a response-first turn boundary', async (t) => {
+  const product = surface({ structuredMode: 'response-first-product-route' });
+  const startPlan = product.invoke({
+    operation: 'plan-start',
+    input: input({ argv: [provider, 'response-first-product-route'] }),
+  });
+  let started = false;
+  let ended = false;
+  t.after(async () => {
+    if (!started || ended) return;
+    const cleanupPlan = product.invoke({
+      operation: 'plan-control',
+      controlOperation: 'end',
+      actorId: 'actor-agent',
+      session: {
+        workConsoleId: startPlan.workConsoleId,
+        sessionAttemptId: startPlan.sessionAttemptId,
+      },
+      payload: {},
+    });
+    await product.invoke({
+      operation: 'end',
+      actorId: 'actor-agent',
+      plan: cleanupPlan,
+      expectedPlanRoot: cleanupPlan.root,
+      payload: {},
+    });
+  });
+  await product.invoke({
+    operation: 'start',
+    client: 'cli',
+    actorId: 'actor-agent',
+    plan: startPlan,
+    expectedPlanRoot: startPlan.root,
+    execution: { env: {} },
+  });
+  started = true;
+  const ref = {
+    workConsoleId: startPlan.workConsoleId,
+    sessionAttemptId: startPlan.sessionAttemptId,
+  };
+  const payload = { text: 'response-first instruction' };
+  const instructionPlan = product.invoke({
+    operation: 'plan-control',
+    controlOperation: 'instruct',
+    actorId: 'actor-agent',
+    session: ref,
+    payload,
+  });
+  const startedAt = Date.now();
+  const receipt = await product.invoke({
+    operation: 'instruct',
+    actorId: 'actor-agent',
+    plan: instructionPlan,
+    expectedPlanRoot: instructionPlan.root,
+    payload,
+  });
+  assert.equal(receipt.status, 'delivered');
+  assert.ok(Date.now() - startedAt >= 20);
+  await waitFor(
+    () =>
+      product.invoke({ operation: 'status', session: ref }).interactionState ===
+      'ready',
+    'response-first structured turn did not reach its terminal boundary',
+  );
+  const snapshot = product.invoke({ operation: 'snapshot', session: ref });
+  assert.equal(snapshot.agentText, 'Structured answer retained.');
+  assert.equal(snapshot.retainedAgentResponse, true);
+  assert.equal(snapshot.retainedTranscript, false);
+  const endPlan = product.invoke({
+    operation: 'plan-control',
+    controlOperation: 'end',
+    actorId: 'actor-agent',
+    session: ref,
+    payload: {},
+  });
+  await product.invoke({
+    operation: 'end',
+    actorId: 'actor-agent',
+    plan: endPlan,
+    expectedPlanRoot: endPlan.root,
+    payload: {},
+  });
+  ended = true;
+});
+
+test('structured instruction yields at turn start before a slow terminal', async () => {
+  const structuredMode = 'response-first-slow-terminal-product-route';
+  const product = surface({ structuredMode });
+  const startPlan = product.invoke({
+    operation: 'plan-start',
+    input: input({ argv: [provider, structuredMode] }),
+  });
+  await product.invoke({
+    operation: 'start',
+    client: 'cli',
+    actorId: 'actor-agent',
+    plan: startPlan,
+    expectedPlanRoot: startPlan.root,
+    execution: { env: {} },
+  });
+  const ref = {
+    workConsoleId: startPlan.workConsoleId,
+    sessionAttemptId: startPlan.sessionAttemptId,
+  };
+  const payload = { text: 'slow terminal instruction' };
+  const instructionPlan = product.invoke({
+    operation: 'plan-control',
+    controlOperation: 'instruct',
+    actorId: 'actor-agent',
+    session: ref,
+    payload,
+  });
+  const receipt = await product.invoke({
+    operation: 'instruct',
+    actorId: 'actor-agent',
+    plan: instructionPlan,
+    expectedPlanRoot: instructionPlan.root,
+    payload,
+  });
+  assert.equal(receipt.status, 'delivered');
+  assert.equal(
+    product.invoke({ operation: 'status', session: ref }).interactionState,
+    'busy',
+  );
+  await waitFor(
+    () =>
+      product.invoke({ operation: 'status', session: ref }).interactionState ===
+      'ready',
+    'slow structured turn did not reach its terminal boundary',
+  );
+  const snapshot = product.invoke({ operation: 'snapshot', session: ref });
+  assert.equal(snapshot.agentText, 'Structured answer retained.');
+  const endPlan = product.invoke({
+    operation: 'plan-control',
+    controlOperation: 'end',
+    actorId: 'actor-agent',
+    session: ref,
+    payload: {},
+  });
+  await product.invoke({
+    operation: 'end',
+    actorId: 'actor-agent',
+    plan: endPlan,
+    expectedPlanRoot: endPlan.root,
+    payload: {},
+  });
+});
+
 async function waitFor(predicate, label, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -85,16 +234,37 @@ async function waitFor(predicate, label, timeoutMs = 2000) {
   assert.fail(label);
 }
 
-test('production route freezes the exact Codex app-server stdio launch', () => {
+test('production route freezes Codex app-server stdio without version admission', () => {
   const structured = new CodexAppServerProductRuntime();
   const route = structured.planRoute(input());
   assert.deepEqual(route.argv, ['app-server', '--stdio']);
-  assert.throws(
-    () => structured.planRoute(input({ providerVersion: '0.144.4' })),
-    (error) => error.code === 'provider_version_drift',
+  assert.deepEqual(
+    structured.planRoute(
+      input({ providerVersion: 'future-channel-without-semver' }),
+    ),
+    route,
+  );
+  assert.equal(
+    structured.capabilities().routes[0].versionAdmission,
+    'diagnostic-only',
   );
   assert.equal(route.defaultPolicy, 'structured');
   assert.equal(route.rollback, `${CODEX_APP_SERVER_FEATURE_FLAG}=0`);
+});
+
+test('arbitrary Codex version metadata uses structured capability negotiation', () => {
+  const product = surface();
+  const plan = product.invoke({
+    operation: 'plan-start',
+    input: input({ providerVersion: 'opaque-nightly' }),
+  });
+  assert.equal(plan.transportRoute.kind, 'structured');
+  assert.deepEqual(plan.effects, [
+    'spawn-codex-app-server-direct-stdio',
+    'start-one-provider-thread',
+    'register-session',
+    'attach-presentation',
+  ]);
 });
 
 test('product policy defaults Codex to structured with an explicit PTY rollback', () => {
@@ -186,7 +356,7 @@ test('GUI CLI and Agent share one frozen structured route and exact controls', a
   assert.deepEqual(guiPlan.argv, [provider, 'product-route']);
   assert.deepEqual(guiPlan.structured.threadStartParams, {
     cwd: here,
-    approvalPolicy: 'untrusted',
+    approvalPolicy: 'on-request',
     approvalsReviewer: 'user',
     sandbox: 'read-only',
   });
@@ -286,6 +456,16 @@ test('GUI CLI and Agent share one frozen structured route and exact controls', a
       'ready',
     'structured turn did not return to ready',
   );
+  const completedSnapshot = product.invoke({
+    operation: 'snapshot',
+    session: ref,
+  });
+  assert.equal(
+    completedSnapshot.agentText,
+    'Approved structured answer retained.',
+  );
+  assert.equal(completedSnapshot.retainedAgentResponse, true);
+  assert.equal(completedSnapshot.retainedTranscript, false);
 
   assert.throws(
     () =>

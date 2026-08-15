@@ -999,6 +999,8 @@ test('provider exit metadata remains visible without retaining terminal output',
   });
   runtime.list()[0].child.emit('exit', { exitCode: 64, signal: 0 });
   const status = clients.cli.show(ref);
+  assert.equal(status.live || status.controllable, false);
+  assert.equal(clients.cli.list().attempts[0].live, false);
   assert.equal(status.lifecycleState, 'ended');
   assert.equal(status.inputAdmission, 'closed');
   assert.equal(status.exit.exitCode, 64);
@@ -1006,7 +1008,7 @@ test('provider exit metadata remains visible without retaining terminal output',
   assert.doesNotMatch(JSON.stringify(status.exit), /terminal|stderr|output/iu);
 });
 
-test('controller lease has one winner and transfers only after exact release', () => {
+test('controller lease has one winner and transfers only after exact release', async () => {
   const { clients, input, runtime, surface } = fixture();
   const ref = {
     workConsoleId: input.workConsoleId,
@@ -1046,7 +1048,7 @@ test('controller lease has one winner and transfers only after exact release', (
 
   runtime.list()[0].child.emit('data', '\u001b[2J\u001b[H› Ready');
   const payload = { text: 'Continue after an explicit lease transfer' };
-  const delivered = observer.control(
+  const delivered = await observer.control(
     observer.planControl('instruct', ref, payload),
     payload,
     true,
@@ -1054,7 +1056,7 @@ test('controller lease has one winner and transfers only after exact release', (
   assert.equal(delivered.status, 'written');
 });
 
-test('Agent instruction uses the shared plan and receipt without claiming work outcome', () => {
+test('Agent instruction uses the shared plan and receipt without claiming work outcome', async () => {
   const { clients, input, runtime } = fixture();
   clients.gui.start(clients.gui.planStart(input), {
     attachmentId: 'view:assignment-card',
@@ -1075,7 +1077,7 @@ test('Agent instruction uses the shared plan and receipt without claiming work o
   assert.deepEqual(plans[0], plans[1]);
   assert.deepEqual(plans[1], plans[2]);
 
-  const result = clients['kfd3-agent'].control(plans[2], payload, true);
+  const result = await clients['kfd3-agent'].control(plans[2], payload, true);
   assert.equal(result.status, 'written');
   assert.equal(
     result.deliveryReceipt.proves,
@@ -1088,7 +1090,7 @@ test('Agent instruction uses the shared plan and receipt without claiming work o
     JSON.stringify(result),
     /Inspect the current Assignment/u,
   );
-  assert.equal(runtime.list()[0].child.writes.length, 1);
+  assert.equal(runtime.list()[0].child.writes.length, 2);
 });
 
 test('approval state holds shared automatic instruction and stale plans fail closed', () => {
@@ -1118,7 +1120,7 @@ test('approval state holds shared automatic instruction and stale plans fail clo
   );
 });
 
-test('the product runtime executes a reviewed plan through the real Capsule host', () => {
+test('the product runtime executes a reviewed plan through the real Capsule host', async () => {
   const child = new FakePtyProcess(9001);
   const spawns = [];
   const runtime = new InProcessAgentSessionProductRuntime({
@@ -1172,6 +1174,23 @@ test('the product runtime executes a reviewed plan through the real Capsule host
     },
   });
   assert.equal(runtime.list()[0].host.status().lifecycleState, 'ready');
+
+  const session = {
+    workConsoleId: input.workConsoleId,
+    sessionAttemptId: input.sessionAttemptId,
+  };
+  const endPlan = client.planControl('end', session, {});
+  const ending = client.control(endPlan, {});
+  child.emit('exit', { exitCode: 1, signal: 0 });
+  await ending;
+
+  const ended = client.show(session);
+  assert.equal(ended.exit.exitCode, 1);
+  assert.deepEqual(ended.exit.controlRequest, {
+    operation: 'end',
+    signal: 'SIGTERM',
+  });
+  assert.equal(ended.workAgent.attention.kind, 'ready-for-review');
 });
 
 test('the local product RPC preserves the same action and error envelopes', async (t) => {

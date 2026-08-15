@@ -3,7 +3,7 @@
   "schema": "kungfu.deprecation-registry/v1",
   "contract": "framework/deprecation/deprecation-lifecycle.contract.json",
   "discoveryContract": "framework/deprecation/deprecation-discovery.contract.json",
-  "productVersion": "4.0.0-alpha.1",
+  "productVersion": "4.0.0-alpha.2",
   "releaseHistory": [],
   "entries": [
     {
@@ -100,7 +100,16 @@
         ]
       },
       "removalEvidence": null,
-      "extensionWarrant": null,
+      "extensionWarrant": {
+        "authority": "kungfu.warrant",
+        "warrantRoot": "sha256:abd64bd171c62faad7337c6568efc351401b15cc83ad3829ccc2846014ef1de2",
+        "entryId": "core.yijinjing.boolean-mmap-adapters",
+        "authorizedBy": "dongkeren",
+        "issuedAt": "2026-08-14",
+        "expiresOn": "2026-08-15",
+        "expiresAfterRelease": "4.0.0-alpha.2",
+        "evidenceRef": "framework/deprecation/deprecation-registry.json"
+      },
       "contributedFrom": {
         "authority": "framework/core/architecture/layers.json",
         "entryId": "yijinjing-boolean-mmap-adapters"
@@ -180,7 +189,16 @@
         ]
       },
       "removalEvidence": null,
-      "extensionWarrant": null,
+      "extensionWarrant": {
+        "authority": "kungfu.warrant",
+        "warrantRoot": "sha256:36311bf03d529d1eea33f126b795df6a4429112514493caa30f45e8bb9155275",
+        "entryId": "core.yijinjing.journal-open-policy-adapters",
+        "authorizedBy": "dongkeren",
+        "issuedAt": "2026-08-14",
+        "expiresOn": "2026-08-15",
+        "expiresAfterRelease": "4.0.0-alpha.2",
+        "evidenceRef": "framework/deprecation/deprecation-registry.json"
+      },
       "contributedFrom": {
         "authority": "git-history",
         "entryId": "cb8dfb6be51be65c93c813843396a6349da4f1b7"
@@ -260,7 +278,16 @@
         ]
       },
       "removalEvidence": null,
-      "extensionWarrant": null,
+      "extensionWarrant": {
+        "authority": "kungfu.warrant",
+        "warrantRoot": "sha256:618a5d10841dd540cd9c8067e66e4e2e409943ad9cc66682994b266a68e2e789",
+        "entryId": "core.yijinjing.page-open-policy-adapters",
+        "authorizedBy": "dongkeren",
+        "issuedAt": "2026-08-14",
+        "expiresOn": "2026-08-15",
+        "expiresAfterRelease": "4.0.0-alpha.2",
+        "evidenceRef": "framework/deprecation/deprecation-registry.json"
+      },
       "contributedFrom": {
         "authority": "git-history",
         "entryId": "cb8dfb6be51be65c93c813843396a6349da4f1b7"

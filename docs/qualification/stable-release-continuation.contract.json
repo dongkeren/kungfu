@@ -2,7 +2,7 @@
   "schema": "kungfu.stable-release-continuation-rehearsal/v1",
   "status": "qualified",
   "authorityClassification": "immutable-qualified-rehearsal",
-  "versionLineAuthorityRoot": "sha256:2fd580501fb77ae9ee05c8dd6a4bf141fc8cdeb77c8d4d3e9cd550133213b33d",
+  "versionLineAuthorityRoot": "sha256:8e5a196ab4c194d19efb7c0dd52e885adf0da99af73b660da0d2fa8ccac0213b",
   "recordedAt": "2026-07-27",
   "buildchain": {
     "repository": "kungfu-systems/buildchain",
@@ -35,5 +35,5 @@
     "modifiedTags": false,
     "published": false
   },
-  "contractRoot": "sha256:c4bdf3e834d35e95df2f550305fa3c37d86a584fe831839ee16d56acf96d014a"
+  "contractRoot": "sha256:906b5cb7a229d2ed32b01e085e2b8a2548f5ee55d9f969d58e144af1ad07bae6"
 }

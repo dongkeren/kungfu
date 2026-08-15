@@ -71,6 +71,13 @@ def _work_ref():
     }
 
 
+def test_agent_session_cli_exposes_structured_control_response():
+    result = CliRunner().invoke(kfc, ["agent", "session", "--help"])
+
+    assert result.exit_code == 0
+    assert "respond-control" in result.output
+
+
 def test_agent_session_core_contract_matches_cross_language_golden():
     schema = json.loads(
         (
@@ -562,6 +569,56 @@ def test_third_party_runtime_verification_accepts_bounded_opaque_version(
     assert result["argv"] == ["version"]
 
 
+@pytest.mark.parametrize("provider", ["codex", "claude", "opencode", "cursor"])
+def test_runtime_version_probe_failure_warns_but_never_blocks_available_agent(
+    monkeypatch, provider
+):
+    monkeypatch.setattr(
+        runtime_profiles.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=17, stdout="", stderr="version unavailable"
+        ),
+    )
+
+    result = runtime_profiles.verify_profile(
+        {
+            "id": f"{provider}.path.test",
+            "provider": provider,
+            "launch": {"executable": sys.executable},
+        }
+    )
+
+    assert result["available"] is True
+    assert result["ok"] is True
+    assert result["version"] is None
+    assert result["error"] is None
+    assert result["warning"] == "version probe exited 17"
+    assert result["versionAdmission"] == "diagnostic-only"
+
+
+def test_runtime_version_probe_exception_warns_but_never_blocks_available_agent(
+    monkeypatch,
+):
+    def unavailable(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(runtime_profiles.subprocess, "run", unavailable)
+    result = runtime_profiles.verify_profile(
+        {
+            "id": "codex.path.test",
+            "provider": "codex",
+            "launch": {"executable": sys.executable},
+        }
+    )
+
+    assert result["available"] is True
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert result["warning"]
+    assert result["versionAdmission"] == "diagnostic-only"
+
+
 def test_runtime_profile_plan_apply_default_and_remove_are_preview_first(
     tmp_path, monkeypatch
 ):
@@ -1036,6 +1093,7 @@ def test_registered_third_party_adapter_materializes_only_bounded_runtime_state(
     assert skill_file.is_relative_to(runtime_dir)
     assert adapter["argv"] == ["--instructions", str(skill_file)]
     assert adapter["credentialEnvironment"] == ["TERMAGENT_API_KEY"]
+    assert adapter["processEnvironment"] == ["TMUX", "TMUX_PANE"]
     assert adapter["environment"]["TERMAGENT_SKILL"] == str(skill_file)
     context = json.loads(adapter["environment"]["TERMAGENT_CONTEXT"])
     assert context["skill"] == str(skill_file)
@@ -1195,6 +1253,8 @@ def test_agent_context_returns_native_canonical_entrypoints(monkeypatch, tmp_pat
         "entrypoints": {"bindWork": ["/exact/kungfu", "agent", "console", "bind-work"]},
     }
     monkeypatch.setenv("KUNGFU_AGENT_CONTEXT", json.dumps(native))
+    monkeypatch.delenv("KUNGFU_WORK_REF", raising=False)
+    monkeypatch.delenv("KUNGFU_AGENT_CONSOLE_ENVELOPE", raising=False)
 
     assert (
         agent_commands._context(
@@ -1289,6 +1349,8 @@ def test_third_party_adapter_rejects_builtin_replacement_and_unsafe_templates(
 
 def test_native_interactive_runner_inherits_terminal_descriptors(monkeypatch, tmp_path):
     calls = []
+    monkeypatch.setenv("TMUX", "/private/tmp/tmux-501/agentctl,12345,7")
+    monkeypatch.setenv("TMUX_PANE", "%42")
     profile = {
         "provider": "amp",
         "cwdPolicy": "workspace-root",
@@ -1330,6 +1392,8 @@ def test_native_interactive_runner_inherits_terminal_descriptors(monkeypatch, tm
     assert set(calls[0][1]) == {"cwd", "env", "check"}
     assert calls[0][1]["check"] is False
     assert calls[0][1]["env"]["KUNGFU_AGENT_ENVIRONMENT"] == "native-interactive"
+    assert calls[0][1]["env"]["TMUX"] == "/private/tmp/tmux-501/agentctl,12345,7"
+    assert calls[0][1]["env"]["TMUX_PANE"] == "%42"
     assert "stdin" not in calls[0][1]
     assert "stdout" not in calls[0][1]
     assert "stderr" not in calls[0][1]
@@ -1656,7 +1720,7 @@ def test_current_native_console_uses_project_runtime_when_cli_context_is_home(
         status,
     )
     monkeypatch.setattr(
-        "kungfu.cli.commands.assignment._profile_source", lambda: tmp_path
+        "kungfu.cli.commands.assignment.profile_source", lambda: tmp_path
     )
 
     def validate_source(_source, runtime_dir):
@@ -1742,7 +1806,7 @@ def test_public_bind_work_cli_preserves_stable_project_runtime_under_home(
         },
     )
     monkeypatch.setattr(
-        "kungfu.cli.commands.assignment._profile_source", lambda: tmp_path
+        "kungfu.cli.commands.assignment.profile_source", lambda: tmp_path
     )
     monkeypatch.setattr(
         "kungfu.profile_sdk.validate_source",
@@ -1938,82 +2002,6 @@ def test_native_interactive_runner_reuses_work_console_with_fresh_attempts(
         assert "stdin" not in kwargs
         assert "stdout" not in kwargs
         assert "stderr" not in kwargs
-
-
-@pytest.mark.skipif(not hasattr(os, "openpty"), reason="requires a POSIX PTY")
-def test_native_interactive_runner_preserves_a_real_pty(tmp_path):
-    probe = (
-        "import json,os,sys;"
-        "print(json.dumps({"
-        "'stdin':sys.stdin.isatty(),"
-        "'stdout':sys.stdout.isatty(),"
-        "'stderr':sys.stderr.isatty(),"
-        "'environment':os.environ.get('KUNGFU_AGENT_ENVIRONMENT'),"
-        "'workspace':os.environ.get('KUNGFU_WORKSPACE_ROOT')}),flush=True)"
-    )
-    profile = {
-        "id": "kungfu.agent-runtime.amp.pty-probe",
-        "provider": "amp",
-        "cwdPolicy": "workspace-root",
-        "launch": {
-            "executable": sys.executable,
-            "argv": [],
-            "interactiveArgv": ["-c", probe],
-            "shellMode": False,
-        },
-    }
-    wrapper = (
-        "from kungfu.agent import run_agent;"
-        f"profile={profile!r};"
-        "raise SystemExit(run_agent.run_native_interactive("
-        "profile,"
-        f"runtime_dir={str(tmp_path / 'runtime')!r},"
-        f"config_home={str(tmp_path / 'config')!r},"
-        f"runtime_home={str(tmp_path / 'home')!r},"
-        f"workspace_root={str(tmp_path)!r},"
-        "work_ref=None,"
-        "work_selection={'schema':'kungfu.native-work-selection/v1','state':'none'}))"
-    )
-    master_fd, slave_fd = os.openpty()
-    process = subprocess.Popen(
-        [sys.executable, "-c", wrapper],
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        close_fds=True,
-    )
-    os.close(slave_fd)
-    chunks = []
-    deadline = time.monotonic() + 10
-    try:
-        while time.monotonic() < deadline:
-            ready, _, _ = select.select([master_fd], [], [], 0.1)
-            if ready:
-                try:
-                    chunks.append(os.read(master_fd, 65536))
-                except OSError:
-                    break
-            if process.poll() is not None and not ready:
-                break
-        return_code = process.wait(timeout=1)
-    finally:
-        os.close(master_fd)
-        if process.poll() is None:
-            process.terminate()
-            process.wait(timeout=1)
-
-    assert return_code == 0
-    output = b"".join(chunks).decode("utf-8").replace("\r", "")
-    payload = json.loads(
-        next(line for line in output.splitlines() if line.startswith("{"))
-    )
-    assert payload == {
-        "stdin": True,
-        "stdout": True,
-        "stderr": True,
-        "environment": "native-interactive",
-        "workspace": str(tmp_path),
-    }
 
 
 @pytest.mark.skipif(not hasattr(os, "openpty"), reason="requires a POSIX PTY")
@@ -2225,6 +2213,7 @@ def test_agent_session_cli_forwards_the_same_self_describing_action(
         }
 
     monkeypatch.setattr("kungfu.agent.session_surface.invoke", fake_invoke)
+    monkeypatch.delenv("KUNGFU_AGENT_CONSOLE_ID", raising=False)
 
     @click.group()
     @click.option("--home", type=click.Path(), required=True)

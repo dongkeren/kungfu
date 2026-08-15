@@ -84,8 +84,10 @@ def _context(ctx):
             "config": "kungfu config show --json",
             "skills": "kungfu skill list --json",
             "skillCatalog": "kungfu skill catalog --json",
+            "skillRegistry": "kungfu skill inspect --json",
             "kfx": "kungfu kfx list --json",
         },
+        "skillRegistry": agent_pack.skill_registry(ctx.home),
         "docs": documentation_pack.discovery_context(
             agent_work_lab_commands.find_repo_root()
         ),
@@ -193,23 +195,7 @@ def intent_map(ctx, as_json):
         click.echo(f"{row['id']} [{row['maturity']}]: {row['summary']}")
 
 
-@agent.command(
-    name="work-advisory",
-    help="assess bounded structured signals before proposing durable Work",
-)
-@click.option(
-    "--signals",
-    "signals_file",
-    type=click.File("r", encoding="utf-8"),
-    required=True,
-    help="structured JSON signals; transcripts and hidden reasoning are rejected",
-)
-@click.option("--json", "as_json", is_flag=True, help="machine-readable output")
-@kfd3_api("kungfu.agent.work-advisory")
-@agent_command_context
-def work_advisory_command(ctx, signals_file, as_json):
-    del ctx
-    agent_work_lab_commands.emit_agent_work_advisory(signals_file, as_json)
+agent_work_lab_commands.register_advisories(agent, agent_command_context)
 
 
 @agent.group(
@@ -323,11 +309,7 @@ def docs(
     )
 
 
-@agent.command(help=api_help("kungfu.agent.capabilities"))
-@click.option("--json", "as_json", is_flag=True, help="machine-readable output")
-@kfd3_api("kungfu.agent.capabilities")
-@agent_command_context
-def capabilities(ctx, as_json):
+def _capabilities_payload():
     work_model = contract_runtime.contract_metadata("agent-work-state")
     action_geometry = contract_runtime.contract_metadata("action-geometry")
     work_domain_profile = contract_runtime.contract_metadata(
@@ -347,7 +329,17 @@ def capabilities(ctx, as_json):
         "actionGeometry": action_geometry,
         "workDomainProfile": work_domain_profile,
         "workLoop": first_value_protocol.work_authority_capabilities(),
+        "workspaceGit": first_value_protocol.workspace_git_policy_view(),
     }
+    return payload
+
+
+@agent.command(help=api_help("kungfu.agent.capabilities"))
+@click.option("--json", "as_json", is_flag=True, help="machine-readable output")
+@kfd3_api("kungfu.agent.capabilities")
+@agent_command_context
+def capabilities(ctx, as_json):
+    payload = _capabilities_payload()
     if as_json:
         _json(payload)
         return
@@ -1089,6 +1081,7 @@ def console_bind_work(ctx, initiative_id, assignment_id, as_json):
             "acquire-control",
             "release-control",
             "instruct",
+            "respond-control",
             "send-key",
             "interrupt",
             "end",

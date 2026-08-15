@@ -40,35 +40,37 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | Workflow | Job | Authority | Publication | Receipt | Credentials | Environment | Steps |
 | --- | --- | --- | --- | --- | --- | --- | ---: |
 | `.github/workflows/adr-release-gate.yml` | `adr-release` | qualification | none | diagnostic | token:read | none | 2 |
-| `.github/workflows/affected-native-cache-promote.yml` | `promote` | qualification | none | diagnostic | token:write | none | 24 |
+| `.github/workflows/affected-native-cache-promote.yml` | `promote` | qualification | none | diagnostic | token:write | none | 25 |
 | `.github/workflows/affected-native-cache-promote.yml` | `qualify_windows_x86_64_consumer` | qualification | none | diagnostic | token:read | none | 5 |
-| `.github/workflows/affected-native-pr.yml` | `affected_native` | qualification | none | diagnostic | token:write | none | 19 |
-| `.github/workflows/affected-native-pr.yml` | `affected_native_shards` | qualification | none | diagnostic | token:read | none | 23 |
+| `.github/workflows/affected-native-pr.yml` | `affected_native` | qualification | none | diagnostic | token:write | none | 20 |
+| `.github/workflows/affected-native-pr.yml` | `affected_native_shards` | qualification | none | diagnostic | token:write | none | 18 |
 | `.github/workflows/affected-native-pr.yml` | `cancel_after_source_failure` | qualification | none | diagnostic | token:write | none | 1 |
 | `.github/workflows/affected-native-pr.yml` | `candidate_buildchain_config` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/affected-native-pr.yml` | `candidate_preflight` | qualification | none | diagnostic | token:read | none | 7 |
 | `.github/workflows/affected-native-pr.yml` | `dco` | qualification | none | diagnostic | token:read | none | 2 |
-| `.github/workflows/affected-native-pr.yml` | `kfd_verifier` | qualification | none | diagnostic | token:read | none | 4 |
+| `.github/workflows/affected-native-pr.yml` | `kfd_verifier` | qualification | none | diagnostic | token:write | none | 3 |
 | `.github/workflows/affected-native-pr.yml` | `proof_probe` | qualification | none | diagnostic | token:read | none | 10 |
-| `.github/workflows/affected-native-pr.yml` | `qualified_core_candidate` | qualification | none | diagnostic | token:read | none | 5 |
-| `.github/workflows/affected-native-pr.yml` | `shifu_workspace` | qualification | none | diagnostic | token:read | none | 3 |
+| `.github/workflows/affected-native-pr.yml` | `shifu_workspace` | qualification | none | diagnostic | token:write | none | 3 |
 | `.github/workflows/affected-native-pr.yml` | `source_acceptance` | qualification | none | diagnostic | token:read | none | 0 |
+| `.github/workflows/affected-native-pr.yml` | `warrant_admission` | qualification | none | diagnostic | token:read | none | 4 |
 | `.github/workflows/alpha-promotion-preflight.yml` | `aggregate` | qualification | none | diagnostic | token:read | none | 4 |
 | `.github/workflows/alpha-promotion-preflight.yml` | `probe` | qualification | none | diagnostic | token:read | none | 10 |
+| `.github/workflows/auditable-demo.yml` | `auditable-demo` | qualification | none | qualifying | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
+| `.github/workflows/auditable-demo.yml` | `build` | qualification | none | qualifying | token:write, oidc | none | 0 |
+| `.github/workflows/auditable-demo.yml` | `resolve-binary` | qualification | none | diagnostic | token:read | none | 1 |
 | `.github/workflows/aws-us-linux-burst-qualification.yml` | `qualify` | qualification | none | diagnostic | token:read | none | 0 |
-| `.github/workflows/aws-us-macos-burst-qualification.yml` | `qualify` | qualification | none | diagnostic | token:read | none | 0 |
+| `.github/workflows/aws-us-macos-burst-qualification.yml` | `qualify` | qualification | none | diagnostic | token:write, oidc | none | 0 |
 | `.github/workflows/aws-us-windows-burst-qualification.yml` | `cleanup-exercise` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/aws-us-windows-burst-qualification.yml` | `full` | qualification | none | diagnostic | token:write, oidc | none | 0 |
 | `.github/workflows/aws-us-windows-burst-qualification.yml` | `smoke` | qualification | none | diagnostic | token:write, oidc | none | 0 |
 | `.github/workflows/aws-us-windows-burst-qualification.yml` | `trust` | qualification | none | diagnostic | token:read | none | 2 |
-| `.github/workflows/build.yml` | `auditable-demo` | qualification | none | qualifying | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/build.yml` | `auditable-demo-fast-sentinel` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/build.yml` | `build` | qualification | none | qualifying | token:write, oidc, repo-secret:BUILDCHAIN_ARTIFACT_RELAY_S3_DOWNLOAD_ROLE_ARN+BUILDCHAIN_ARTIFACT_RELAY_S3_ROLE_ARN+BUILDCHAIN_ARTIFACT_RELAY_S3_UPLOAD_ROLE_ARN+KUNGFU_GITHUB_TOKEN | none | 0 |
+| `.github/workflows/build.yml` | `finalize-upgrade-publication-admission` | qualification | none | diagnostic | token:read | none | 6 |
 | `.github/workflows/build.yml` | `kungfu-phase-b` | qualification | none | qualifying | token:read | none | 0 |
 | `.github/workflows/build.yml` | `phase-b-package` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/build.yml` | `precompute-alpha-publication-tail` | qualification | none | diagnostic | token:read | none | 4 |
-| `.github/workflows/build.yml` | `preflight` | qualification | none | diagnostic | token:write, oidc, repo-secret:KUNGFU_GITHUB_TOKEN | none | 2 |
-| `.github/workflows/build.yml` | `resolve-auditable-demo-source` | qualification | none | diagnostic | token:read | none | 2 |
+| `.github/workflows/build.yml` | `preflight` | qualification | none | diagnostic | token:write, oidc, repo-secret:KUNGFU_GITHUB_TOKEN | none | 3 |
 | `.github/workflows/build.yml` | `windows-fast-sentinel` | qualification | none | diagnostic | token:read | none | 3 |
 | `.github/workflows/buildchain-validate.yml` | `promotion-rehearsal` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/buildchain-validate.yml` | `validate` | qualification | none | diagnostic | token:read | none | 2 |
@@ -77,15 +79,20 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/core-build-profiles.yml` | `shifu_observation` | qualification | none | diagnostic | token:read | none | 4 |
 | `.github/workflows/dco.yml` | `signoff` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/dev-alpha-candidate-patrol.yml` | `candidate` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
+| `.github/workflows/dev-alpha-candidate-patrol.yml` | `candidate-provenance` | qualification | none | diagnostic | token:read | none | 3 |
+| `.github/workflows/dev-alpha-candidate-patrol.yml` | `release-cut-lock` | qualification | none | diagnostic | token:read | none | 3 |
 | `.github/workflows/dev-alpha-candidate-patrol.yml` | `resolve-channels` | qualification | none | diagnostic | token:none | none | 1 |
 | `.github/workflows/dev-delivery-warrant-terminal.yml` | `cancel-queued` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/dev-delivery-warrant-terminal.yml` | `close` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/dev-delivery-warrant-terminal.yml` | `prepare` | qualification | none | diagnostic | token:write | none | 2 |
 | `.github/workflows/dev-gate-latency-patrol.yml` | `capture` | diagnostic | evidence | diagnostic | token:read | none | 5 |
 | `.github/workflows/dev-gate-latency-patrol.yml` | `collect` | diagnostic | evidence | diagnostic | token:read | none | 6 |
+| `.github/workflows/dev-post-merge-advisory.yml` | `prepare` | qualification | none | diagnostic | token:read | none | 4 |
+| `.github/workflows/dev-post-merge-advisory.yml` | `production_graph_parity` | qualification | none | diagnostic | token:read | none | 6 |
+| `.github/workflows/dev-post-merge-advisory.yml` | `qualified_core_candidate` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/dev-pr-auto-merge.yml` | `admission` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
-| `.github/workflows/dev-pr-auto-merge.yml` | `delivery-contract` | qualification | none | diagnostic | token:read | none | 9 |
-| `.github/workflows/dev-pr-auto-merge.yml` | `resolve-target` | qualification | none | diagnostic | token:none | none | 1 |
+| `.github/workflows/dev-pr-auto-merge.yml` | `delivery-contract` | qualification | none | diagnostic | token:read | none | 12 |
+| `.github/workflows/dev-pr-auto-merge.yml` | `resolve-target` | qualification | none | diagnostic | token:read | none | 1 |
 | `.github/workflows/dev-qualification-patrol.yml` | `patrol` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/dev-verify-patrol.yml` | `bind-source` | qualification | none | diagnostic | token:read | none | 1 |
 | `.github/workflows/dev-verify-patrol.yml` | `report` | diagnostic | none | none | token:write | none | 1 |
@@ -113,7 +120,9 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/queue-admission-lease.yml` | `admission` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/release-new-version.yml` | `alpha-timeline` | qualification | none | diagnostic | token:write | none | 11 |
 | `.github/workflows/release-new-version.yml` | `promote` | release-control | channel | qualifying | token:write, oidc, repo-secret:BUILDCHAIN_ISSUE_APP_ID+BUILDCHAIN_ISSUE_APP_PRIVATE_KEY+KUNGFU_ALPHA_CHANNEL_SIGNING_PRIVATE_KEY+KUNGFU_GITHUB_TOKEN+KUNGFU_GOVERNANCE_AUDITOR_APP_PRIVATE_KEY | none | 0 |
-| `.github/workflows/release-new-version.yml` | `promotion-contract` | qualification | none | diagnostic | token:read | none | 8 |
+| `.github/workflows/release-new-version.yml` | `promotion-contract` | qualification | none | diagnostic | token:read | none | 11 |
+| `.github/workflows/release-new-version.yml` | `recover` | release-control | channel | qualifying | token:write, oidc, repo-secret:BUILDCHAIN_ISSUE_APP_ID+BUILDCHAIN_ISSUE_APP_PRIVATE_KEY+KUNGFU_ALPHA_CHANNEL_SIGNING_PRIVATE_KEY+KUNGFU_GITHUB_TOKEN+KUNGFU_GOVERNANCE_AUDITOR_APP_PRIVATE_KEY | none | 0 |
+| `.github/workflows/release-new-version.yml` | `recovery-preflight` | qualification | none | diagnostic | token:read | none | 8 |
 | `.github/workflows/release-shifu.yml` | `build` | qualification | none | diagnostic | token:write, oidc | none | 7 |
 | `.github/workflows/release-shifu.yml` | `release` | product-publication | product | none | token:write, repo-secret:GITHUB_TOKEN | `adr0049-production-publication` | 3 |
 | `.github/workflows/report-projection.yml` | `exact-source-projection` | qualification | none | diagnostic | token:read | none | 6 |

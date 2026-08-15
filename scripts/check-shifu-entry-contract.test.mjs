@@ -178,7 +178,7 @@ test('source Kungfu route projects its built TUI and Product extensions', (t) =>
     'kungfu',
   );
   const tuiEntry = path.join(temp, 'framework', 'tui', 'dist', 'tui.mjs');
-  const extensionRoot = path.join(temp, 'product', 'extensions');
+  const extensionRoot = path.join(temp, 'extensions');
   const template = path.join(
     extensionRoot,
     'agent-work-lab',
@@ -236,6 +236,15 @@ test('Windows source Kungfu route projects built TUI Product paths', () => {
     windows,
     /if not defined KF_BUNDLED_EXTENSION_ROOT if exist .*agent-work-lab\\experience\\starter-project\.json/u,
   );
+});
+
+test('Windows launcher is checked out with cmd-safe line endings', () => {
+  const result = spawnSync('git', ['check-attr', 'eol', '--', 'shifu.cmd'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'shifu.cmd: eol: crlf');
 });
 
 test('cached pinned uv activates Work after Qualified Core materialization', (t) => {
@@ -407,7 +416,7 @@ test('build-free read-only routes bypass launcher bootstrap on both shims', () =
   assert.doesNotMatch(windowsFloor, /fnm install|pnpm|diagnostics/u);
 });
 
-test('open-card Work Design preflight is build-free on both shims', () => {
+test('work-design Work Design preflight is build-free on both shims', () => {
   const posix = fs.readFileSync(path.join(ROOT, 'shifu'), 'utf8');
   const windows = fs.readFileSync(path.join(ROOT, 'shifu.cmd'), 'utf8');
   const readonly = fs.readFileSync(
@@ -415,12 +424,12 @@ test('open-card Work Design preflight is build-free on both shims', () => {
     'utf8',
   );
   for (const entrypoint of [posix, windows]) {
-    assert.match(entrypoint, /work-design:open-card-preflight/u);
+    assert.match(entrypoint, /work-design:preflight/u);
     assert.match(entrypoint, /shifu-readonly-entry\.mjs/u);
   }
   assert.match(
     readonly,
-    /framework[\\/]work-design-open-card[\\/]tooling[\\/]open-card-preflight\.mjs/u,
+    /framework[\\/]work-design-preflight[\\/]tooling[\\/]work-design-preflight\.mjs/u,
   );
   assert.doesNotMatch(
     readonly,
@@ -482,7 +491,9 @@ test('Xinfa source entry prefers hash-pinned wasm and preserves native fallback'
 
 test('Xinfa quality uses the source resolver and forwards one Windows mode', () => {
   const posix = fs.readFileSync(path.join(ROOT, 'shifu'), 'utf8');
-  const windows = fs.readFileSync(path.join(ROOT, 'shifu.cmd'), 'utf8');
+  const windows = fs
+    .readFileSync(path.join(ROOT, 'shifu.cmd'), 'utf8')
+    .replaceAll('\r\n', '\n');
   const posixBlock = posix.match(/xinfa:quality\)[\s\S]*?;;/u)?.[0];
   const windowsBlock = windows.match(
     /:xinfaquality[\s\S]*?(?=\r?\n:projectcut\r?\n)/u,

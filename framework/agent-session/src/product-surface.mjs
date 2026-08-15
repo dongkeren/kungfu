@@ -20,6 +20,7 @@ const READ_OPERATIONS = new Set([
   'list',
   'show',
   'status',
+  'wait-status-change',
   'snapshot',
 ]);
 
@@ -251,23 +252,30 @@ export function agentSessionProductState({
 function publicStatus(session) {
   const status = session.port.status();
   const controller = status.controllerLease;
+  const live =
+    status.lifecycleState !== 'ended' && status.inputAdmission !== 'closed';
+  const exit =
+    status.exit && session.endControl
+      ? { ...status.exit, controlRequest: { ...session.endControl } }
+      : status.exit;
   const statusProjection = {
     schema: 'kungfu.agent-session.surface-status/v1',
-    live: true,
+    live,
     terminalObservable: true,
-    controllable: true,
+    controllable: live,
     workConsoleId: status.workConsoleId,
     sessionAttemptId: status.sessionAttemptId,
     capsuleId: status.capsuleId,
     capsuleGeneration: status.capsuleGeneration,
     coordinatorEpoch: status.coordinatorEpoch,
     sessionStreamEpoch: status.sessionStreamEpoch,
+    changeSequence: status.changeSequence,
     lifecycleState: status.lifecycleState,
     interactionState: status.interactionState,
     inputAdmission: status.inputAdmission,
     foreground: status.foreground,
     output: status.output,
-    exit: status.exit,
+    exit,
     providerAdapter: status.providerAdapter,
     queuedInstructions: status.queuedInstructions,
     binding: session.binding,
@@ -289,7 +297,7 @@ function publicStatus(session) {
     proof: null,
     receiptRoots: [],
     product: agentSessionProductState({
-      live: true,
+      live,
       lifecycleState: status.lifecycleState,
       interactionState: status.interactionState,
       providerCompatible: status.providerAdapter?.compatible ?? null,
@@ -491,6 +499,7 @@ export class AgentSessionProductSurface {
         'attach',
         'detach',
         'status',
+        'wait-status-change',
         'snapshot',
         'plan-control',
         'acquire-control',
@@ -565,9 +574,13 @@ export class AgentSessionProductSurface {
           workspaceId: console.workspaceId,
           binding: nativeStatus?.binding ?? console.binding,
           backend: attempt.backend,
-          live: nativeStatus?.live ?? Boolean(live),
-          terminalObservable: nativeStatus?.terminalObservable ?? Boolean(live),
-          controllable: nativeStatus?.controllable ?? Boolean(live),
+          live: nativeStatus?.live ?? live?.live ?? false,
+          terminalObservable:
+            nativeStatus?.terminalObservable ??
+            live?.terminalObservable ??
+            false,
+          controllable:
+            nativeStatus?.controllable ?? live?.controllable ?? false,
           lifecycleState:
             nativeStatus?.lifecycleState ??
             live?.lifecycleState ??
@@ -665,6 +678,19 @@ export class AgentSessionProductSurface {
       console: projection?.console ?? null,
       attempt: projection?.attempt ?? null,
     };
+  }
+
+  async waitStatusChange({ session: ref, afterChangeSequence }) {
+    const normalized = sessionRef(ref);
+    const session = this.runtime.get(normalized);
+    if (!session || typeof session.waitForStatusChange !== 'function') {
+      throw new AgentSessionSurfaceError(
+        'unsupported_operation',
+        'event-driven status changes are unavailable for this Agent Session',
+      );
+    }
+    await session.waitForStatusChange(afterChangeSequence);
+    return this.show(normalized);
   }
 
   resolveConsole(input) {
@@ -790,9 +816,9 @@ export class AgentSessionProductSurface {
       workRef: structuredClone(workRef),
       bindingScope,
       sourceWorkspaceId: declaredSourceWorkspaceId,
-      effects: ['bind-active-native-attempt-to-work'],
+      effects: ['replace-native-attempt-current-work-observation'],
       workEffects: [],
-      rollback: 'end-native-attempt-or-bind-after-active-attempt-ends',
+      rollback: 'bind-the-prior-work-again-or-end-native-attempt',
     };
     return { ...body, root: agentSessionSurfaceRoot(body) };
   }
@@ -1146,12 +1172,12 @@ export class AgentSessionProductSurface {
           initializeParams: input.structured?.initializeParams ?? {
             clientInfo: {
               name: 'kungfu-agent-session',
-              version: '4.0.0-alpha.1',
+              version: '4.0.0-alpha.2',
             },
           },
           threadStartParams: input.structured?.threadStartParams ?? {
             ...(input.cwd ? { cwd: input.cwd } : {}),
-            approvalPolicy: 'untrusted',
+            approvalPolicy: 'on-request',
             approvalsReviewer: 'user',
             sandbox: 'read-only',
           },
@@ -1474,6 +1500,8 @@ export class AgentSessionProductSurface {
       if (operation === 'list') return this.list();
       if (operation === 'show' || operation === 'status')
         return this.show(request.session);
+      if (operation === 'wait-status-change')
+        return this.waitStatusChange(request);
       return this.#session(request.session).port.snapshot({
         requestedSequence: request.requestedSequence ?? 0,
       });

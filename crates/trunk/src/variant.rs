@@ -27,6 +27,10 @@ use std::ffi::OsStr;
 const ENV_VARIANT_KEY: &str = "KUNGFU_AS_VARIANT";
 /// Optional exact argv[1] that owns one internal Node-variant invocation.
 const ENV_VARIANT_ENTRY_KEY: &str = "KUNGFU_NODE_VARIANT_ENTRY";
+/// Node sets this private descriptor only for a child created through
+/// `child_process.fork`. Such a child is another Node module invocation even
+/// when argv[1] differs from the parent worker's scoped entry.
+const ENV_NODE_CHANNEL_FD_KEY: &str = "NODE_CHANNEL_FD";
 
 /// The standalone node-host library the product ships next to this binary; it
 /// exports the C entry `kungfu_node_run` (a thin wrapper over node::Start).
@@ -38,6 +42,21 @@ const NODE_HOST_LIB: &str = "libkungfu_node_host.dylib";
 const NODE_HOST_LIB: &str = "libkungfu_node_host.so";
 #[cfg(windows)]
 const NODE_HOST_LIB: &str = "kungfu_node_host.dll";
+
+#[cfg(unix)]
+const RTLD_NOW: std::ffi::c_int = 2;
+// `RTLD_GLOBAL` is platform-defined rather than POSIX-numeric.  The embedded
+// Node host must publish libnode's N-API exports so native addons loaded later
+// by Node (for example node-pty) can resolve them from the process scope.
+#[cfg(target_os = "macos")]
+const RTLD_GLOBAL: std::ffi::c_int = 0x8;
+#[cfg(all(unix, not(target_os = "macos")))]
+const RTLD_GLOBAL: std::ffi::c_int = 0x100;
+
+#[cfg(unix)]
+fn node_host_loader_flags() -> std::ffi::c_int {
+    RTLD_NOW | RTLD_GLOBAL
+}
 
 pub fn native_node_available() -> bool {
     env::current_exe()
@@ -52,11 +71,19 @@ pub fn native_node_available() -> bool {
 pub fn dispatch() -> Option<i32> {
     match env::var(ENV_VARIANT_KEY).ok().as_deref() {
         Some("node")
-            if scoped_entry_matches(
+            if node_variant_entry_matches(
                 env::var_os(ENV_VARIANT_ENTRY_KEY).as_deref(),
                 env::args_os().nth(1).as_deref(),
+                env::var_os(ENV_NODE_CHANNEL_FD_KEY).as_deref(),
             ) =>
         {
+            // This fast path bypasses the normal product launch functions, so
+            // the worker itself must establish the external Python cache
+            // contract before it can launch any bundled interpreter child.
+            if let Err(message) = crate::launch::configure_product_cache_environment() {
+                eprintln!("kungfu: {message}");
+                return Some(1);
+            }
             run_node()
         }
         Some("node") => {
@@ -73,6 +100,14 @@ pub fn dispatch() -> Option<i32> {
 
 fn scoped_entry_matches(expected: Option<&OsStr>, actual: Option<&OsStr>) -> bool {
     expected.is_none() || expected == actual
+}
+
+fn node_variant_entry_matches(
+    expected: Option<&OsStr>,
+    actual: Option<&OsStr>,
+    node_channel_fd: Option<&OsStr>,
+) -> bool {
+    scoped_entry_matches(expected, actual) || node_channel_fd.is_some()
 }
 
 /// The C entry the node-host exports: `int kungfu_node_run(int argc, char **argv)`.
@@ -146,7 +181,6 @@ fn run_node() -> Option<i32> {
     use std::path::PathBuf;
 
     // POSIX dynamic-loader entry points; std-only, no crate dependency.
-    const RTLD_NOW: c_int = 2;
     extern "C" {
         fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
         fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
@@ -159,7 +193,7 @@ fn run_node() -> Option<i32> {
     let lib_c = CString::new(lib_path.as_os_str().as_bytes()).ok()?;
 
     // Absent library → not the product build → fall through to the Python path.
-    let handle = unsafe { dlopen(lib_c.as_ptr(), RTLD_NOW) };
+    let handle = unsafe { dlopen(lib_c.as_ptr(), node_host_loader_flags()) };
     if handle.is_null() {
         return None;
     }
@@ -261,6 +295,18 @@ mod tests {
             Some(OsStr::new("/exact/runner.mjs")),
             Some(OsStr::new("agent")),
         ));
+        assert!(node_variant_entry_matches(
+            Some(OsStr::new("C:\\product\\tui\\agent-session-worker.mjs")),
+            Some(OsStr::new(
+                "C:\\product\\tui\\node_modules\\node-pty\\lib\\conpty_console_list_agent"
+            )),
+            Some(OsStr::new("3")),
+        ));
+        assert!(!node_variant_entry_matches(
+            Some(OsStr::new("C:\\product\\tui\\agent-session-worker.mjs")),
+            Some(OsStr::new("C:\\product\\runtime\\public-adapter.mjs")),
+            None,
+        ));
 
         // No variant requested → fall through.
         env::remove_var(ENV_VARIANT_KEY);
@@ -316,5 +362,13 @@ mod tests {
             );
             expected_offset += expected.len() + 1;
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn node_host_loader_publishes_native_addon_symbols() {
+        let flags = node_host_loader_flags();
+        assert_ne!(flags & RTLD_NOW, 0);
+        assert_ne!(flags & RTLD_GLOBAL, 0);
     }
 }

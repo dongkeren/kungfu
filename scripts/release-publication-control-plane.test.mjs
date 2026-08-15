@@ -8,7 +8,9 @@ import {
   discoverBuildchainReleaseWorkflows,
   inspectLive,
   status,
+  validateBuildWorkflowAuthority,
   validateExternalWorkflowInventory,
+  validatePromotionWorkflowAuthority,
   validateRegistry,
 } from '../framework/release/publication-control-plane.mjs';
 const p = path.join(
@@ -41,6 +43,65 @@ test('checked registry closes workflows and invariants', () => {
   const v = get();
   assert.equal(validateRegistry(v), v);
   assert.equal(status(v).sourceAcceptance, 'passed');
+});
+test('build authority keeps the workflow shell and runtime on v3-alpha', () => {
+  const source = fs.readFileSync('.github/workflows/build.yml', 'utf8');
+  const contract = JSON.parse(
+    fs.readFileSync('docs/release-promotion-rehearsal.contract.json', 'utf8'),
+  );
+  const shellRef = contract.buildchain.workflow_shell_ref;
+  assert.equal(validateBuildWorkflowAuthority(source, shellRef), true);
+  assert.throws(
+    () => validateBuildWorkflowAuthority(source, 'v3'),
+    /channel is invalid/u,
+  );
+  assert.throws(
+    () =>
+      validateBuildWorkflowAuthority(
+        source.replace(
+          `.build.yml@${shellRef}`,
+          `.build.yml@${'0'.repeat(40)}`,
+        ),
+        shellRef,
+      ),
+    /authority drift/u,
+  );
+});
+test('promotion authority keeps Alpha workflow routing floating and recovery runtime exact', () => {
+  const source = fs.readFileSync(
+    '.github/workflows/release-new-version.yml',
+    'utf8',
+  );
+  const policy = JSON.parse(
+    fs.readFileSync(
+      'docs/qualification/gates/release-admission-policy.json',
+      'utf8',
+    ),
+  );
+  const runtime = policy.buildchain.runtimes.alpha.publicationRuntimeSha;
+  assert.equal(validatePromotionWorkflowAuthority(source, runtime), true);
+  assert.throws(
+    () =>
+      validatePromotionWorkflowAuthority(
+        source.replace(
+          'release-candidate-promote.yml@v3-alpha',
+          `release-candidate-promote.yml@${runtime}`,
+        ),
+        runtime,
+      ),
+    /authority drift/u,
+  );
+  assert.throws(
+    () =>
+      validatePromotionWorkflowAuthority(
+        source.replace(
+          'buildchain-ref: ${{ inputs.resume-buildchain-runtime-sha }}',
+          'buildchain-ref: v3-alpha',
+        ),
+        runtime,
+      ),
+    /authority drift/u,
+  );
 });
 test('unregistered local workflow fails', () => {
   const v = get();

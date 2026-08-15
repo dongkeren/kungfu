@@ -38,8 +38,18 @@ const isWin = process.platform === 'win32';
 
 /** @typedef {{label: string, command: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv}} Command */
 
-function git(args) {
-  const result = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+const SOURCE_ACCEPTANCE_GIT_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+
+export function readSourceAcceptanceGit(
+  args,
+  { cwd = ROOT, optional = false } = {},
+) {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: SOURCE_ACCEPTANCE_GIT_MAX_BUFFER_BYTES,
+  });
+  if (optional) return result.status === 0 ? result.stdout.trim() : '';
   if (result.status !== 0) {
     throw new Error(
       `git ${args.join(' ')} failed: ${(result.stderr || '').trim()}`,
@@ -48,9 +58,12 @@ function git(args) {
   return result.stdout.trim();
 }
 
+function git(args) {
+  return readSourceAcceptanceGit(args);
+}
+
 function gitMaybe(args) {
-  const result = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
-  return result.status === 0 ? result.stdout.trim() : '';
+  return readSourceAcceptanceGit(args, { optional: true });
 }
 
 function commandAvailable(command) {
@@ -150,19 +163,20 @@ export function sourceChangedFiles() {
   /** @type {Set<string>} */
   const files = new Set();
   for (const args of [
-    ['diff', '--name-only', '--diff-filter=ACM', `${base.sha}...HEAD`],
-    ['diff', '--name-only', '--diff-filter=ACM'],
-    ['diff', '--cached', '--name-only', '--diff-filter=ACM'],
+    [
+      'diff',
+      '--name-only',
+      '--no-renames',
+      '--diff-filter=ACDMR',
+      `${base.sha}...HEAD`,
+    ],
+    ['diff', '--name-only', '--no-renames', '--diff-filter=ACDMR'],
+    ['diff', '--cached', '--name-only', '--no-renames', '--diff-filter=ACDMR'],
     ['ls-files', '--others', '--exclude-standard'],
   ]) {
     for (const file of git(args).split('\n')) {
       const rel = file.trim();
-      if (
-        rel &&
-        !isLocalQualificationRuntime(rel) &&
-        fs.existsSync(path.join(ROOT, rel))
-      )
-        files.add(rel);
+      if (rel && !isLocalQualificationRuntime(rel)) files.add(rel);
     }
   }
   console.log(
@@ -276,10 +290,75 @@ function findFirstParentTreeEquivalent(sourceTree, headSha, gitRead) {
   return '';
 }
 
+function findFirstParentPatchEquivalent(
+  sourceSha,
+  baseParent,
+  candidateParent,
+  gitRead,
+) {
+  const sourceBase = gitRead(['merge-base', sourceSha, candidateParent]);
+  if (!/^[0-9a-f]{40}$/u.test(sourceBase)) return '';
+  const sourcePatch = gitRead([
+    'diff',
+    '--binary',
+    '--full-index',
+    '--no-renames',
+    sourceBase,
+    sourceSha,
+    '--',
+  ]);
+  if (!sourcePatch) return '';
+
+  const candidates = gitRead([
+    'log',
+    '--first-parent',
+    `--max-count=${KFD_REBASE_EQUIVALENCE_ANCESTOR_LIMIT}`,
+    '--format=%H',
+    candidateParent,
+  ])
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const baseIndex = candidates.indexOf(baseParent);
+  if (baseIndex < 0) return '';
+  for (const commitSha of candidates.slice(0, baseIndex)) {
+    const replayPatch = gitRead([
+      'diff',
+      '--binary',
+      '--full-index',
+      '--no-renames',
+      baseParent,
+      commitSha,
+      '--',
+    ]);
+    if (replayPatch === sourcePatch) return commitSha;
+  }
+  return '';
+}
+
+export function githubMergeGroupCoordinates(
+  env = process.env,
+  readFile = fs.readFileSync,
+) {
+  if (env.GITHUB_EVENT_NAME !== 'merge_group' || !env.GITHUB_EVENT_PATH)
+    return null;
+  try {
+    const event = JSON.parse(readFile(env.GITHUB_EVENT_PATH, 'utf8'));
+    const baseSha = String(event?.merge_group?.base_sha || '');
+    const headSha = String(event?.merge_group?.head_sha || '');
+    if (!/^[0-9a-f]{40}$/u.test(baseSha) || !/^[0-9a-f]{40}$/u.test(headSha))
+      return null;
+    return { baseSha, headSha };
+  } catch {
+    return null;
+  }
+}
+
 export function findGitTreeEquivalentAncestor(
   sourceSha,
   headSha,
   gitRead = gitMaybe,
+  mergeGroup = githubMergeGroupCoordinates(),
 ) {
   if (gitRead(['cat-file', '-t', sourceSha]) !== 'commit') return '';
   const sourceTree = gitRead(['rev-parse', `${sourceSha}^{tree}`]);
@@ -306,6 +385,27 @@ export function findGitTreeEquivalentAncestor(
   ])
     .trim()
     .split(/\s+/u);
+
+  // GitHub merge queue currently emits a linear replay rather than the
+  // historical two-parent synthetic merge. Trust that shape only when the
+  // merge_group event binds this exact checked head and protected base, then
+  // require the same bounded byte-for-byte cumulative patch equivalence used
+  // for the synthetic form. Ordinary local and PR checkouts cannot enter this
+  // path by merely resembling a replay graph.
+  if (
+    mergeSha === headSha &&
+    baseParent &&
+    !candidateParent &&
+    mergeGroup?.headSha === headSha &&
+    /^[0-9a-f]{40}$/u.test(mergeGroup.baseSha)
+  ) {
+    return findFirstParentPatchEquivalent(
+      sourceSha,
+      mergeGroup.baseSha,
+      headSha,
+      gitRead,
+    );
+  }
   if (
     mergeSha !== headSha ||
     !baseParent ||
@@ -316,7 +416,24 @@ export function findGitTreeEquivalentAncestor(
   const headTree = gitRead(['rev-parse', `${headSha}^{tree}`]);
   const candidateTree = gitRead(['rev-parse', `${candidateParent}^{tree}`]);
   if (headTree !== candidateTree) return '';
-  return findFirstParentTreeEquivalent(sourceTree, candidateParent, gitRead);
+  const treeMatch = findFirstParentTreeEquivalent(
+    sourceTree,
+    candidateParent,
+    gitRead,
+  );
+  if (treeMatch) return treeMatch;
+
+  // A protected base may advance in unrelated paths while GitHub exactly
+  // replays the candidate's Project Cut. The whole trees then differ even
+  // though the cumulative binary patch is byte-for-byte identical. Admit only
+  // a bounded first-parent candidate whose complete patch from the protected
+  // base exactly matches sourceSha's complete patch from their merge base.
+  return findFirstParentPatchEquivalent(
+    sourceSha,
+    baseParent,
+    candidateParent,
+    gitRead,
+  );
 }
 
 export function assertKfdEvidenceSourceBinding({
@@ -336,7 +453,7 @@ export function assertKfdEvidenceSourceBinding({
     !gitSha.test(findTreeEquivalentAncestor(sourceSha, headSha))
   ) {
     throw new Error(
-      `KFD evidence source ${sourceSha} is not an ancestor of checked head ${headSha} and has no tree-equivalent ancestor; regenerate the evidence after rebasing`,
+      `KFD evidence source ${sourceSha} is not an ancestor of checked head ${headSha} and has no exact protected-replay equivalent ancestor; regenerate the evidence after rebasing`,
     );
   }
   return sourceSha;
@@ -361,7 +478,11 @@ export function resolveKfdProductGateCheckedAt({
 }) {
   if (write) return now();
   for (const gate of retainedGateResults) {
-    const checkedAt = String(gate?.checkedAt || '');
+    const retainedSourceSha = String(gate?.source?.sha || '');
+    if (retainedSourceSha && retainedSourceSha !== sourceSha) continue;
+    const checkedAt = String(
+      gate?.verificationCut?.checkedAt || gate?.checkedAt || '',
+    );
     if (checkedAt) return checkedAt;
   }
   const checkedAt = commitTimestamp(sourceSha);
@@ -376,8 +497,15 @@ export function resolveKfdProductGateCheckedAt({
 /**
  * @param {string[]} files
  * @param {string} [evidenceBaseCommit]
+ * @param {string[]} [deletedFiles]
  */
-export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
+export function sourceAcceptancePlan(
+  files,
+  evidenceBaseCommit = '',
+  deletedFiles = [],
+) {
+  const deleted = new Set(deletedFiles);
+  const materialFiles = files.filter((file) => !deleted.has(file));
   const settlementPublicationPresent = fs.existsSync(
     path.join(ROOT, 'framework/project-cut/publication.contract.json'),
   );
@@ -399,10 +527,14 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
       'Shifu Documentation Protocol',
       'scripts/check-shifu-documentation-contract.mjs',
     ],
-    [
-      'documentation material lane',
-      'scripts/run-documentation-material-tests.mjs',
-    ],
+    ...(coldReadOnlySourceAcceptance
+      ? []
+      : [
+          [
+            'documentation material lane',
+            'scripts/run-documentation-material-tests.mjs',
+          ],
+        ]),
     [
       'read-only source and Agent route inventory',
       'scripts/check-readonly-source-routes.mjs',
@@ -510,6 +642,12 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
     ['agent session contract', 'scripts/check-agent-session-contract.mjs'],
     ['CLI catalog parity', 'scripts/check-cli-catalog-parity.mjs'],
     [
+      'KFX Site Bundle impact dispositions',
+      'framework/site/tooling/check-kfx-site-impact.mjs',
+      ...(evidenceBaseCommit ? ['--base', evidenceBaseCommit] : []),
+      ...files.flatMap((file) => ['--changed-file', file]),
+    ],
+    [
       'deprecation lifecycle authority',
       'framework/deprecation/deprecation-lifecycle.mjs',
       '--as-of',
@@ -545,8 +683,8 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
       'framework/work-design-policy-replay/tooling/check-work-design-policy-replay.mjs',
     ],
     [
-      'Work design open-card contract',
-      'framework/work-design-open-card/tooling/check-work-design-open-card.mjs',
+      'Work design work-design contract',
+      'framework/work-design-preflight/tooling/check-work-design-preflight.mjs',
     ],
     [
       'Project Cut composition contract',
@@ -674,142 +812,153 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
             }
           : undefined,
     })),
-    {
-      label: 'source-acceptance contract tests',
-      command: process.execPath,
-      args: [
-        '--test',
-        'scripts/buildchain-install.test.mjs',
-        'scripts/run-shifu-lifecycle.test.mjs',
-        'scripts/check-typescript-files.test.mjs',
-        'scripts/source-acceptance.test.mjs',
-        'scripts/platform-command.test.mjs',
-        'product/scripts/dist.test.mjs',
-        'scripts/opencode-local-model-canary-workflow.test.mjs',
-        'scripts/kungfu-workflow-authority.test.mjs',
-        'scripts/code-complexity-budget.test.mjs',
-        'scripts/check-code-complexity.test.mjs',
-        'framework/report-projection/authority.test.mjs',
-        'framework/maintainability/semantic-amplification.test.mjs',
-        'framework/maintainability/terminal-evidence-matrix.test.mjs',
-        ...(coldReadOnlySourceAcceptance
-          ? []
-          : ['scripts/readonly-agent-bootstrap.test.mjs']),
-        'scripts/check-readonly-source-routes.test.mjs',
-        'scripts/check-shifu-entry-contract.test.mjs',
-        'scripts/check-shifu-cache-contract.test.mjs',
-        ...(coldReadOnlySourceAcceptance
-          ? []
-          : ['framework/production-graph/check.test.mjs']),
-        'scripts/check-health-diagnostics-contract.test.mjs',
-        'scripts/shifu-cache-runtime.test.mjs',
-        'scripts/shifu-conan-hit-evidence.test.mjs',
-        'scripts/shifu-conan-legacy.test.mjs',
-        'scripts/shifu-conan-publish.test.mjs',
-        'scripts/shifu-uv-cache-adapter.test.mjs',
-        'scripts/shifu-gate-runtime.test.mjs',
-        'scripts/shifu-gate-executor.test.mjs',
-        'scripts/shifu-documentation-runtime.test.mjs',
-        'scripts/shifu-documentation-surfaces.test.mjs',
-        'scripts/shifu-documentation-consumers.test.mjs',
-        'scripts/kungfu-xinfa-consumer.test.mjs',
-        'scripts/check-kungfu-gate-catalog.test.mjs',
-        'scripts/linux-arm64-alpha-qualification-workflow.test.mjs',
-        'scripts/affected-native-proof.test.mjs',
-        'scripts/qualified-assignment-core-artifact.test.mjs',
-        'scripts/assemble-kungfu-publication-gate.test.mjs',
-        'scripts/verify-kungfu-release-admission.test.mjs',
-        'scripts/release-publication-control-plane.test.mjs',
-        'scripts/version-line-authority.test.mjs',
-        'crates/xinfa/tooling/check-boundary.test.mjs',
-        'scripts/check-schema-authority.test.mjs',
-        'scripts/check-incubation-passport.test.mjs',
-        'scripts/check-hub-starter-docker-concept.test.mjs',
-        'scripts/check-canonical-json.test.mjs',
-        'scripts/check-primitive-catalog.test.mjs',
-        'scripts/check-primitive-authority-boundary.test.mjs',
-        'scripts/check-runtime-contract.test.mjs',
-        'scripts/check-trademark-public-use.test.mjs',
-        'scripts/prepare-ungfu-release-evidence.test.mjs',
-        'scripts/check-npm-package-registry.test.mjs',
-        'scripts/npm-release-inventory.test.mjs',
-        'scripts/check-upgrade-contract.test.mjs',
-        'scripts/probe-cpp-cmake-contract.test.mjs',
-        'scripts/check-upgrade-qualification.test.mjs',
-        'scripts/upgrade-publication-admission.test.mjs',
-        'scripts/check-agent-session-contract.test.mjs',
-        'scripts/check-cli-catalog-parity.test.mjs',
-        'framework/deprecation/deprecation-surface-discovery.test.mjs',
-        'scripts/check-fact-cut-kernel-contract.test.mjs',
-        'scripts/check-data-protection-contract.test.mjs',
-        'scripts/check-durable-history-qualification.test.mjs',
-        'scripts/check-work-agent-history-continuity.test.mjs',
-        'scripts/check-project-cut-dogfood-history.test.mjs',
-        'scripts/check-exit-bundle-contract.test.mjs',
-        'scripts/check-fact-root-canonical.test.mjs',
-        'scripts/kungfu-invariant.test.mjs',
-        'scripts/check-evidence-envelope.test.mjs',
-        'scripts/check-kfd7-library-boundary.test.mjs',
-        'scripts/check-layered-api-encoding-boundary.test.mjs',
-        'scripts/check-work-lifecycle-native.test.mjs',
-        'scripts/check-work-lifecycle-operation-matrix.test.mjs',
-        'framework/work-profile-conformance/work-profile-conformance.test.mjs',
-        'scripts/check-work-control-vocabulary.test.mjs',
-        'scripts/check-project-work-agent-product.test.mjs',
-        'scripts/registry-envelope.test.mjs',
-        'scripts/check-kfd-agent-runtime-boundary.mjs',
-        'scripts/check-fact-root-canonical.test.mjs',
-        'scripts/check-project-cut-contract.test.mjs',
-        'scripts/check-git-episode-provider.test.mjs',
-        'scripts/check-project-cut-settlement.test.mjs',
-        'scripts/check-project-cut-history.test.mjs',
-        'scripts/check-work-history-selector.test.mjs',
-        'scripts/check-work-design-advisor.test.mjs',
-        'scripts/check-work-design-policy-replay.test.mjs',
-        'scripts/check-work-design-open-card.test.mjs',
-        'scripts/check-project-cut-composition.test.mjs',
-        ...(settlementPublicationPresent
-          ? ['scripts/check-project-cut-publication.test.mjs']
-          : []),
-        'scripts/project-cut-merge-queue-admission.test.mjs',
-        'scripts/check-workspace-continuation.test.mjs',
-        'framework/assignment-capture/assignment-capture.test.mjs',
-        'scripts/run-continuity-pilot.test.mjs',
-        'scripts/check-episode-admission-contract.test.mjs',
-        'framework/agent-session/tests/capsule-host.test.mjs',
-        'framework/agent-session/tests/peer-transport.test.mjs',
-        'framework/agent-session/tests/runtime-port.test.mjs',
-        'framework/agent-session/tests/provider-adapters.test.mjs',
-        'framework/agent-session/tests/interaction-port.test.mjs',
-        'framework/agent-session/tests/codex-app-server-contract.test.mjs',
-        'framework/agent-session/tests/codex-app-server-interaction.test.mjs',
-        'framework/agent-session/tests/codex-app-server-recovery.test.mjs',
-        'framework/agent-session/tests/codex-app-server-runtime.test.mjs',
-        'framework/agent-session/tests/codex-app-server-product.test.mjs',
-        'framework/agent-session/tests/product-surface.test.mjs',
-        'framework/agent-session/tests/product-detached-host.test.mjs',
-        'extensions/terminal/tests/agent-session-snapshot.test.ts',
-        'framework/core/tests/qualification/runtime-activation/run.test.mjs',
-        'framework/core/tests/qualification/durability/run.test.mjs',
-        'framework/core/tests/qualification/durability/powercut_plan.test.mjs',
-        'framework/core/tests/qualification/durability/fault_campaign.test.mjs',
-        'framework/core/tests/qualification/durability/candidate_evidence.test.mjs',
-        'framework/core/tests/qualification/durability/retained_evidence.test.mjs',
-        'framework/core/tests/qualification/durability/institutional_evidence.test.mjs',
-        'framework/core/tests/qualification/durability/product_contract.test.mjs',
-        'framework/core/tests/qualification/durability/slo_evidence.test.mjs',
-        'framework/core/tests/qualification/durability/offhost_evidence.test.mjs',
-        'framework/core/tests/qualification/durability/clean_restart_evidence.test.mjs',
-        'framework/core/tests/qualification/durability/production_candidate_admission.test.mjs',
-        'scripts/run-durability-powercut-qemu.test.mjs',
-        'scripts/prepare-durability-powercut-qemu.test.mjs',
-        'scripts/run-durability-fault-campaign.test.mjs',
-        'scripts/run-durability-institutional-qemu.test.mjs',
-        'scripts/run-durability-slo.test.mjs',
-        'scripts/run-durability-offhost-restore.test.mjs',
-        'scripts/run-durability-clean-host-restart.test.mjs',
-      ],
-    },
+    ...(coldReadOnlySourceAcceptance
+      ? []
+      : [
+          {
+            label: 'source-acceptance contract tests',
+            command: process.execPath,
+            args: [
+              '--test',
+              'scripts/buildchain-install.test.mjs',
+              'scripts/run-shifu-lifecycle.test.mjs',
+              'scripts/check-typescript-files.test.mjs',
+              'scripts/source-acceptance-git.test.mjs',
+              'scripts/source-acceptance.test.mjs',
+              'scripts/platform-command.test.mjs',
+              'product/scripts/dist.test.mjs',
+              'product/scripts/dist-cli-executable-layout.test.mjs',
+              'product/scripts/installed-kungfu/index.test.mjs',
+              'scripts/opencode-local-model-canary-workflow.test.mjs',
+              'scripts/kungfu-workflow-authority.test.mjs',
+              'scripts/code-complexity-budget.test.mjs',
+              'scripts/check-code-complexity.test.mjs',
+              'framework/report-projection/authority.test.mjs',
+              'framework/maintainability/semantic-amplification.test.mjs',
+              'framework/maintainability/terminal-evidence-matrix.test.mjs',
+              ...(coldReadOnlySourceAcceptance
+                ? []
+                : ['scripts/readonly-agent-bootstrap.test.mjs']),
+              'scripts/check-readonly-source-routes.test.mjs',
+              'scripts/check-shifu-entry-contract.test.mjs',
+              'scripts/check-shifu-cache-contract.test.mjs',
+              ...(coldReadOnlySourceAcceptance
+                ? []
+                : ['framework/production-graph/check.test.mjs']),
+              'scripts/check-health-diagnostics-contract.test.mjs',
+              'scripts/shifu-cache-runtime.test.mjs',
+              'scripts/shifu-conan-hit-evidence.test.mjs',
+              'scripts/shifu-conan-legacy.test.mjs',
+              'scripts/shifu-conan-publish.test.mjs',
+              'scripts/shifu-uv-cache-adapter.test.mjs',
+              'scripts/shifu-gate-runtime.test.mjs',
+              'scripts/shifu-gate-executor.test.mjs',
+              'scripts/shifu-documentation-runtime.test.mjs',
+              'scripts/shifu-documentation-surfaces.test.mjs',
+              'scripts/shifu-documentation-consumers.test.mjs',
+              'scripts/kungfu-xinfa-consumer.test.mjs',
+              'scripts/check-kungfu-gate-catalog.test.mjs',
+              'scripts/linux-arm64-alpha-qualification-workflow.test.mjs',
+              'scripts/affected-native-proof.test.mjs',
+              'scripts/affected-native-semantic-source.test.mjs',
+              'scripts/qualified-assignment-core-artifact.test.mjs',
+              'scripts/assemble-kungfu-publication-gate.test.mjs',
+              'scripts/verify-kungfu-release-admission.test.mjs',
+              'scripts/release-publication-control-plane.test.mjs',
+              'scripts/version-line-authority.test.mjs',
+              'crates/xinfa/tooling/check-boundary.test.mjs',
+              'scripts/check-schema-authority.test.mjs',
+              'scripts/check-incubation-passport.test.mjs',
+              'scripts/check-hub-starter-docker-concept.test.mjs',
+              'scripts/check-canonical-json.test.mjs',
+              'scripts/check-primitive-catalog.test.mjs',
+              'scripts/check-primitive-authority-boundary.test.mjs',
+              'scripts/check-runtime-contract.test.mjs',
+              'scripts/check-trademark-public-use.test.mjs',
+              'scripts/prepare-ungfu-release-evidence.test.mjs',
+              'scripts/check-npm-package-registry.test.mjs',
+              'scripts/npm-release-inventory.test.mjs',
+              'scripts/check-upgrade-contract.test.mjs',
+              'scripts/probe-cpp-cmake-contract.test.mjs',
+              'scripts/check-upgrade-qualification.test.mjs',
+              'scripts/upgrade-publication-admission.test.mjs',
+              'scripts/check-agent-session-contract.test.mjs',
+              'scripts/check-cli-catalog-parity.test.mjs',
+              'scripts/check-kfx-site-impact.test.mjs',
+              'framework/deprecation/deprecation-surface-discovery.test.mjs',
+              'scripts/check-fact-cut-kernel-contract.test.mjs',
+              'scripts/check-temporal-relation-contract.test.mjs',
+              'scripts/check-release-provenance-object.test.mjs',
+              'scripts/check-data-protection-contract.test.mjs',
+              'scripts/check-durable-history-qualification.test.mjs',
+              'scripts/check-work-agent-history-continuity.test.mjs',
+              'scripts/check-project-cut-dogfood-history.test.mjs',
+              'scripts/check-exit-bundle-contract.test.mjs',
+              'scripts/check-fact-root-canonical.test.mjs',
+              'scripts/kungfu-invariant.test.mjs',
+              'scripts/check-evidence-envelope.test.mjs',
+              'scripts/check-kfd7-library-boundary.test.mjs',
+              'scripts/check-layered-api-encoding-boundary.test.mjs',
+              'scripts/check-work-lifecycle-native.test.mjs',
+              'scripts/check-work-lifecycle-operation-matrix.test.mjs',
+              'framework/work-profile-conformance/work-profile-conformance.test.mjs',
+              'scripts/check-work-control-vocabulary.test.mjs',
+              'scripts/check-project-work-agent-product.test.mjs',
+              'scripts/registry-envelope.test.mjs',
+              'scripts/check-kfd-agent-runtime-boundary.mjs',
+              'scripts/check-fact-root-canonical.test.mjs',
+              'scripts/check-project-cut-contract.test.mjs',
+              'scripts/check-git-episode-provider.test.mjs',
+              'scripts/check-project-cut-settlement.test.mjs',
+              'scripts/check-project-cut-history.test.mjs',
+              'scripts/check-work-history-selector.test.mjs',
+              'scripts/check-work-design-advisor.test.mjs',
+              'scripts/check-work-design-policy-replay.test.mjs',
+              'scripts/check-work-design-preflight.test.mjs',
+              'scripts/check-project-cut-composition.test.mjs',
+              ...(settlementPublicationPresent
+                ? ['scripts/check-project-cut-publication.test.mjs']
+                : []),
+              'scripts/project-cut-merge-queue-admission.test.mjs',
+              'scripts/check-workspace-continuation.test.mjs',
+              'framework/assignment-capture/assignment-capture.test.mjs',
+              'scripts/run-continuity-pilot.test.mjs',
+              'scripts/check-episode-admission-contract.test.mjs',
+              'framework/agent-session/tests/capsule-host.test.mjs',
+              'framework/agent-session/tests/peer-transport.test.mjs',
+              'framework/agent-session/tests/runtime-port.test.mjs',
+              'framework/agent-session/tests/provider-adapters.test.mjs',
+              'framework/agent-session/tests/interaction-port.test.mjs',
+              'framework/agent-session/tests/codex-app-server-contract.test.mjs',
+              'framework/agent-session/tests/codex-app-server-interaction.test.mjs',
+              'framework/agent-session/tests/codex-app-server-recovery.test.mjs',
+              'framework/agent-session/tests/codex-app-server-runtime.test.mjs',
+              'framework/agent-session/tests/codex-app-server-product.test.mjs',
+              'framework/agent-session/tests/product-surface.test.mjs',
+              'framework/agent-session/tests/product-detached-host.test.mjs',
+              'extensions/terminal/tests/agent-session-snapshot.test.ts',
+              'framework/core/tests/qualification/runtime-activation/run.test.mjs',
+              'framework/core/tests/qualification/durability/run.test.mjs',
+              'framework/core/tests/qualification/durability/powercut_plan.test.mjs',
+              'framework/core/tests/qualification/durability/fault_campaign.test.mjs',
+              'framework/core/tests/qualification/durability/candidate_evidence.test.mjs',
+              'framework/core/tests/qualification/durability/retained_evidence.test.mjs',
+              'framework/core/tests/qualification/durability/institutional_evidence.test.mjs',
+              'framework/core/tests/qualification/durability/product_contract.test.mjs',
+              'framework/core/tests/qualification/durability/slo_evidence.test.mjs',
+              'framework/core/tests/qualification/durability/offhost_evidence.test.mjs',
+              'framework/core/tests/qualification/durability/clean_restart_evidence.test.mjs',
+              'framework/core/tests/qualification/durability/production_candidate_admission.test.mjs',
+              'scripts/run-durability-powercut-qemu.test.mjs',
+              'scripts/prepare-durability-powercut-qemu.test.mjs',
+              'scripts/run-durability-fault-campaign.test.mjs',
+              'scripts/run-durability-institutional-qemu.test.mjs',
+              'scripts/run-durability-slo.test.mjs',
+              'scripts/run-durability-offhost-restore.test.mjs',
+              'scripts/run-durability-clean-host-restart.test.mjs',
+            ],
+          },
+        ]),
     {
       label: 'Phase B package identity contract tests',
       command: 'python3',
@@ -820,21 +969,25 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
         'scripts.test_prepare_kungfu_phase_b_package',
       ],
     },
-    {
-      label: 'agent work state contract and CLI parity',
-      command: process.execPath,
-      args: ['scripts/run-agent-work-state-tests.mjs'],
-    },
-    {
-      label: 'runtime upgrade control-plane tests',
-      command: process.execPath,
-      args: ['scripts/run-runtime-upgrade-tests.mjs'],
-    },
-    {
-      label: 'desktop update adapter tests',
-      command: process.execPath,
-      args: ['scripts/run-desktop-update-tests.mjs'],
-    },
+    ...(coldReadOnlySourceAcceptance
+      ? []
+      : [
+          {
+            label: 'agent work state contract and CLI parity',
+            command: process.execPath,
+            args: ['scripts/run-agent-work-state-tests.mjs'],
+          },
+          {
+            label: 'runtime upgrade control-plane tests',
+            command: process.execPath,
+            args: ['scripts/run-runtime-upgrade-tests.mjs'],
+          },
+          {
+            label: 'desktop update adapter tests',
+            command: process.execPath,
+            args: ['scripts/run-desktop-update-tests.mjs'],
+          },
+        ]),
     ...(coldReadOnlySourceAcceptance
       ? []
       : [
@@ -850,7 +1003,14 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
         ]),
   ];
 
-  const web = files.filter(
+  if (coldReadOnlySourceAcceptance) {
+    const nestedContractIndex = plan.findIndex(
+      (step) => step.label === 'source-acceptance contract tests',
+    );
+    if (nestedContractIndex >= 0) plan.splice(nestedContractIndex, 1);
+  }
+
+  const web = materialFiles.filter(
     (file) =>
       WEB.test(file) &&
       !GENERATED_EVIDENCE_ROOTS.some((root) => file.startsWith(root)),
@@ -869,7 +1029,7 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
     });
   }
 
-  const guiTypeScript = files.filter(
+  const guiTypeScript = materialFiles.filter(
     (file) => file.startsWith('framework/gui/src/') && /\.tsx?$/.test(file),
   );
   if (guiTypeScript.length && !coldReadOnlySourceAcceptance) {
@@ -885,7 +1045,7 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
     });
   }
 
-  const python = files.filter((file) => file.endsWith('.py'));
+  const python = materialFiles.filter((file) => file.endsWith('.py'));
   if (python.length) {
     const format = sourcePythonCommand([
       'format',
@@ -919,7 +1079,7 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
   const typedPython = python.filter((file) =>
     TYPED_PYTHON_ROOTS.some((root) => file.startsWith(root)),
   );
-  if (typedPython.length) {
+  if (typedPython.length && !coldReadOnlySourceAcceptance) {
     const mypy = sourceMypyCommand(['--config-file', 'pyproject.toml']);
     plan.push({
       label: 'Python type baseline',
@@ -928,7 +1088,7 @@ export function sourceAcceptancePlan(files, evidenceBaseCommit = '') {
     });
   }
 
-  const cpp = files.filter((file) => CPP.test(file));
+  const cpp = materialFiles.filter((file) => CPP.test(file));
   if (cpp.length) {
     const formatter = sourceClangFormatCommand([
       '-style=file',
@@ -1027,7 +1187,14 @@ function main() {
         '[source-acceptance] cold read-only lane: the installed TypeScript dependency graph is absent; normal source acceptance and CI enforce tooling type checks.',
       );
     }
-    for (const step of sourceAcceptancePlan(files, sourceMergeBase().sha))
+    const deletedFiles = files.filter(
+      (file) => !fs.existsSync(path.join(ROOT, file)),
+    );
+    for (const step of sourceAcceptancePlan(
+      files,
+      sourceMergeBase().sha,
+      deletedFiles,
+    ))
       runSourceAcceptanceStep(step, runtime.env);
   } catch (error) {
     failure = error;

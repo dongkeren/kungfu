@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from .resources import (
+    assess_skill_decision,
     assess_work_advisory,
     bootstrap_contract,
     bootstrap_receipt_schema,
@@ -18,11 +19,21 @@ from .resources import (
     registry_schema,
     skill_state,
     skill_path,
+    skill_decision_contract,
+    skill_decision_policy_root,
     work_authority_capabilities,
 )
 from . import documentation
 
+
+def skill_registry(home):
+    from kungfu.skill import inspect_registry
+
+    return inspect_registry(home)
+
+
 __all__ = [
+    "assess_skill_decision",
     "assess_work_advisory",
     "bootstrap_contract",
     "bootstrap_receipt_schema",
@@ -40,6 +51,9 @@ __all__ = [
     "registry_schema",
     "skill_state",
     "skill_path",
+    "skill_decision_contract",
+    "skill_decision_policy_root",
+    "skill_registry",
     "work_authority_capabilities",
     "documentation",
 ]

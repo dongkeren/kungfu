@@ -117,6 +117,14 @@ if (agentWorkLabOnly) {
       'TUI Getting Started',
       'framework/tui/src/agent-first-onboarding-view.test.ts',
     ],
+    [
+      'TUI deterministic Project onboarding',
+      'framework/tui/src/starter-project-view.test.ts',
+    ],
+    [
+      'API deterministic Project onboarding',
+      'framework/api/tests/projects.test.ts',
+    ],
     ['TUI experience', 'framework/tui/src/agent-work-lab-view.test.ts'],
     ['TUI workbench framework', 'framework/tui/src/profile-shell.test.ts'],
     ['Product TUI demo entry', 'product/scripts/product.test.mjs'],
@@ -151,6 +159,14 @@ if (agentWorkLabOnly) {
       'ruff',
       'format',
       '--check',
+      path.join(
+        root,
+        'framework/core/src/python/kungfu/agent/runtime_profiles.py',
+      ),
+      path.join(
+        root,
+        'framework/core/src/python/kungfu/agent/work_projection.py',
+      ),
       path.join(root, 'framework/core/src/python/kungfu/agent_work_lab.py'),
       path.join(
         root,

@@ -21,7 +21,7 @@
       "atlas": "framework/agent-work/role-schemas/atlas.schema.json",
       "warrant": "framework/agent-work/role-schemas/warrant.schema.json"
     },
-    "abstractionAuthorityRoot": "sha256:bca8cf2cb144dd05250e3bea9d274394cdf47b141a7795c5a1ffc2d95bcd5ca6",
+    "abstractionAuthorityRoot": "sha256:3feacc972ba83311045dd5f6b219fd92827a50c8d6f5240f13cb127908965063",
     "abstractionAuthorityPath": "framework/work-lifecycle/kungfu-work-lifecycle-operation-matrix.contract.json",
     "sourceRoot": "sha256:be4c92b368d0b015b78d1a67a1087c2a11c9f85eaebfc8c203ad695ac6ba3e4d",
     "sourcePath": "framework/agent-work/kungfu-agent-work-domain-profile.contract.json"
@@ -200,7 +200,7 @@
     "evidencePath": "framework/work-profile-conformance/qualification/kfd-7-product-gate.json",
     "evidencePointer": null,
     "authorityPath": ".buildchain/alpha-contract-lock.json",
-    "authorityRoot": "sha256:75c82a34f4c0b5e8f2f607814872e5414b3e06c24bee255a0081b00d08e7b39b"
+    "authorityRoot": "sha256:e36f382e47ec5d4cd9a3e5087fc0110deab6568ac14c7797abf3759de65d5191"
   },
   "workOperationModel": {
     "authority": "existing-work-api",

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-"""Bounded executable verification probes for Agent Runtime Profiles."""
+"""Executable verification probes for Agent Runtime Profiles."""
 
 from __future__ import annotations
 
@@ -22,14 +22,14 @@ def parse_semantic_version(output: str) -> str | None:
 
 
 class VerificationProbe:
-    """Inspect only one declared executable with a bounded version command."""
+    """Inspect only one declared executable with its version command."""
 
     def __init__(
         self,
         *,
         schema: str,
         default_timeout_seconds: float = 5.0,
-        provider_timeouts: Mapping[str, float] | None = None,
+        provider_timeouts: Mapping[str, float | None] | None = None,
         run: Callable[..., Any] = subprocess.run,
     ) -> None:
         self.schema = schema
@@ -37,7 +37,7 @@ class VerificationProbe:
         self.provider_timeouts = dict(provider_timeouts or {})
         self.run = run
 
-    def timeout(self, provider: str) -> float:
+    def timeout(self, provider: str) -> float | None:
         return self.provider_timeouts.get(provider, self.default_timeout_seconds)
 
     def raw_version(
@@ -82,6 +82,7 @@ class VerificationProbe:
         )
         version = None
         error = None
+        warning = None
         if available:
             try:
                 result = self.run(
@@ -99,14 +100,14 @@ class VerificationProbe:
                 )
                 text = (result.stdout or result.stderr or "").strip()
                 if result.returncode != 0:
-                    error = f"version probe exited {result.returncode}"
+                    warning = f"version probe exited {result.returncode}"
                 elif text:
                     first_line = text.splitlines()[0].strip()[:256]
                     version = parse_semantic_version(first_line) or first_line
                 else:
-                    error = "version probe returned no output"
+                    warning = "version probe returned no output"
             except (OSError, subprocess.SubprocessError) as exc:
-                error = str(exc)
+                warning = str(exc)
         else:
             error = "executable is missing or not executable"
         return {
@@ -117,8 +118,10 @@ class VerificationProbe:
             "argv": probe_argv,
             "available": available,
             "version": version,
-            "ok": available and error is None,
+            "ok": available,
             "error": error,
+            "warning": warning,
+            "versionAdmission": "diagnostic-only",
             "observedAt": datetime.now(UTC).isoformat(),
             "privacyBoundary": "bounded declared executable version probe only",
         }

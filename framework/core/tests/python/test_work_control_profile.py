@@ -10,6 +10,9 @@ import pytest
 
 from kungfu import assignment_orchestration, profile_composition, profile_sdk
 from kungfu.agent import work_profile
+from kungfu.atlas import mission_control
+from kungfu.rewind import reporting as rewind_reporting
+from kungfu.storage import service as storage_service
 
 
 SOURCE = Path(__file__).resolve().parents[4] / "extensions" / "work-control"
@@ -19,6 +22,190 @@ def _activate(source: Path, runtime: Path) -> None:
     for action in ("install", "qualify", "activate"):
         plan = profile_sdk.lifecycle_plan(runtime, action, source)["corePlan"]
         profile_sdk.lifecycle_apply(runtime, plan, f"test:{action}")
+
+
+def _materialize_contract(source: Path, runtime: Path) -> None:
+    contract = profile_composition.contract_materialization_plan(source, runtime)
+    if contract["operations"]:
+        profile_composition.authorized_contract_materialize(
+            runtime,
+            contract,
+            profile_sdk.answer_decision(
+                contract["decisionCard"], "approve", "test-owner"
+            ),
+        )
+
+
+def test_completion_review_deduplicates_one_subject_across_authorities(tmp_path):
+    runtime = tmp_path / "runtime"
+    _activate(SOURCE, runtime)
+    _materialize_contract(SOURCE, runtime)
+    mission_control.create_initiative(
+        str(runtime),
+        initiative_id="user-mission",
+        title="User Mission",
+        intent="Retain the user authority fact",
+        actor="test-user",
+        actor_type="user",
+    )
+    mission_control.create_initiative(
+        str(runtime),
+        initiative_id="agent-mission",
+        title="Agent Mission",
+        intent="Retain the agent authority fact",
+        actor="test-agent",
+        actor_type="agent",
+    )
+    for initiative_id, actor, actor_type in (
+        ("user-mission", "test-user", "user"),
+        ("agent-mission", "test-agent", "agent"),
+    ):
+        mission_control.create_assignment(
+            str(runtime),
+            initiative_id=initiative_id,
+            assignment_id="shared-assignment",
+            title="Shared Assignment",
+            objective="Preserve both authority claims for one subject",
+            actor=actor,
+            actor_type=actor_type,
+        )
+
+    state = mission_control.query_state(
+        str(runtime), mission_id="agent-mission", storage_source_id="kungfu"
+    )
+    matching = [
+        row
+        for row in state["goals"]
+        if row["subject_key"] == "kungfu:shared-assignment"
+    ]
+    assert len(matching) == 2
+    assert {row["source_id"] for row in matching} == {
+        "kungfu-agent",
+        "kungfu-user",
+    }
+
+    mission_control.claim_completion(
+        str(runtime),
+        mission_id="agent-mission",
+        goal_id="shared-assignment",
+        statement="The shared Assignment is ready for review",
+        actor="test-agent",
+        storage_source_id="kungfu",
+    )
+    review = mission_control.review_completion(
+        str(runtime),
+        mission_id="agent-mission",
+        goal_id="shared-assignment",
+        reviewer="independent-reviewer",
+        reviewer_source="independent-review-run",
+        storage_source_id="kungfu",
+    )
+    assert review["review"]["claimant"] == "test-agent"
+    assert review["review"]["reviewer"] == "independent-reviewer"
+
+
+@pytest.mark.parametrize(
+    ("agent_request_root", "expected_verdict", "expected_conflict_count"),
+    [
+        ("sha256:" + "1" * 64, "fit", 0),
+        ("sha256:" + "2" * 64, "conflicted", 1),
+    ],
+)
+def test_completion_review_converges_only_exact_native_assignment_definitions(
+    tmp_path, agent_request_root, expected_verdict, expected_conflict_count
+):
+    runtime = tmp_path / "runtime"
+    _activate(SOURCE, runtime)
+    _materialize_contract(SOURCE, runtime)
+    mission_control.create_initiative(
+        str(runtime),
+        initiative_id="initiative-a",
+        title="Initiative A",
+        intent="Prove exact cross-authority Assignment convergence",
+        actor="test-agent",
+        actor_type="agent",
+    )
+    work_definition = {
+        "goal_id": "assignment-a",
+        "initiative_id": "initiative-a",
+        "title": "Assignment A",
+        "objective": "Preserve provenance without inventing a semantic conflict",
+    }
+    for actor, actor_type, request_root in (
+        ("test-user", "user", "sha256:" + "1" * 64),
+        ("test-agent", "agent", agent_request_root),
+    ):
+        mission_control.create_assignment(
+            str(runtime),
+            initiative_id="initiative-a",
+            assignment_id="assignment-a",
+            title="Assignment A",
+            objective="Preserve provenance without inventing a semantic conflict",
+            actor=actor,
+            actor_type=actor_type,
+            responsibility="assignment-a-owner",
+            request_root=request_root,
+            work_definition=work_definition,
+            storage_source_id="kungfu",
+        )
+
+    raw_state = mission_control.query_state(
+        str(runtime), mission_id="initiative-a", storage_source_id="kungfu"
+    )
+    assert len(raw_state["lineage"]["conflicts"]) == 1
+    assert len(raw_state["goals"]) == 2
+
+    rewind_reporting.begin_run(
+        str(runtime),
+        run_id="assignment-a-run",
+        provider="codex",
+        cwd=None,
+        work_id="assignment-a",
+    )
+    rewind_reporting.report_cost(
+        str(runtime),
+        run_id="assignment-a-run",
+        provider="codex",
+        surface="exec-json",
+        source="codex-exec-json",
+        attribution="exact_run",
+        work_id="assignment-a",
+        input_tokens=8,
+        output_tokens=2,
+        cost_usd=0.01,
+    )
+    rewind_reporting.end_run(
+        str(runtime), run_id="assignment-a-run", status="succeeded", exit_code=0
+    )
+    work_episode = next(
+        row
+        for row in storage_service.episode_list(runtime)["episodes"]
+        if row["open"]["source"] == "rewind:assignment-a-run"
+    )
+    mission_control.claim_completion(
+        str(runtime),
+        mission_id="initiative-a",
+        goal_id="assignment-a",
+        statement="Assignment A is complete with exact evidence",
+        actor="test-agent",
+        actor_type="agent",
+        storage_source_id="kungfu",
+        evidence_episode_ids=[int(work_episode["episode_id"])],
+    )
+    review = mission_control.review_completion(
+        str(runtime),
+        mission_id="initiative-a",
+        goal_id="assignment-a",
+        reviewer="independent-reviewer",
+        reviewer_source="independent-review-run",
+        storage_source_id="kungfu",
+    )
+    assert review["review"]["verdict"] == expected_verdict
+    assert (
+        review["trust_report"]["assessment"]["report"]["evidence"]["conflict_count"]
+        == expected_conflict_count
+    )
+    assert len(review["trust_report"]["state"]["lineage"]["conflicts"]) == 1
 
 
 def _copy_source(tmp_path: Path) -> Path:

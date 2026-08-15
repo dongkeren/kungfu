@@ -1,0 +1,26 @@
+{
+  "name": "@kungfu-kfx/github-dogfood-bridge",
+  "version": "0.1.0",
+  "description": "Optional authorized bridge from normalized GitHub observations to immutable Dogfood Findings",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "README.md",
+    "fixtures",
+    "kungfu.kfx.json",
+    "sdk",
+    "src",
+    "test"
+  ],
+  "scripts": {
+    "qualify": "node test/qualify.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "kungfuAuthoring": {
+    "productVersion": "4.0.0-alpha.2",
+    "kitRoot": "sha256:36486ad8eb493de96f551089191e2ccf130c638ee44194a36d6f58d8a2f12ca6",
+    "sdkRoot": "sha256:2dc5182cd834d7e0597277af523d2196509b7e1583d6a62b70a25874f5c69fce"
+  }
+}

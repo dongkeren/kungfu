@@ -32,6 +32,7 @@ function fixture() {
     'node_modules/@kungfu-tech/buildchain/dist/site/buildchain-contract.json',
     'node_modules/@kungfu-tech/buildchain/dist/site/publication-authority-registry.json',
     'docs/qualification/gates',
+    'docs/qualification/evidence/kungfu-temporal-release-admission-facts.json',
     'framework/primitive/kungfu-primitive-catalog.contract.json',
     'config/primitive/kungfu-primitive-catalog.contract.json',
     'docs/qualification/evidence/layer-gates/c4ba70d95/linux-x64.raw/layer-artifact-gate-receipt.json',
@@ -233,9 +234,9 @@ test('current Kungfu catalog, docs, matrix, actions, and workflows align', () =>
   const controllers = result.workflowFacts.filter(
     (fact) => fact.execution === 'controller',
   );
-  assert.equal(controllers.length, 10);
+  assert.equal(controllers.length, 11);
   assert.ok(controllers.every((fact) => fact.gates.length > 0));
-  assert.equal(result.workflowAuthority.workflows.length, 36);
+  assert.equal(result.workflowAuthority.workflows.length, 38);
   const agentPatrol = result.workflowAuthority.workflows.find(
     (workflow) => workflow.path === '.github/workflows/kungfu-agent-patrol.yml',
   );

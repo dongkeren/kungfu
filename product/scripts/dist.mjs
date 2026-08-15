@@ -26,6 +26,7 @@ import {
   isShippedKfdSupport,
   runInstalledActionPrimitiveDiscovery,
   runInstalledCliSemanticSmoke,
+  runInstalledEmbeddedNodeAddonSmoke,
   runInstalledKungfu,
   runInstalledKungfuActionSmoke,
   runInstalledKungfuAgentHubSmoke,
@@ -36,8 +37,10 @@ import {
 } from './installed-kungfu/index.mjs';
 export {
   installedKungfuInvocation,
+  isInstalledKfdBuildClosure,
   isShippedKfdSupport,
   runInstalledCliSemanticSmoke,
+  runInstalledEmbeddedNodeAddonSmoke,
   runInstalledKungfu,
   runInstalledKungfuAgentHubSmoke,
   runInstalledKungfuCommand,
@@ -51,9 +54,12 @@ import {
 import * as symlinks from './portable-symlinks.mjs';
 import { productReleaseChannelConfig } from './release-channel-trust.mjs';
 import {
+  assertNodePtyPackageIdentity,
   assertSupportedProductHost,
+  nodePtyRuntimeClosure,
   readTrunkRuntimePinSnapshot,
   runProductAssembly,
+  verifyNodePtyRuntimeClosure,
 } from './runtime-pin-snapshot.mjs';
 import {
   buildCliUpgradeManifest,
@@ -89,6 +95,8 @@ const DESKTOP_RELEASE_DIR = path.join(RELEASE_DIR, 'desktop');
 const CLI_RELEASE_DIR = path.join(RELEASE_DIR, 'cli');
 const NPM_RELEASE_DIR = path.join(RELEASE_DIR, 'npm');
 const CLI_ARCHIVE_PREFIX = 'kungfu-episodes-cli';
+const AGENT_SESSION_CONTRACT_FILE = 'kungfu-agent-session.contract.json';
+const CODEX_APP_SERVER_CONTRACT_FILE = 'kungfu-codex-app-server.contract.json';
 const CLI_SURFACE_CATALOG = path.join(
   ROOT,
   'framework',
@@ -574,12 +582,17 @@ function parseJsonOutput(output, label) {
   }
 }
 
-function listKfxPackages() {
+export function listKfxPackages() {
   const packages = [];
   const visit = (dir, depth) => {
     if (depth > 2 || !fs.existsSync(dir)) return;
+    const packagePath = path.join(dir, 'package.json');
+    if (fs.existsSync(packagePath)) {
+      const pkg = readJson(packagePath);
+      if (pkg.kungfuProduct?.assembly === 'reference-only') return;
+    }
     if (fs.existsSync(path.join(dir, 'kungfu.kfx.json'))) {
-      const pkg = readJson(path.join(dir, 'package.json'));
+      const pkg = readJson(packagePath);
       const manifest = readJson(path.join(dir, 'kungfu.kfx.json'));
       if (manifest?.name && manifest?.kungfuConfig) {
         packages.push({
@@ -898,6 +911,17 @@ function assertCoreAssembled() {
 // env/package surface) ships next to the assembled product, together with its
 // runtime-pins manifest. UV_VERSION in the manifest must equal the repo's
 // .uv-version so the product and the dev launcher pull the same pinned uv.
+export function stageProductTrunkEntrypoints(
+  trunkBin,
+  runtimeRoot,
+  platform = process.platform,
+) {
+  const suffix = platform === 'win32' ? '.exe' : '';
+  for (const name of ['kungfu-trunk', 'kungfu']) {
+    fs.copyFileSync(trunkBin, path.join(runtimeRoot, `${name}${suffix}`));
+  }
+}
+
 function stageTrunk(runtimePinSnapshot) {
   // KF-ADR-019f86da-4f90-73ff-9543-f0a4f0beef05 stage 3 productionization: link the embedding membrane and ship the
   // real embedding-backed doctor on every platform. POSIX links the SHARED
@@ -936,7 +960,7 @@ function stageTrunk(runtimePinSnapshot) {
   if (!fs.existsSync(trunkBin)) {
     throw new Error(`cargo did not produce ${rel(trunkBin)}`);
   }
-  fs.copyFileSync(trunkBin, path.join(CORE_DIST, path.basename(trunkBin)));
+  stageProductTrunkEntrypoints(trunkBin, CORE_DIST);
   fs.writeFileSync(
     path.join(CORE_DIST, 'runtime-pins.env'),
     runtimePinSnapshot.runtimePins,
@@ -1003,29 +1027,113 @@ export function stageNodePtyForCli(
   platform = process.platform,
   architecture = process.arch,
 ) {
+  assertNodePtyPackageIdentity(source);
+  const closure = nodePtyRuntimeClosure(platform, architecture);
   copyTree(source, target);
-  if (platform === 'linux') {
-    const nativeDirectory = path.join('build', 'Release');
-    const targetNativeDirectory = path.join(target, nativeDirectory);
-    fs.mkdirSync(targetNativeDirectory, { recursive: true });
-    const input = path.join(source, nativeDirectory, 'pty.node');
-    if (!fs.existsSync(input) || !fs.lstatSync(input).isFile()) {
-      throw new Error(
-        `required Linux node-pty runtime not found: ${rel(input)}`,
-      );
+  const prebuilds = path.join(target, 'prebuilds');
+  if (fs.existsSync(prebuilds)) {
+    const selected =
+      platform === 'darwin' || platform === 'win32'
+        ? `${platform}-${architecture}`
+        : null;
+    for (const entry of fs.readdirSync(prebuilds)) {
+      if (entry !== selected) {
+        fs.rmSync(path.join(prebuilds, entry), {
+          recursive: true,
+          force: true,
+        });
+      }
     }
-    fs.copyFileSync(input, path.join(targetNativeDirectory, 'pty.node'));
-  } else if (platform === 'darwin') {
-    fs.chmodSync(
-      path.join(
-        target,
-        'prebuilds',
-        `${platform}-${architecture}`,
-        'spawn-helper',
-      ),
-      0o755,
+    if (selected === null) fs.rmSync(prebuilds, { recursive: true });
+  }
+  if (platform === 'linux') {
+    // node-pty 1.1.0 builds spawn-helper only on Darwin. Linux uses forkpty,
+    // so restore only the addon that copyTree deliberately excludes with build/.
+    for (const relative of closure.requiredFiles) {
+      const input = path.join(source, relative);
+      if (!fs.existsSync(input) || !fs.lstatSync(input).isFile()) {
+        throw new Error(
+          `required node-pty runtime file not found: ${rel(input)}`,
+        );
+      }
+      const output = path.join(target, relative);
+      fs.mkdirSync(path.dirname(output), { recursive: true });
+      fs.copyFileSync(input, output);
+    }
+  }
+  for (const relative of closure.executableFiles) {
+    fs.chmodSync(path.join(target, relative), 0o755);
+  }
+  verifyNodePtyRuntimeClosure(target, platform, architecture);
+}
+
+export function verifyDarwinCliExecutableLayout(installRoot, run = spawnSync) {
+  if (process.platform !== 'darwin') return null;
+  const layout = cliArchiveLayout('darwin');
+  const nodePtyRoot = path.join(
+    installRoot,
+    'tui',
+    'node_modules',
+    'node-pty',
+    'prebuilds',
+  );
+  const selectedPrebuild = `darwin-${process.arch}`;
+  const prebuilds = fs.readdirSync(nodePtyRoot).sort();
+  if (prebuilds.join('\0') !== selectedPrebuild) {
+    throw new Error(
+      `macOS CLI node-pty closure is not architecture-exact: ${prebuilds.join(', ')}`,
     );
   }
+  const machObjects = [
+    path.join(installRoot, layout.runtimeEntrypoint),
+    path.join(installRoot, layout.pythonEntrypoint),
+    path.join(nodePtyRoot, selectedPrebuild, 'pty.node'),
+    path.join(nodePtyRoot, selectedPrebuild, 'spawn-helper'),
+  ];
+  const executablePaths = new Set([
+    machObjects[0],
+    machObjects[1],
+    machObjects[3],
+  ]);
+  for (const executable of machObjects) {
+    if (
+      executablePaths.has(executable) &&
+      (fs.statSync(executable).mode & 0o111) === 0
+    ) {
+      throw new Error(`macOS CLI executable bit is missing: ${executable}`);
+    }
+    const architecture = run('file', ['-b', executable], {
+      encoding: 'utf8',
+    });
+    if (
+      architecture.status !== 0 ||
+      !String(architecture.stdout).includes('arm64') ||
+      String(architecture.stdout).includes('x86_64')
+    ) {
+      throw new Error(
+        `macOS CLI executable architecture is not arm64: ${executable}`,
+      );
+    }
+    const signature = run(
+      'codesign',
+      ['--verify', '--strict', '--verbose=2', executable],
+      { encoding: 'utf8' },
+    );
+    if (signature.status !== 0) {
+      throw new Error(
+        `macOS CLI executable signature is invalid: ${executable}: ${signature.stderr || signature.stdout}`,
+      );
+    }
+  }
+  return {
+    architecture: 'arm64',
+    architectureExact: true,
+    executableBits: true,
+    codesignStrict: true,
+    nodePtyPrebuild: selectedPrebuild,
+    notarization:
+      'protected-release-credential-island-not-claimed-by-dev-build',
+  };
 }
 
 function bundleSdkForCli(stageRoot, esbuildRuntime) {
@@ -1132,6 +1240,40 @@ export function stageActionPackage(stageRoot) {
   return target;
 }
 
+function stageAgentSessionContractsForCli(stageRoot) {
+  for (const relative of [
+    AGENT_SESSION_CONTRACT_FILE,
+    CODEX_APP_SERVER_CONTRACT_FILE,
+  ]) {
+    const source = path.join(AGENT_SESSION_DIR, relative);
+    const destination = path.join(stageRoot, relative);
+    assertFile(source, `Agent Session contract ${relative}`);
+    fs.copyFileSync(source, destination);
+  }
+  copyTree(
+    path.join(AGENT_SESSION_DIR, 'schemas'),
+    path.join(stageRoot, 'schemas'),
+  );
+
+  const codexContract = readJson(
+    path.join(stageRoot, CODEX_APP_SERVER_CONTRACT_FILE),
+  );
+  const schemaManifest = codexContract.surfacePin?.schemaManifest;
+  if (
+    typeof schemaManifest !== 'string' ||
+    path.isAbsolute(schemaManifest) ||
+    schemaManifest.split(/[\\/]/u).includes('..')
+  ) {
+    throw new Error(
+      'Codex App Server contract declares an unsafe schema manifest path',
+    );
+  }
+  assertFile(
+    path.join(stageRoot, schemaManifest),
+    'Codex App Server schema manifest',
+  );
+}
+
 function stageDesktopAuthoringRuntime(esbuildRuntime) {
   assertSafeGeneratedDir(DESKTOP_AUTHORING_DIR);
   fs.rmSync(DESKTOP_AUTHORING_DIR, { recursive: true, force: true });
@@ -1211,6 +1353,9 @@ export function writeAuditableDemoBinaryMetadata(
 
 function writeCliManifest(stageRoot, archiveName, layout) {
   const surfaceCatalog = readJson(CLI_SURFACE_CATALOG);
+  const codexAppServerContract = readJson(
+    path.join(stageRoot, CODEX_APP_SERVER_CONTRACT_FILE),
+  );
   const update = fs.existsSync(RELEASE_CHANNEL_TRUST)
     ? {
         channels: {
@@ -1273,6 +1418,10 @@ function writeCliManifest(stageRoot, archiveName, layout) {
           kfdAgentRuntime: `runtime/${isWin ? 'kungfu-kfd-agent-runtime.exe' : 'kungfu-kfd-agent-runtime'}`,
           kfdAgentRuntimeManifest: 'runtime/kfd-agent-runtime.manifest.json',
           tui: 'tui/tui.mjs',
+          agentSessionContract: AGENT_SESSION_CONTRACT_FILE,
+          codexAppServerContract: CODEX_APP_SERVER_CONTRACT_FILE,
+          codexAppServerSchemaManifest:
+            codexAppServerContract.surfacePin.schemaManifest,
           extensions: 'extensions',
           templates: 'templates',
           upgradeManifest: 'upgrade/kungfu-release-manifest.json',
@@ -1376,13 +1525,6 @@ export function runInstalledKungfuAssignmentAdmissionSmoke({
     ...env,
     HOME: userHome,
     USERPROFILE: userHome,
-    KUNGFU_INSTALL_SOURCE: 'archive',
-    KUNGFU_DIR: installRoot,
-    KUNGFU_UPGRADE_MANIFEST: path.join(
-      installRoot,
-      'upgrade',
-      'kungfu-release-manifest.json',
-    ),
   };
   fs.mkdirSync(workspace, { recursive: true });
   fs.writeFileSync(
@@ -1586,6 +1728,21 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           'kfdAgentRuntimeManifest',
         );
         const tuiEntry = entryPath(installRoot, manifest.entries, 'tui');
+        const agentSessionContract = entryPath(
+          installRoot,
+          manifest.entries,
+          'agentSessionContract',
+        );
+        const codexAppServerContract = entryPath(
+          installRoot,
+          manifest.entries,
+          'codexAppServerContract',
+        );
+        const codexAppServerSchemaManifest = entryPath(
+          installRoot,
+          manifest.entries,
+          'codexAppServerSchemaManifest',
+        );
         const extensionsRoot = entryPath(
           installRoot,
           manifest.entries,
@@ -1640,6 +1797,26 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           'installed KFD Agent Runtime manifest',
         );
         assertFile(tuiEntry, 'installed TUI entry');
+        assertFile(agentSessionContract, 'installed Agent Session contract');
+        assertFile(
+          codexAppServerContract,
+          'installed Codex App Server contract',
+        );
+        assertFile(
+          codexAppServerSchemaManifest,
+          'installed Codex App Server schema manifest',
+        );
+        const installedCodexContract = readJson(codexAppServerContract);
+        if (
+          path.resolve(
+            installRoot,
+            installedCodexContract.surfacePin?.schemaManifest ?? '',
+          ) !== path.resolve(codexAppServerSchemaManifest)
+        ) {
+          throw new Error(
+            'CLI product manifest Codex schema entry drifted from its contract',
+          );
+        }
         assertDirectory(extensionsRoot, 'installed kfx extensions');
         assertDirectory(templatesRoot, 'installed SDK templates');
 
@@ -1720,6 +1897,11 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           kungfuBin,
           env: smokeEnv,
         });
+        runInstalledEmbeddedNodeAddonSmoke({
+          installRoot,
+          runtimeEntry,
+          env: smokeEnv,
+        });
         runInstalledTuiBootstrapSmoke({
           installRoot,
           kungfuBin,
@@ -1732,6 +1914,8 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           kungfuBin,
           env: smokeEnv,
         });
+        const platformVerification =
+          verifyDarwinCliExecutableLayout(installRoot);
         const qualification = qualifyCliSurface({
           cli: kungfuBin,
           expectedCatalog: readJson(CLI_SURFACE_CATALOG),
@@ -1739,6 +1923,8 @@ export function smokeCliProductArchive({ archivePath, archiveBase }) {
           identity: {
             archive: path.basename(archivePath),
             archiveSha256: sha256File(archivePath),
+            sourceCommit: upgradeIdentity.sourceCommit,
+            ...(platformVerification ? { platformVerification } : {}),
           },
           environment: smokeEnv,
           runCommand: runInstalledKungfuCommand,
@@ -1794,6 +1980,7 @@ function buildCliProduct(esbuildRuntime) {
         ),
         path.join(stageRoot, 'tui', 'node_modules', 'node-pty'),
       );
+      stageAgentSessionContractsForCli(stageRoot);
       bundleSdkForCli(stageRoot, esbuildRuntime);
       const bundledUpgradeManifest = buildCliUpgradeManifest({
         stageRoot,

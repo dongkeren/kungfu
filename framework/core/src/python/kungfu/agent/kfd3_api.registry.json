@@ -135,6 +135,11 @@
       "projections": ["commands.json", "provider-skill"]
     },
     {
+      "id": "kungfu.agent.skill-advisory", "surface": "cli",
+      "name": "kungfu agent skill-advisory --signals <signals.json> --json", "purpose": "Return exactly one rooted, authority-free Skill reuse, creation, draft, plan, or none decision from bounded structured signals.",
+      "maturity": "preview", "visibility": "public-agent", "anchor": {"kind": "runtime-click", "symbol": "skill_advisory_command"}, "projections": ["commands.json", "agent-pack-doc", "provider-skill"]
+    },
+    {
       "id": "kungfu.agent.map",
       "surface": "cli",
       "name": "kungfu agent map --json",
@@ -1984,7 +1989,7 @@
       "projections": [
         "commands.json"
       ]
-    },
+    }, {"id":"kungfu.skill.author.contract","surface":"cli","name":"kungfu skill author contract --json","purpose":"Discover the exact rooted workspace-local Skill authoring constraints, schemas, examples, actions, and non-claims.","maturity":"stable","visibility":"adjacent-agent","anchor":{"kind":"catalog"},"projections":["commands.json","agent-pack-doc"]}, {"id":"kungfu.skill.author.catalog","surface":"cli","name":"kungfu skill author catalog --json","purpose":"Read the exact current Skill candidate catalog root required for mandatory deduplication.","maturity":"stable","visibility":"adjacent-agent","anchor":{"kind":"catalog"},"projections":["commands.json","agent-pack-doc"]}, {"id":"kungfu.skill.author.inspect","surface":"cli","name":"kungfu skill author inspect --spec <spec.json> --json","purpose":"Compare one bounded Skill proposal with the current rooted catalog and fail closed on duplicates or ambiguity.","maturity":"stable","visibility":"adjacent-agent","anchor":{"kind":"catalog"},"projections":["commands.json"]}, {"id":"kungfu.skill.author.scaffold","surface":"cli","name":"kungfu skill author scaffold --signals <signals.json> --spec <spec.json> --workspace <path> --target <relative-path> --json","purpose":"Preview or exact-root execute one deterministic new workspace-local instruction-only Skill draft without lifecycle mutation.","maturity":"stable","visibility":"adjacent-agent","anchor":{"kind":"catalog"},"projections":["commands.json","agent-pack-doc"]}, {"id":"kungfu.skill.author.qualify","surface":"cli","name":"kungfu skill author qualify <draft-path> --json","purpose":"Qualify one exact draft as workspace-local instruction-only content without claiming installation, activation, or Work completion.","maturity":"stable","visibility":"adjacent-agent","anchor":{"kind":"catalog"},"projections":["commands.json"]},
     {
       "id": "kungfu.kfx.install",
       "surface": "cli",
@@ -2374,21 +2379,13 @@
         "kfd-3-surfaces"
       ]
     },
-    {
-      "id": "kungfu.agent-work-lab.inspect",
-      "surface": "cli-api-gui",
-      "name": "kungfu agent-work-lab inspect --json",
-      "purpose": "Resolve an empty, existing-Work, or diagnostic startup route without materializing runtime state.",
-      "maturity": "experimental",
-      "visibility": "public-agent",
-      "anchor": {
-        "kind": "catalog"
-      },
-      "projections": [
-        "capabilities-json",
-        "kfd-3-surfaces"
-      ]
-    },
+    {"id":"kungfu.agent-work-lab.open","surface":"cli-api-tui","name":"kungfu agent-work-lab open","purpose":"Enter the interactive Agent Work Lab directly without changing the user's onboarding or Work state.","maturity":"experimental","visibility":"public-human","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
+    {"id":"kungfu.agent-work-lab.watch","surface":"cli-api-tui","name":"kungfu agent-work-lab watch","purpose":"Launch the playback-only continuity demonstration without claiming that an installed Agent was tested.","maturity":"experimental","visibility":"public-human","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
+    {"id":"kungfu.agent-work-lab.tour","surface":"cli-api-tui","name":"kungfu agent-work-lab tour [--episode 1|2|all] [--speed <rate>]","purpose":"Launch the playback-only disposable Project failure, recovery, review, and settlement story.","maturity":"experimental","visibility":"public-human","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
+    {"id":"kungfu.agent-work-lab.try","surface":"cli-api-tui","name":"kungfu agent-work-lab try [--destination <path>] [--expected-plan-root <root> --execute]","purpose":"Preview, then explicitly create and open one retained Starter Project without overwriting an existing path.","maturity":"experimental","visibility":"public-human","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
+    {"id":"kungfu.agent-work-lab.test","surface":"cli-api","name":"kungfu agent-work-lab test [agent] [--target-agent <agent>] [--execute] [--json]","purpose":"Resolve human Agent names to exact profiles, preview the test, and after explicit authorization retain same-Agent or cross-Agent continuity evidence.","maturity":"experimental","visibility":"public-agent","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
+    {"id":"kungfu.agent-work-lab.report","surface":"cli-api","name":"kungfu agent-work-lab report [result] [--json]","purpose":"Reopen and root-verify the latest bounded retained test report or one exact supplied report.","maturity":"experimental","visibility":"public-agent","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
+    {"id":"kungfu.agent-work-lab.inspect","surface":"cli-api-gui","name":"kungfu agent-work-lab inspect --json","purpose":"Resolve an empty, existing-Work, or diagnostic startup route without materializing runtime state.","maturity":"experimental","visibility":"public-agent","anchor":{"kind":"catalog"},"projections":["capabilities-json","kfd-3-surfaces"]},
     {
       "id": "kungfu.agent-work-lab.catalog",
       "surface": "cli-api-gui",

@@ -7,9 +7,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  createAttachedAgentSessionHost,
   createDetachedAgentSessionHost,
   detachedAgentSessionPaths,
 } from '../src/product-client.mjs';
+import { invokeAgentSessionSurfaceRpc } from '../src/product-rpc.mjs';
 
 const FIXTURE = fileURLToPath(
   new URL('./fixtures/product-worker-fixture.mjs', import.meta.url),
@@ -31,6 +33,40 @@ test('detached endpoint is stable per runtime root and derived only from it', ()
       ? `\\\\.\\pipe\\kungfu-agent-session-${expectedScope}`
       : path.join(first.socketDirectory, `${expectedScope}.sock`),
   );
+  if (process.platform !== 'win32') {
+    assert.equal(
+      first.socketDirectory,
+      path.join('/tmp', `kungfu-agent-session-${process.getuid?.() ?? 'user'}`),
+    );
+  }
+});
+
+test('attached host readiness and retirement follow its owner lifecycle', async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), 'kungfu-session-attached-'),
+  );
+  const host = createAttachedAgentSessionHost({
+    runtimeDir: root,
+    ptyModule: '/not-loaded-for-capabilities.js',
+  });
+  try {
+    assert.equal(
+      (await host.invoke({ operation: 'capabilities' })).schema,
+      'kungfu.agent-session.surface-capabilities/v1',
+    );
+    assert.equal(
+      (
+        await invokeAgentSessionSurfaceRpc({
+          endpoint: host.endpoint,
+          request: { operation: 'capabilities' },
+        })
+      ).schema,
+      'kungfu.agent-session.surface-capabilities/v1',
+    );
+  } finally {
+    await host.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('filesystem aliases resolve to one detached endpoint', async () => {
@@ -67,6 +103,10 @@ test('a new main client reconnects to one worker and worker loss never fakes con
     runtimeDir: root,
     executable: process.execPath,
     workerPath: FIXTURE,
+    env: {
+      ...process.env,
+      KUNGFU_NODE_VARIANT_ENTRY: '/product/tui/tui.mjs',
+    },
     spawnProcess,
     unrefWorker: false,
   };
@@ -82,6 +122,7 @@ test('a new main client reconnects to one worker and worker loss never fakes con
     });
     assert.equal(children.length, 1);
     assert.equal(spawnedEnvironments[0].KUNGFU_AS_VARIANT, 'node');
+    assert.equal(spawnedEnvironments[0].KUNGFU_NODE_VARIANT_ENTRY, undefined);
 
     children[0].kill('SIGTERM');
     await new Promise((resolve) => children[0].once('exit', resolve));

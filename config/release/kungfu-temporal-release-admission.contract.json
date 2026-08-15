@@ -1,0 +1,55 @@
+{
+  "schema": "kungfu.temporal-release-admission-contract/v1",
+  "id": "kungfu-temporal-release-admission",
+  "status": "implemented",
+  "objective": "Admit a release only through one exact bounded path joining Buildchain compatibility proofs, Kungfu release provenance, qualification, approval, and authority.",
+  "maximumPathDepth": 2,
+  "defaultMode": "dual-read",
+  "rollbackMode": "legacy-exact",
+  "releaseAuthorityIdentity": "kungfu-systems/kungfu:.github/workflows/release-new-version.yml",
+  "requiredReleaseSurfaces": [
+    "advanced-release-candidate-promote",
+    "promote-buildchain-ref-action",
+    "release-candidate-promote"
+  ],
+  "exactBindings": [
+    "repository",
+    "channel",
+    "sourceSha",
+    "sourceTree",
+    "candidateObjectRoot",
+    "artifactRoot",
+    "runtimeSha",
+    "contractDigest",
+    "qualificationRoot",
+    "approvalRoot",
+    "authorityRoot"
+  ],
+  "factAuthority": {
+    "projection": "docs/qualification/evidence/kungfu-temporal-release-admission-facts.json",
+    "activeSelection": "activeProofRoots",
+    "admittedDigests": "derived-from-active-proof-records",
+    "orphanPolicy": "reject"
+  },
+  "dualRead": {
+    "legacyField": "publicationContractDigests",
+    "parity": "generated-exact-set-from-active-proof-roots",
+    "mismatch": "fail-closed"
+  },
+  "rollback": {
+    "switch": "KUNGFU_TEMPORAL_RELEASE_ADMISSION_MODE=legacy-exact",
+    "scope": "prior exact contract whitelist only",
+    "historicalMutation": false
+  },
+  "receipt": {
+    "schema": "kungfu.temporal-release-admission-receipt/v1",
+    "positiveAndNegative": true,
+    "privatePayload": false,
+    "diagnostics": "stable rooted reason codes"
+  },
+  "safety": {
+    "realPublicationRequired": false,
+    "implicitComposition": "forbidden",
+    "majorLineInference": "forbidden"
+  }
+}

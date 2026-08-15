@@ -18,7 +18,11 @@ const PACK = path.join(
   'kungfu',
   'agent',
 );
-const AGENT_CLI_SOURCES = ['agent.py', 'agent_first_value_entry.py'];
+const AGENT_CLI_SOURCES = [
+  'agent.py',
+  'agent_first_value_entry.py',
+  'agent_work_lab.py',
+];
 
 const REQUIRED = [
   'index.json',
@@ -26,6 +30,7 @@ const REQUIRED = [
   'intent-map.json',
   'first-value.contract.json',
   'first-value-receipt.schema.json',
+  'skill-decision.contract.json',
   'xinfa-context.md',
   'primitive-management.md',
   'mode-selection.md',
@@ -75,6 +80,7 @@ let apiSchema = null;
 let intentMap = null;
 let firstValueContract = null;
 let firstValueReceiptSchema = null;
+let skillDecisionContract = null;
 try {
   index = readJson('index.json');
 } catch (e) {
@@ -125,6 +131,13 @@ try {
 } catch (e) {
   fail(
     `first-value-receipt.schema.json is invalid JSON: ${e instanceof Error ? e.message : e}`,
+  );
+}
+try {
+  skillDecisionContract = readJson('skill-decision.contract.json');
+} catch (e) {
+  fail(
+    `skill-decision.contract.json is invalid JSON: ${e instanceof Error ? e.message : e}`,
   );
 }
 
@@ -202,6 +215,39 @@ if (intentMap) {
     ])
       if (!(field in row))
         fail(`intent-map.json intent ${row.id} missing ${field}`);
+  }
+  const workspaceGit = intentMap.workspaceGit || {};
+  if (
+    workspaceGit.schema !== 'kungfu.workspace-git-boundary/v1' ||
+    workspaceGit.scope !== '.kungfu/' ||
+    workspaceGit.neverStageWholeHome !== true ||
+    workspaceGit.publicationDisposition !== 'stage-only-after-row-selection' ||
+    workspaceGit.defaultDisposition !== 'keep-local' ||
+    workspaceGit.unmatchedPathPolicy !==
+      'keep-local-unless-explicit-repository-policy'
+  )
+    fail('intent-map.json workspace Git boundary defaults are invalid');
+  const gitRows = [
+    ...(workspaceGit.publishAllowlist || []),
+    ...(workspaceGit.localOnly || []),
+  ];
+  const gitIds = gitRows.map((row) => row.id);
+  if (new Set(gitIds).size !== gitIds.length)
+    fail('intent-map.json workspace Git boundary has duplicate ids');
+  for (const row of gitRows) {
+    if (
+      typeof row.pathRegex !== 'string' ||
+      !row.pathRegex.startsWith('^') ||
+      !row.pathRegex.endsWith('$')
+    ) {
+      fail(`intent-map.json workspace Git rule ${row.id} is not anchored`);
+      continue;
+    }
+    try {
+      new RegExp(row.pathRegex, 'u');
+    } catch {
+      fail(`intent-map.json workspace Git rule ${row.id} is invalid`);
+    }
   }
 }
 if (firstValueContract) {
@@ -292,6 +338,51 @@ if (firstValueReceiptSchema) {
     fail('first-value receipt schema permits more than one question');
   if (firstValueReceiptSchema.properties?.diagnostics?.maxItems !== 0)
     fail('a verified first-value receipt can retain diagnostics');
+}
+if (skillDecisionContract && index && intentMap) {
+  const policyRoot = `sha256:${crypto
+    .createHash('sha256')
+    .update(read('skill-decision.contract.json'), 'utf8')
+    .digest('hex')}`;
+  const outcomes = skillDecisionContract.outcomes || [];
+  const exactOutcomes = [
+    'auto-use-existing',
+    'suggest-existing',
+    'suggest-create',
+    'auto-draft',
+    'plan-only',
+    'none',
+  ];
+  if (
+    skillDecisionContract.schema !==
+      'kungfu.agent-skill-decision-contract/v1' ||
+    outcomes.length !== exactOutcomes.length ||
+    exactOutcomes.some((outcome) => !outcomes.includes(outcome))
+  )
+    fail('Skill decision contract does not declare exactly the six outcomes');
+  if (
+    skillDecisionContract.input?.rawTranscriptRetention !== false ||
+    skillDecisionContract.authority?.class !== 'read-only-advisory'
+  )
+    fail('Skill decision contract weakens the private read-only boundary');
+  if (
+    index.skillDecision?.policyRoot !== policyRoot ||
+    intentMap.skillDecision?.policyRoot !== policyRoot ||
+    !brief.includes(policyRoot)
+  )
+    fail(
+      'Agent Pack index, intent map, and brief do not bind the Skill policy root',
+    );
+  for (const provider of ['codex', 'claude', 'amp', 'opencode']) {
+    const providerSkill = read(`skills/${provider}/SKILL.md`);
+    if (
+      !providerSkill.includes(policyRoot) ||
+      !providerSkill.includes('kungfu agent skill-advisory')
+    )
+      fail(
+        `${provider} provider Skill does not bind the shared Skill decision`,
+      );
+  }
 }
 for (const [rel, text] of [
   ['brief.md', brief],
@@ -432,7 +523,12 @@ if (apiRegistry) {
       .map((row) => row.id),
   );
   const observedAnchors = new Set(
-    [...agentCli.matchAll(/@kfd3_api\("([^"]+)"\)/g)].map((match) => match[1]),
+    [...agentCli.matchAll(/@kfd3_api\("([^"]+)"\)/g)]
+      .map((match) => match[1])
+      .filter(
+        (apiId) =>
+          apiId === 'kungfu.agent' || apiId.startsWith('kungfu.agent.'),
+      ),
   );
   for (const apiId of expectedRuntimeIds) {
     if (!observedAnchors.has(apiId))

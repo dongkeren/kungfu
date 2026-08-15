@@ -161,10 +161,61 @@ test('continuous reader exposes turn identity before a late turn/start response'
   assert.equal(response.status, 'observed');
 });
 
-test('malformed and unknown frames fail closed and freeze admission', async (t) => {
+test('Windows command wrappers use an explicit shell without version coupling', async (t) => {
+  const child = stdoutEndingChild();
+  let invocation = null;
+  const host = createHost({
+    platform: 'win32',
+    spawn: (executable, argv, options) => {
+      invocation = { executable, argv, options };
+      return child;
+    },
+  });
+  await host.start({
+    sessionAttemptId: 'attempt-wrapper',
+    runtimeGeneration: '8',
+    executable: '/agent/bin/codex.CMD',
+    argv: ['app-server', '--stdio'],
+    env: { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+    cliVersion: 'opaque-future-build',
+    initializeParams: {
+      clientInfo: { name: 'kungfu-test', version: '4.0.0-alpha.1' },
+    },
+  });
+  t.after(() => stop(host));
+  assert.equal(invocation.executable, 'C:\\Windows\\System32\\cmd.exe');
+  assert.deepEqual(invocation.argv, [
+    '/d',
+    '/s',
+    '/v:off',
+    '/c',
+    'call "/agent/bin/codex.CMD" "app-server" "--stdio"',
+  ]);
+  assert.equal(invocation.options.shell, false);
+  assert.equal(invocation.options.windowsVerbatimArguments, true);
+});
+
+test('unknown provider notifications remain diagnostic and keep admission open', async (t) => {
+  const host = await start('unknown-method');
+  t.after(() => stop(host));
+  await waitUntil(
+    () => host.status().queue.depth >= 2,
+    'unknown provider notification was not retained as a diagnostic event',
+  );
+  const event = host
+    .takeEvents()
+    .find((candidate) => candidate.providerMethod === 'provider/unknown');
+  assert.equal(event.providerMethod, 'provider/unknown');
+  assert.equal(event.normalizedSemantic, 'provider-notification-unclassified');
+  assert.equal(event.authority, 'provider-diagnostic-not-work-fact');
+  assert.equal(host.status().failure, null);
+  assert.equal(host.status().inputAdmission, 'open');
+});
+
+test('malformed frames and unknown requests fail closed and freeze admission', async (t) => {
   for (const [mode, code] of [
     ['malformed', 'malformed-jsonl'],
-    ['unknown-method', 'unknown-method'],
+    ['unknown-request', 'unknown-method'],
   ]) {
     const host = await start(mode);
     t.after(() => stop(host, `shutdown-${mode}`));
@@ -344,26 +395,19 @@ test('unexpected provider exit is visible and never claims a terminal outcome', 
   assert.notEqual(status.inputAdmission, 'open');
 });
 
-test('version drift fails before spawn', async () => {
-  let spawned = false;
-  const host = createHost({
-    spawn: () => {
-      spawned = true;
-      throw new Error('must not spawn');
+test('runtime version metadata never blocks a valid structured handshake', async (t) => {
+  const host = createHost();
+  t.after(() => stop(host));
+  const status = await host.start({
+    sessionAttemptId: 'attempt-version-neutral',
+    runtimeGeneration: '1',
+    executable: process.execPath,
+    argv: [provider, 'stderr-redaction'],
+    cliVersion: 'future-channel-without-semver',
+    initializeParams: {
+      clientInfo: { name: 'kungfu-test', version: '4.0.0-alpha.1' },
     },
   });
-  await assert.rejects(
-    host.start({
-      sessionAttemptId: 'attempt-1',
-      runtimeGeneration: '1',
-      executable: process.execPath,
-      argv: [provider],
-      cliVersion: '0.145.0',
-      initializeParams: {
-        clientInfo: { name: 'kungfu-test', version: '4.0.0-alpha.1' },
-      },
-    }),
-    (error) => error.code === 'cli-version-drift',
-  );
-  assert.equal(spawned, false);
+  assert.equal(status.provider.cliVersion, 'future-channel-without-semver');
+  assert.equal(status.lifecycleState, 'ready');
 });

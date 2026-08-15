@@ -1,4 +1,5 @@
 lockfileVersion: '9.0'
+
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
@@ -44,14 +45,17 @@ importers:
         specifier: 1.9.4
         version: 1.9.4
       '@kungfu-tech/buildchain':
-        specifier: 3.0.0
-        version: 3.0.0
+        specifier: 3.0.9-alpha.16
+        version: 3.0.9-alpha.16
       '@kungfu-tech/buildchain-alpha':
-        specifier: npm:@kungfu-tech/buildchain@3.0.6-alpha.1
-        version: '@kungfu-tech/buildchain@3.0.6-alpha.1'
+        specifier: npm:@kungfu-tech/buildchain@3.0.9-alpha.16
+        version: '@kungfu-tech/buildchain@3.0.9-alpha.16'
+      '@kungfu-tech/buildchain-stable':
+        specifier: npm:@kungfu-tech/buildchain@3.0.7
+        version: '@kungfu-tech/buildchain@3.0.7'
       '@kungfu-tech/kfd':
-        specifier: 1.0.0-alpha.53
-        version: 1.0.0-alpha.53
+        specifier: 1.0.0-alpha.62
+        version: 1.0.0-alpha.62
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -76,6 +80,9 @@ importers:
       markdownlint-cli2:
         specifier: 0.22.1
         version: 0.22.1(supports-color@7.2.0)
+      tar-stream:
+        specifier: 2.2.0
+        version: 2.2.0
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -187,6 +194,8 @@ importers:
       '@types/react':
         specifier: ^18.3.3
         version: 18.3.31
+
+  extensions/github-webhook-reference-suite: {}
 
   extensions/journal-manager:
     dependencies:
@@ -485,7 +494,7 @@ importers:
         version: 2.4.1
       electron:
         specifier: ^42.5.0
-        version: 42.5.0(supports-color@7.2.0)
+        version: 42.5.1(supports-color@7.2.0)
       node-addon-api:
         specifier: ^8.0.0
         version: 8.9.0
@@ -533,8 +542,8 @@ importers:
         specifier: ^4.3.1
         version: 4.7.0(vite@6.4.3(@types/node@24.13.2)(jiti@2.7.0)(less@4.6.7)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
       electron:
-        specifier: 42.5.0
-        version: 42.5.0(supports-color@7.2.0)
+        specifier: 42.5.1
+        version: 42.5.1(supports-color@7.2.0)
       electron-builder:
         specifier: ^26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
@@ -611,8 +620,12 @@ importers:
 
   framework/tui:
     dependencies:
-      '@kungfu-tech/agent-session': {specifier: 'workspace:*', version: 'link:../agent-session'}
-      '@kungfu-tech/api': {specifier: 'workspace:*', version: 'link:../api'}
+      '@kungfu-tech/agent-session':
+        specifier: workspace:*
+        version: link:../agent-session
+      '@kungfu-tech/api':
+        specifier: workspace:*
+        version: link:../api
       '@kungfu-tech/core':
         specifier: workspace:*
         version: link:../core
@@ -653,7 +666,9 @@ importers:
       '@kungfu-tech/kfx-adapter-langchain':
         specifier: workspace:*
         version: link:../extensions/langchain-adapter
-      '@kungfu-tech/kfx-agent-work-lab-experience': {specifier: 'workspace:*', version: 'link:../extensions/agent-work-lab/experience'}
+      '@kungfu-tech/kfx-agent-work-lab-experience':
+        specifier: workspace:*
+        version: link:../extensions/agent-work-lab/experience
       '@kungfu-tech/kfx-dogfood-actions':
         specifier: workspace:*
         version: link:../extensions/dogfood/dogfood-actions
@@ -663,7 +678,9 @@ importers:
       '@kungfu-tech/kfx-dogfood-contract':
         specifier: workspace:*
         version: link:../extensions/dogfood/dogfood-contract
-      '@kungfu-tech/kfx-suite-agent-work-lab': {specifier: 'workspace:*', version: 'link:../extensions/agent-work-lab'}
+      '@kungfu-tech/kfx-suite-agent-work-lab':
+        specifier: workspace:*
+        version: link:../extensions/agent-work-lab
       '@kungfu-tech/kfx-suite-dogfood-feedback':
         specifier: workspace:*
         version: link:../extensions/dogfood
@@ -1446,8 +1463,13 @@ packages:
     engines: {node: '>=22.14.0'}
     hasBin: true
 
-  '@kungfu-tech/buildchain@3.0.6-alpha.1':
-    resolution: {integrity: sha512-rmElQ2qeK/hN3PWPseclXp2AeedvKhtRQUPc/gZ3zi3kXRWWD1EuPKVuHreBsYBYsOcfAZKz2N0/dWXkOE/WJg==}
+  '@kungfu-tech/buildchain@3.0.7':
+    resolution: {integrity: sha512-e3Dl4/x0mcGOJCQq1HRMc8rk0b+CNd/QUP9R0d2PQg/eHZgYFdoov0FwgVxEDkALnpQrUYvTLyo1EbG5SkNKkg==}
+    engines: {node: '>=22.14.0'}
+    hasBin: true
+
+  '@kungfu-tech/buildchain@3.0.9-alpha.16':
+    resolution: {integrity: sha512-zmCO+sexBlu5TIAkzD0OWpXJD8LXCteHJr6MN79VfWNy2GlUj34za84eI+M+A38a68MNggYkhE/1ZuMx/yyrZg==}
     engines: {node: '>=22.14.0'}
     hasBin: true
 
@@ -1457,6 +1479,10 @@ packages:
 
   '@kungfu-tech/kfd@1.0.0-alpha.53':
     resolution: {integrity: sha512-t7ZyBXhhfYKNYo+KgBan/SBsBK1UygTf8RaTxQ+toTStwuq4wR5Z85sSAO/kmC2F/oqHeYVaan6nU28e1sVERw==}
+    hasBin: true
+
+  '@kungfu-tech/kfd@1.0.0-alpha.62':
+    resolution: {integrity: sha512-x5MgFZzphfOo3BiWH8zdyw0JcGGTxVZ5x/0Vzyv0xKOh4RvwVzdGW4kRffIgVQ6bWXCeZFkgz9d1iSlfcHcfMw==}
     hasBin: true
 
   '@kungfu-tech/libnode-darwin-arm64@22.22.3-kf.5-alpha.3':
@@ -2697,8 +2723,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@42.5.0:
-    resolution: {integrity: sha512-cYEKS9XFz+c9fAB4jI0x49yz1FFzB55r3q96wu9YkwwJMv7t9202IE/ltlgy6yitl/J4M7C8JQcmUqdzDvPl/w==}
+  electron@42.5.1:
+    resolution: {integrity: sha512-2VFNJcHHbrhIpGsJHdkLoi/nWPZPxN3GHVPe+9At3Oz3/TJRwpr+7JL97ddBDbKyLmHGx3GfI2jvzcEQL28uFw==}
     engines: {node: '>= 22.12.0'}
 
   emoji-regex@10.6.0:
@@ -5806,14 +5832,23 @@ snapshots:
       '@kungfu-tech/kfd': 1.0.0-alpha.41
       smol-toml: 1.7.0
 
-  '@kungfu-tech/buildchain@3.0.6-alpha.1':
+  '@kungfu-tech/buildchain@3.0.7':
     dependencies:
       '@kungfu-tech/kfd': 1.0.0-alpha.53
+      ajv: 8.20.0
+      smol-toml: 1.7.0
+
+  '@kungfu-tech/buildchain@3.0.9-alpha.16':
+    dependencies:
+      '@kungfu-tech/kfd': 1.0.0-alpha.62
+      ajv: 8.20.0
       smol-toml: 1.7.0
 
   '@kungfu-tech/kfd@1.0.0-alpha.41': {}
 
   '@kungfu-tech/kfd@1.0.0-alpha.53': {}
+
+  '@kungfu-tech/kfd@1.0.0-alpha.62': {}
 
   '@kungfu-tech/libnode-darwin-arm64@22.22.3-kf.5-alpha.3':
     optional: true
@@ -7176,7 +7211,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@42.5.0(supports-color@7.2.0):
+  electron@42.5.1(supports-color@7.2.0):
     dependencies:
       '@electron-internal/extract-zip': 1.0.4
       '@electron/get': 5.0.0(supports-color@7.2.0)

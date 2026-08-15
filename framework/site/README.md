@@ -9,8 +9,8 @@ confidence: high
 sensitivity: public
 evidence_grade: A
 review_state: self-reviewed
-last_reviewed: 2026-07-27
-ai_provenance: GPT-5 via Codex on 2026-07-27; based on the current site bundle, packaged Spec reader journey, KFD-3 registries, trademark policy, and visually verified downstream reader patterns; no site deployment, npm publication, or downstream repository mutation is claimed
+last_reviewed: 2026-08-11
+ai_provenance: GPT-5 via Codex on 2026-08-11; based on the current product bundle, dedicated KFX source contracts, installed authoring kit, Profile and Suite model, KFD and Release Passport evidence, and packaged Spec reader journey; no site deployment, npm publication, or downstream repository mutation is claimed
 ---
 
 # `@kungfu-tech/site`
@@ -53,6 +53,16 @@ artifacts under `dist/site/`.
   reader-contract, version-matrix, registry and retained-vector routes.
   Consumers never need a monorepo checkout.
 - `schema/site-bundle.schema.json` — package/consumer contract.
+- `dist/site/kfx/site-bundle.json` — dedicated KFX developer projection with
+  exact immutable source coordinates, roots, maturity, status, and non-claim
+  boundaries for every facet.
+- `dist/site/kfx/agent-index.json` and `human-index.json` — the same explicit
+  KFX reading order for Agent and human consumers.
+- `dist/site/kfx/source-manifest.json`, `manifest.json`, and
+  `schema/kfx-site-bundle.schema.json` — reproducible source and artifact roots
+  plus the exact versioned schema projection. Generation fails when a declared
+  source is missing, dirty relative to the pinned commit, stale, reordered, or
+  contradictory.
 - `experience.js` — deterministic, framework-independent human/Agent page
   generator. It emits complete HTML pages plus rooted `manifest.json`,
   `agent-index.json`, and `llms.txt` bodies without writing a downstream
@@ -72,6 +82,58 @@ signed channel and product artifacts exist. The resulting directory is a
 release artifact, not a site checkout: a site-owned workflow pins and verifies
 the bundle root before projecting any route. Source builds do not make an
 installer available, and this package never deploys `kungfu.tech`.
+
+The KFX bundle is additive to the existing product bundle. This source change
+does not publish npm, update a downstream Site dependency, or claim that
+`kfx.libkungfu.dev` consumes the generated files. A future downstream pickup
+must pin an exact published package and verify the package-local manifest.
+
+## KFX change impact gate
+
+`src/kfx-site-impact.contract.json` maps KFX-owned source paths to the existing
+KFX Site Bundle facets. `check:source` passes its exact base revision and
+changed-file set to the build-free checker. A changed declared source, such as
+the KFX contract or authoring guide, is itself a semantic bundle update for the
+facets that bind it. Other public contract, schema, SDK, CLI, Agent, manifest,
+qualification, and reference surfaces must update a bound source or make a
+meaningful semantic change in `src/kfx-site-bundle.source.json`.
+
+Internal implementation and test changes may instead carry one immutable
+`kungfu.kfx-site-impact-proof/v1`. The proof binds the exact merge base, every
+changed path outside the proof directory, before/after content roots, and the
+still-unresolved facet set. Public surfaces are never proof-eligible. Proofs
+also cannot authorize themselves: proof files are excluded from the change
+root, and a proof-only change fails.
+
+Run the same check used by source acceptance:
+
+```sh
+./shifu check:kfx-site-impact
+```
+
+When the diagnostic lists only proof-eligible internal changes, create the
+exact content-addressed proof with a specific explanation:
+
+```sh
+./shifu check:kfx-site-impact -- --write-proof \
+  --rationale "The allocation refactor preserves public contracts, observable behavior, and every documented reader journey."
+./shifu check:kfx-site-impact
+```
+
+Commit the generated JSON together with the implementation. Do not edit its
+base, paths, roots, facets, attestations, filename, or rationale afterward; a
+subsequent change requires a new proof. The stable diagnostics are:
+
+- `KFX_SITE_BUNDLE_IMPACT_UNMAPPED`: add an explicit path-to-facet rule; KFX
+  ownership fails closed.
+- `KFX_SITE_BUNDLE_UPDATE_REQUIRED`: update the listed facets through the
+  declaration or one of their bound sources; use a proof only when every
+  remaining path is reported as eligible.
+- `KFX_SITE_BUNDLE_IMPACT_PROOF_INVALID`: regenerate the proof from the current
+  exact diff and replace generic rationale with the concrete non-impact case.
+- `KFX_SITE_BUNDLE_IMPACT_CONTRACT_WEAKENED`: restore removed ownership,
+  selectors, facets, exclusions, or non-waivable disposition. New mappings may
+  add coverage but the same change cannot weaken existing coverage.
 
 The bundle schema version, npm pickup version, `.kungfu` layout/spec versions,
 ABI versions, and component contract versions are independent axes. The

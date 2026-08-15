@@ -4,7 +4,7 @@
     "name": "Kungfu",
     "email": "info@kungfu.link"
   },
-  "version": "4.0.0-alpha.1",
+  "version": "4.0.0-alpha.2",
   "description": "Kungfu Skill schemas and catalog/context helpers",
   "license": "Apache-2.0",
   "type": "module",
@@ -23,7 +23,9 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "test:golden": "node --experimental-transform-types scripts/golden.mjs"
+    "test:golden": "node --experimental-transform-types scripts/golden.mjs",
+    "test:contract-v2": "node scripts/contract-v2.mjs",
+    "registry": "node --experimental-transform-types scripts/registry.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

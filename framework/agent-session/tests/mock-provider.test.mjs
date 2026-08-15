@@ -2,15 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MOCK_AGENT_SCENARIOS,
+  MOCK_AGENT_VERSION,
   MOCK_RECOVERY_STORY_DELIVERABLE_PATH,
+  createMockAgentInputFramer,
   createMockAgentMachine,
+  mockRecoveryStoryDeliverable,
 } from '../src/mock-provider.mjs';
 import { createProviderAdapter } from '../src/provider-adapters.mjs';
 
 function inspect(lines) {
   return createProviderAdapter({
     provider: 'synthetic',
-    version: '1.0.0',
+    version: MOCK_AGENT_VERSION,
   }).inspect({
     lines,
     volatileTail: lines.join('\n'),
@@ -19,6 +22,15 @@ function inspect(lines) {
     foreground: { provider: 'synthetic' },
   });
 }
+
+test('current Mock Agent version is admitted by its bundled interaction adapter', () => {
+  const adapter = createProviderAdapter({
+    provider: 'synthetic',
+    version: MOCK_AGENT_VERSION,
+  });
+  assert.equal(adapter.compatible, true);
+  assert.equal(adapter.tested, true);
+});
 
 test('Mock Agent exposes the complete deterministic scenario catalog', () => {
   assert.deepEqual(MOCK_AGENT_SCENARIOS, [
@@ -52,7 +64,28 @@ test('multi-step scenario deterministically crosses answer, approval, and review
   const review = machine.input('y');
   assert.equal(machine.state(), 'ready-for-review');
   assert.equal(inspect(review.lines).state, 'ready');
+  assert.match(review.lines.join('\n'), /MOCK VALIDATION/u);
+  assert.match(review.lines.join('\n'), /MOCK UNRESOLVED RISKS/u);
   assert.match(review.lines.join('\n'), /READY FOR REVIEW/u);
+});
+
+test('Mock Agent frames split bracketed paste and raw key input at terminal submission boundaries', () => {
+  const frames = [];
+  const input = createMockAgentInputFramer((frame) => frames.push(frame));
+  const escapeCode = String.fromCharCode(27);
+
+  input.push(`${escapeCode}[200~first line\n`);
+  input.push(`second line${escapeCode}[201~`);
+  assert.deepEqual(frames, []);
+  input.push('\r');
+  input.push('y');
+  assert.equal(frames.length, 1);
+  input.push('\r');
+
+  assert.deepEqual(frames, [
+    `${escapeCode}[200~first line\nsecond line${escapeCode}[201~`,
+    'y',
+  ]);
 });
 
 test('blocked and crash scenarios are explicit and stable', () => {
@@ -154,6 +187,15 @@ test('recovery-story keeps the original business objective in natural Agent lang
   assert.match(crash, /without relying on prior chat/u);
   assert.match(completed, /deliverables\/launch-brief\.md/u);
   assert.match(completed, /does not approve its own Work/u);
+  const deliverable = mockRecoveryStoryDeliverable();
+  assert.match(
+    deliverable,
+    /developers coordinating long-running coding-agent work/u,
+  );
+  assert.doesNotMatch(deliverable, /Northstar Notes|small product teams/u);
+  assert.match(deliverable, /## Validation evidence/u);
+  assert.match(deliverable, /inputs\/product-notes\.md/u);
+  assert.match(deliverable, /## Unresolved risks/u);
 });
 
 test('recovery-delivery isolates the reviewable launch brief without inventing failed Attempts', () => {
@@ -171,6 +213,8 @@ test('recovery-delivery isolates the reviewable launch brief without inventing f
   assert.equal(completed.exitCode, 0);
   assert.deepEqual(writes, [MOCK_RECOVERY_STORY_DELIVERABLE_PATH]);
   assert.match(completed.lines.join('\n'), /does not approve its own Work/u);
+  assert.equal(inspect(completed.lines).state, 'busy');
+  assert.doesNotMatch(completed.lines.join('\n'), /^\s*mock›(?:\s|$)/mu);
 });
 
 test('every Mock Agent scenario reaches its declared deterministic boundary', () => {

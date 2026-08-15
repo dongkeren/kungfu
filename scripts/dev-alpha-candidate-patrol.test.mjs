@@ -9,7 +9,7 @@ const ROOT = process.cwd();
 const BUILDCHAIN_DEV_VERIFY_RUNTIME =
   '916fc84d488ae6f5af271a67487e79ecb47b9ae2';
 const BUILDCHAIN_TIMEOUT_SAFE_RUNTIME =
-  '2e7e07902ac28d8f3edcfb81098ef9ebc7a91878';
+  '58e48d73ae7fef0dd06ae02baf6d090e4da5487d';
 
 function workflow(name) {
   return fs.readFileSync(path.join(ROOT, '.github/workflows', name), 'utf8');
@@ -136,6 +136,13 @@ test('candidate patrol is a thin Buildchain caller with exact channel and eviden
   );
   assert.match(source, /auto-merge: true/u);
   assert.match(source, /merge-method: rebase/u);
+  assert.match(source, /name: Verify frozen Alpha Release Cut source lock/u);
+  assert.match(source, /lock=\.buildchain\/alpha-release-cut-lock\.json/u);
+  assert.match(source, /git show -s --format=%P/u);
+  assert.match(
+    source,
+    /needs\.release-cut-lock\.outputs\.candidate-settlement-authorized == 'true'/u,
+  );
   assert.doesNotMatch(
     source,
     /npm publish|gh release create|git tag|gh pr merge/iu,

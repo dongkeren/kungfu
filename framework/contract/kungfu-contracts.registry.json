@@ -76,6 +76,51 @@
       },
       "extraArtifacts": [
         {
+          "label": "skill v2 registry state schema",
+          "source": "framework/skill/schema/skill-registry-state-v2.schema.json",
+          "artifact": "config/skill/schema/skill-registry-state-v2.schema.json"
+        },
+        {
+          "label": "skill v2 lifecycle plan schema",
+          "source": "framework/skill/schema/skill-lifecycle-plan-v2.schema.json",
+          "artifact": "config/skill/schema/skill-lifecycle-plan-v2.schema.json"
+        },
+        {
+          "label": "skill v2 lifecycle receipt schema",
+          "source": "framework/skill/schema/skill-lifecycle-receipt-v2.schema.json",
+          "artifact": "config/skill/schema/skill-lifecycle-receipt-v2.schema.json"
+        },
+        {
+          "label": "skill v2 dependency plan schema",
+          "source": "framework/skill/schema/skill-dependency-plan-v2.schema.json",
+          "artifact": "config/skill/schema/skill-dependency-plan-v2.schema.json"
+        },
+        {
+          "label": "skill v2 dependency invocation receipt schema",
+          "source": "framework/skill/schema/skill-dependency-invocation-receipt-v2.schema.json",
+          "artifact": "config/skill/schema/skill-dependency-invocation-receipt-v2.schema.json"
+        },
+        {
+          "label": "skill authoring spec schema",
+          "source": "framework/skill/schema/skill-authoring-spec-v1.schema.json",
+          "artifact": "config/skill/schema/skill-authoring-spec-v1.schema.json"
+        },
+        {
+          "label": "skill authoring plan schema",
+          "source": "framework/skill/schema/skill-authoring-plan-v1.schema.json",
+          "artifact": "config/skill/schema/skill-authoring-plan-v1.schema.json"
+        },
+        {
+          "label": "skill authoring receipt schema",
+          "source": "framework/skill/schema/skill-authoring-receipt-v1.schema.json",
+          "artifact": "config/skill/schema/skill-authoring-receipt-v1.schema.json"
+        },
+        {
+          "label": "skill v2 definition schema",
+          "source": "framework/skill/schema/skill-definition-v2.schema.json",
+          "artifact": "config/skill/schema/skill-definition-v2.schema.json"
+        },
+        {
           "label": "skill source schema",
           "source": "framework/skill/schema/skill.schema.json",
           "artifact": "config/skill/schema/skill.schema.json"
@@ -137,8 +182,18 @@
       "source": "framework/runtime/kungfu-runtime-surface.contract.json",
       "artifact": "config/kungfu-runtime-surface.contract.json",
       "cli": {
-        "contract": ["runtime", "surface", "contract", "--json"],
-        "schema": ["contract", "show", "runtime-surface", "--json"]
+        "contract": [
+          "runtime",
+          "surface",
+          "contract",
+          "--json"
+        ],
+        "schema": [
+          "contract",
+          "show",
+          "runtime-surface",
+          "--json"
+        ]
       }
     },
     {
@@ -349,7 +404,7 @@
       "surface": "fact-cut-kernel",
       "id": "kungfu-fact-cut-kernel",
       "schema": "kungfu.fact-cut-kernel.contract/v1",
-      "contractSchemaRoot": "sha256:ddf1bdbbcb29cf98e2f5008e08478ed1db3c270f49cf4d48a89ff44fac44368e",
+      "contractSchemaRoot": "sha256:8151dbe376a92b5ccdbb07739e0516979f121e975bff9451a90681ef47450ec2",
       "weldedSurface": "fact-cut-kernel-contract",
       "env": "KUNGFU_FACT_CUT_KERNEL_CONTRACT",
       "file": "kungfu-fact-cut-kernel.contract.json",
@@ -369,7 +424,14 @@
           "fact-cut-kernel",
           "--json"
         ]
-      }
+      },
+      "extraArtifacts": [
+        {
+          "label": "Release provenance semantic object contract",
+          "source": "framework/release/kungfu-release-provenance.contract.json",
+          "artifact": "config/release/kungfu-release-provenance.contract.json"
+        }
+      ]
     },
     {
       "surface": "exit-bundle",
@@ -554,6 +616,38 @@
       ]
     },
     {
+      "surface": "assignment-runtime",
+      "id": "kungfu-assignment-runtime",
+      "schema": "kungfu.assignment-runtime.contract/v1",
+      "contractSchemaRoot": "sha256:5c6beeeb6f1a699052f144566c410ec459d4bfec8ead4916902e264835f3667a",
+      "weldedSurface": "assignment-runtime-contract",
+      "env": "KUNGFU_ASSIGNMENT_RUNTIME_CONTRACT",
+      "file": "kungfu-assignment-runtime.contract.json",
+      "source": "framework/assignment-runtime/assignment-runtime.contract.json",
+      "artifact": "config/assignment-runtime/kungfu-assignment-runtime.contract.json",
+      "cli": {
+        "contract": [
+          "contract",
+          "show",
+          "assignment-runtime",
+          "--json"
+        ],
+        "schema": [
+          "contract",
+          "show",
+          "assignment-runtime",
+          "--json"
+        ]
+      },
+      "extraArtifacts": [
+        {
+          "label": "Assignment Runtime envelope schema",
+          "source": "framework/assignment-runtime/schema/assignment-runtime-envelope-v1.schema.json",
+          "artifact": "config/assignment-runtime/schema/assignment-runtime-envelope-v1.schema.json"
+        }
+      ]
+    },
+    {
       "surface": "primitive-catalog",
       "id": "kungfu-primitive-catalog",
       "schema": "kungfu.primitive-catalog/v2",
@@ -563,8 +657,18 @@
       "source": "framework/primitive/kungfu-primitive-catalog.contract.json",
       "artifact": "config/primitive/kungfu-primitive-catalog.contract.json",
       "cli": {
-        "contract": ["contract", "show", "primitive-catalog", "--json"],
-        "schema": ["contract", "show", "primitive-catalog", "--json"]
+        "contract": [
+          "contract",
+          "show",
+          "primitive-catalog",
+          "--json"
+        ],
+        "schema": [
+          "contract",
+          "show",
+          "primitive-catalog",
+          "--json"
+        ]
       }
     }
   ]

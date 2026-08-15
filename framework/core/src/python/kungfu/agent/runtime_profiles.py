@@ -36,6 +36,105 @@ ADAPTER_SCHEMA = "kungfu.native-provider-adapter/v1"
 BUILTIN_PROVIDERS = ("codex", "claude", "amp", "opencode")
 
 
+def human_agent_catalog(
+    *, config_home: str | None = None, runtime_home: str | None = None
+) -> dict[str, Any]:
+    """Return a deduplicated human projection without reading credentials."""
+
+    payload = discover_catalog(
+        resolved_config=kungfu_config.resolve_config(
+            config_home=config_home, runtime_home=runtime_home
+        )
+    )
+    discovered = {
+        row["profile"]["id"]: row
+        for row in payload.get("discovered", [])
+        if isinstance(row, Mapping)
+        and isinstance(row.get("profile"), Mapping)
+        and row["profile"].get("id")
+    }
+    configured_profiles = payload.get("configured", [])
+    agents: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for profile in [
+        *configured_profiles,
+        *(row["profile"] for row in payload.get("discovered", [])),
+    ]:
+        profile_id = str(profile.get("id") or "")
+        if not profile_id or profile_id in seen:
+            continue
+        seen.add(profile_id)
+        discovery = discovered.get(profile_id, {})
+        configured = profile in configured_profiles
+        verification: Mapping[str, Any] = {}
+        if configured and profile_id not in discovered:
+            try:
+                verification = verify_profile(profile)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                verification = {"ok": False}
+        agents.append(
+            {
+                "id": profile_id,
+                "label": str(profile.get("label") or profile_id),
+                "provider": str(profile.get("provider") or ""),
+                "source": str(profile.get("source") or "configured"),
+                "configured": configured,
+                "discovered": profile_id in discovered,
+                "available": bool(
+                    discovery.get("available", verification.get("ok", False))
+                ),
+                "version": discovery.get("version") or verification.get("version"),
+                "default": profile_id == payload.get("defaultProfileId"),
+                "recommended": profile_id == payload.get("recommendedProfileId"),
+            }
+        )
+    return {**payload, "agents": agents, "credentialContentsRead": False}
+
+
+def resolve_human_selector(
+    selector: str | None,
+    *,
+    config_home: str | None = None,
+    runtime_home: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve a human selector to one exact Runtime Profile id."""
+
+    catalog = human_agent_catalog(config_home=config_home, runtime_home=runtime_home)
+    agents = list(catalog["agents"])
+    requested = str(selector or "default").strip()
+    folded = requested.casefold()
+    if folded in {"default", "recommended"}:
+        profile_id = (
+            catalog.get("defaultProfileId")
+            if folded == "default"
+            else catalog.get("recommendedProfileId")
+        ) or catalog.get("recommendedProfileId")
+        if profile_id:
+            return str(profile_id), catalog
+        raise ValueError(
+            "no default Agent is available; install an Agent CLI or run "
+            "`kungfu agent runtime discover`"
+        )
+    exact = [row for row in agents if str(row["id"]).casefold() == folded]
+    labels = [row for row in agents if str(row["label"]).casefold() == folded]
+    providers = [row for row in agents if str(row["provider"]).casefold() == folded]
+    matches = exact or list(
+        {str(row["id"]): row for row in [*labels, *providers]}.values()
+    )
+    if len(matches) == 1:
+        return str(matches[0]["id"]), catalog
+    if len(matches) > 1:
+        for preference in ("default", "recommended", "configured"):
+            preferred = [row for row in matches if row.get(preference) is True]
+            if len(preferred) == 1:
+                return str(preferred[0]["id"]), catalog
+        choices = ", ".join(str(row["id"]) for row in matches)
+        raise ValueError(f"Agent selector {requested!r} is ambiguous: {choices}")
+    raise ValueError(
+        f"Agent {requested!r} is unavailable; run `kungfu agent-work-lab agents`"
+    )
+
+
 def policy_payload(runtime_dir, target, mode, enabled=True):
     closeout_gate = enabled and mode in {"report", "managed-run"}
     return {
@@ -205,6 +304,9 @@ def adapter_catalog(
         _validate_templates(adapter_id, adapter)
         result[adapter_id] = adapter
         seen.add(adapter_id)
+    process_environment = _agent_config(resolved).get("nativeProcessEnvironment") or []
+    for adapter in result.values():
+        adapter["processEnvironment"] = list(process_environment)
     return result
 
 
@@ -271,10 +373,10 @@ MOCK_SCENARIOS = (
 BACKENDS = ("tmux", "direct")
 CWD_POLICIES = ("workspace-root", "home", "inherit")
 _VERSION_TIMEOUT_SECONDS = 5.0
-_PROVIDER_VERSION_TIMEOUT_SECONDS = {"amp": 15.0}
+_PROVIDER_VERSION_TIMEOUT_SECONDS = {"amp": 15.0, "synthetic": None}
 
 
-def _version_timeout_seconds(provider: str) -> float:
+def _version_timeout_seconds(provider: str) -> float | None:
     return _PROVIDER_VERSION_TIMEOUT_SECONDS.get(provider, _VERSION_TIMEOUT_SECONDS)
 
 
@@ -368,7 +470,11 @@ def deterministic_mock_profile(
         raise ValueError(f"Mock Agent script is unavailable: {script_value}")
     return _profile(
         profile_id=f"kungfu.mock-agent.{scenario}",
-        label=f"Mock Agent · {scenario}",
+        label=(
+            "Mock Reviewer · deterministic-fit"
+            if scenario == "review-fit"
+            else f"Mock Agent · {scenario}"
+        ),
         provider="synthetic",
         executable=os.path.abspath(executable_value),
         argv=[os.path.abspath(script_value), "--scenario", scenario],
@@ -485,7 +591,7 @@ def _probe_version(
     executable: str,
     version_argv: list[str],
     *,
-    timeout_seconds: float = _VERSION_TIMEOUT_SECONDS,
+    timeout_seconds: float | None = _VERSION_TIMEOUT_SECONDS,
 ) -> str | None:
     return VerificationProbe(
         schema=VERIFY_SCHEMA,

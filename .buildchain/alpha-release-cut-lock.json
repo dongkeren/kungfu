@@ -1,0 +1,47 @@
+{
+  "schema": "kungfu.alpha-release-cut-lock/v1",
+  "release": "v4.0.0-alpha.2",
+  "cut": "r17",
+  "state": "frozen",
+  "candidate": {
+    "ref": "refs/heads/fix/alpha2-lineage-repair-r17",
+    "sha": "77a66f7141143e524484a548dbba76a1ae1ecc38",
+    "tree": "6f3a82c10712ec344ecefbf30d11a580aeb4f22b"
+  },
+  "devCut": {
+    "sha": "c3938d8fc5e71578c960cc8137a853a8817b09ca",
+    "tree": "6f3a82c10712ec344ecefbf30d11a580aeb4f22b"
+  },
+  "alphaBase": {
+    "ref": "refs/heads/alpha/v4/v4.0",
+    "sha": "f9e6b0e34bcdd6407b2a18206ace7982d64de2c8",
+    "tree": "67a93b5831596555e7c29104421de3a0b97eb865"
+  },
+  "lineage": {
+    "parentOrder": [
+      "c3938d8fc5e71578c960cc8137a853a8817b09ca",
+      "f9e6b0e34bcdd6407b2a18206ace7982d64de2c8"
+    ],
+    "candidateTreeEqualsDevCut": true
+  },
+  "buildchain": {
+    "sourcePinPolicy": "floating-contract-with-recorded-resolution",
+    "build": {
+      "ref": "v3-alpha",
+      "resolvedSha": "a60957e3ffc8f9a02f0e9419deebc8d35a3f7198",
+      "contractDigest": "sha256:b47881aae6956ef16b94b0e89c4790fa5c6de94202315756a49bc62b8bff6346"
+    },
+    "promotion": {
+      "ref": "v3-alpha",
+      "resolvedSha": "a60957e3ffc8f9a02f0e9419deebc8d35a3f7198",
+      "contractDigest": "sha256:b47881aae6956ef16b94b0e89c4790fa5c6de94202315756a49bc62b8bff6346"
+    }
+  },
+  "policy": {
+    "devMovementInvalidatesCut": false,
+    "devMirrorIsBuildInput": false,
+    "blockerRepairOrder": "release-cut-first-then-independent-dev-forward-port",
+    "recutRequiresNewDevSemanticsEvidence": true,
+    "tailFailureReusesSealedCandidate": true
+  }
+}

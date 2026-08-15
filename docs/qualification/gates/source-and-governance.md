@@ -54,7 +54,7 @@ Each section is bound to the registry id by the catalog meta gate.
 - **Evidence:** unified Gate receipt; no separate artifact is currently required.
 - **Diagnosis:** `./shifu gate explain governance.buildchain-config --profile <profile>`; reproduce with `./shifu gate run governance.buildchain-config` on a capable runner.
 - **Cost:** light; timeout 120 seconds.
-- **Current source:** .github/workflows/affected-native-pr.yml (candidate_buildchain_config; every dev pull request and merge-group candidate before governance preflight or expensive queue work); .github/workflows/buildchain-validate.yml (validate; pull requests except dev/v*/v*, or alpha/release channel push); .github/workflows/release-new-version.yml (promote; merged alpha or release pull request, or manual source-locked dry-run measurement).
+- **Current source:** .github/workflows/affected-native-pr.yml (candidate_buildchain_config; every dev pull request and merge-group candidate before governance preflight or expensive queue work); .github/workflows/buildchain-validate.yml (validate; pull requests except dev/v*/v*, or alpha/release channel push); .github/workflows/release-new-version.yml (promote; merged alpha or release pull request, or manual source-locked dry-run measurement); .github/workflows/release-new-version.yml (recover; manual recovery of one verified sealed Alpha candidate without product rebuild).
 - **Retirement:** remove only after every selecting profile and workflow binding is migrated or explicitly replaced, with the registry and matrix changed in the same review.
 <!-- /gate-doc:governance.buildchain-config -->
 
@@ -86,6 +86,14 @@ Each section is bound to the registry id by the catalog meta gate.
   native contract regressions that the deliberately build-free source gate
   cannot observe.
 - **Action:** `./shifu core:affected -- --execute`
+- **Production Graph shadow:**
+  `./shifu core:affected:graph-shadow -- --graph GRAPH --plan PLAN
+  --verification-receipt VERIFICATION --execute` is an additive, temporary-root
+  consumer of one verified `core:affected` graph node. It validates the exact
+  contract/compiler verifier, source, authority, Xinfa selection, topology and
+  compiled plan before delegating to this unchanged action. Its graph receipt
+  and parity result are evidence only and never replace this Gate, planner,
+  executor, Buildchain logging, native qualification, or current receipt.
 - **Dependencies:** `gate.catalog`, `source.acceptance`.
 - **Workflow execution:** the partition worker uses the explicit diagnostic
   `--omit-dependency source.acceptance` form. The staged candidate workflow has
@@ -189,10 +197,14 @@ Each section is bound to the registry id by the catalog meta gate.
 - **Durable queue admission lease:** the dev ruleset additionally requires
   `Queue admission lease`. The pull-request delivery controller submits exact
   Source Qualification Proof evidence to the pinned Buildchain Warrant queue;
-  only its active, unexpired Warrant may own replay, proof, waiting and GitHub
-  enqueue. The merge-group-only workflow reads the same durable state ref and
-  refuses revision, source-head, Warrant, fencing-token, generation or expiry
-  drift on the exact synthetic SHA. The affected-native aggregate then binds
+  only its active, unexpired provisional Warrant may own native proof work and
+  waiting. GitHub enqueue and the merge-group-only workflow require that same
+  fenced Warrant to be atomically upgraded to `qualified`, with exact native
+  proof and reuse roots; legacy `selected`, `proving`, `waiting`, or `blocked`
+  states are not merge authority. The merge-group workflow reads the same
+  durable state ref and refuses revision, source-head, Warrant, proof-root,
+  fencing-token, generation or expiry drift on the exact synthetic SHA. The
+  affected-native aggregate then binds
   its reconstructable delivery attempt and the live GitHub queue entry into an
   exact Integration Delivery Proof and records that proof through Buildchain's
   state-ref CAS before protected merge observation. Every non-merged dequeue

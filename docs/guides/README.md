@@ -8,6 +8,7 @@ For ordinary local diagnosis and recovery, start with `kungfu health`, then
 review the plan from `kungfu recover`.
 
 - [Choose Your Kungfu](choose-your-kungfu.md)
+- [Use Agent Work Lab](agent-work-lab.md)
 - [Kungfu Alpha Status](alpha-status.md)
 - [Kungfu Alpha Known Issues](known-issues.md)
 - [Load Verified Context for Agents](xinfa-agent-context.md)
@@ -17,7 +18,7 @@ review the plan from `kungfu recover`.
 - [Configuration](config.md)
 - [Native Agent adapters](native-agent-adapters.md)
 - [Durability Configuration](durability-configuration.md)
-- [Make the Kungfu command available and install the standalone CLI](installing-cli.md)
+- [Install the Kungfu CLI](installing-cli.md)
 - [Upgrade Kungfu](upgrading.md)
 - [Exit, Migration, and Version Compatibility](exit-and-version-compatibility.md)
 - [Debugging](debugging.md)

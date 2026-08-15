@@ -212,7 +212,7 @@ export SHIFU_ENTRYPOINT=1
 # Build-free routes read checked-in authorities with Node built-ins only.
 case "${1:-} ${2:-} ${3:-}" in
   kfd\ status*|kfd\ query*|kfd\ check*|kfd:query\ *|kfd:support-matrix:check\ *|core:architecture\ *|core:architecture:health\ *|invariant:verify\ --list*|invariant:verify\ --\ --list*|\
-  maintainability:complexity\ *|maintainability:amplification\ *|maintainability:query\ *|work-design:open-card-preflight\ *|work-design:feedback\ *)
+  maintainability:complexity\ *|maintainability:amplification\ *|maintainability:query\ *|work-design:preflight\ *|work-design:feedback\ *)
     if command -v node >/dev/null 2>&1; then
       exec node ./scripts/shifu-readonly-entry.mjs "$@"
     fi
@@ -312,7 +312,7 @@ if [ "${1:-}" = "kungfu" ]; then
   _kungfu_checkout_bin="./framework/core/dist/kungfu/kungfu"
   if [ -x "$_kungfu_checkout_bin" ]; then
     [ -n "${KUNGFU_TUI_ENTRY:-}" ] || [ ! -f "./framework/tui/dist/tui.mjs" ] || export KUNGFU_TUI_ENTRY="$PWD/framework/tui/dist/tui.mjs"
-    [ -n "${KF_BUNDLED_EXTENSION_ROOT:-}" ] || [ ! -f "./product/extensions/agent-work-lab/experience/starter-project.json" ] || export KF_BUNDLED_EXTENSION_ROOT="$PWD/product/extensions"
+    [ -n "${KF_BUNDLED_EXTENSION_ROOT:-}" ] || [ ! -f "./extensions/agent-work-lab/experience/starter-project.json" ] || export KF_BUNDLED_EXTENSION_ROOT="$PWD/extensions"
     exec "$_kungfu_checkout_bin" "$@"
   fi
   echo "shifu: kungfu source CLI is not assembled; run ./shifu build:core" >&2

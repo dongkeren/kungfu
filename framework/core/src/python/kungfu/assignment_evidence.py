@@ -13,7 +13,10 @@ from typing import Any, Callable
 
 from kungfu import assignment_orchestration as orchestration
 from kungfu.assignment_lifecycle.ports import AssignmentRuntimePort
-from kungfu.agent import run_agent
+from kungfu.agent.session_evidence import (
+    finalize_session_agent_report as finalize_session_agent_report,
+    load_execution_agent_report,
+)
 
 JsonObject = dict[str, Any]
 
@@ -59,6 +62,11 @@ def project_review_evidence(
     work_definition: JsonObject,
 ) -> JsonObject:
     workspace = Path(workspace).resolve()
+    report_path = Path(report_path).resolve()
+    try:
+        report_display_path = report_path.relative_to(workspace).as_posix()
+    except ValueError:
+        report_display_path = str(report_path)
     explicit = work_definition.get("evidence_paths") or []
     if not isinstance(explicit, list) or any(
         not isinstance(value, str) or not value.strip() for value in explicit
@@ -118,6 +126,15 @@ def project_review_evidence(
         total_bytes += size
     if selected:
         primary, *supporting = selected
+        retained_execution = []
+        if report_path not in selected:
+            retained_execution.append(
+                {
+                    "path": report_display_path,
+                    "root": content_root(report_path),
+                    "content": report_path.read_text(encoding="utf-8"),
+                }
+            )
         return {
             "mode": "project-files",
             "primary": {
@@ -125,7 +142,8 @@ def project_review_evidence(
                 "root": content_root(primary),
                 "content": primary.read_text(encoding="utf-8"),
             },
-            "supporting": [
+            "supporting": retained_execution
+            + [
                 {
                     "path": candidate.relative_to(workspace).as_posix(),
                     "root": content_root(candidate),
@@ -133,51 +151,15 @@ def project_review_evidence(
                 for candidate in supporting
             ],
         }
-    report_path = Path(report_path).resolve()
-    try:
-        display_path = report_path.relative_to(workspace).as_posix()
-    except ValueError:
-        display_path = str(report_path)
     return {
         "mode": "execution-report",
         "primary": {
-            "path": display_path,
+            "path": report_display_path,
             "root": content_root(report_path),
             "content": report_path.read_text(encoding="utf-8"),
         },
         "supporting": [],
     }
-
-
-def load_execution_agent_report(
-    path: str | Path,
-    runtime_dir: str | Path,
-    initiative_id: str,
-    assignment_id: str,
-    *,
-    require_success: bool = True,
-) -> tuple[Path, JsonObject]:
-    report_path = Path(path).expanduser().resolve()
-    allowed_root = (Path(runtime_dir) / "agent-runs").resolve()
-    if report_path != allowed_root and allowed_root not in report_path.parents:
-        raise ValueError("Agent report must belong to this workspace runtime")
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    if report.get("schema") != run_agent.REPORT_SCHEMA:
-        raise ValueError("Agent report schema is not supported")
-    expected_root = run_agent.canonical_root(
-        {key: value for key, value in report.items() if key != "reportRoot"}
-    )
-    if report.get("reportRoot") != expected_root:
-        raise ValueError("Agent report root does not match its content")
-    work_ref = (report.get("work") or {}).get("workRef") or {}
-    if (
-        work_ref.get("entityType") != "assignment"
-        or work_ref.get("entityId") != assignment_id
-    ):
-        raise ValueError("Agent report is not bound to this Assignment")
-    if require_success and report.get("launch", {}).get("exitCode") != 0:
-        raise ValueError("Agent report does not contain a successful execution")
-    return report_path, report
 
 
 def latest_starter_agent_report(

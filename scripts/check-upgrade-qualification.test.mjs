@@ -9,6 +9,8 @@ import { test } from 'node:test';
 
 import {
   buildQualificationEvidence,
+  buildUnadvertisedQualificationEvidence,
+  verifyDarwin,
   verifyWindows,
 } from './run-upgrade-native-qualification.mjs';
 import {
@@ -292,6 +294,56 @@ test('Windows Alpha native evidence accepts exact unsigned PE bytes', () => {
   }
 });
 
+test('macOS Alpha native evidence defers final signing to the credential island', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kungfu-deferred-macos-signing-'),
+  );
+  try {
+    const application = path.join(
+      root,
+      'product',
+      'dist',
+      'desktop',
+      'Kungfu Episodes.app',
+      'Contents',
+    );
+    fs.mkdirSync(path.join(application, 'MacOS'), { recursive: true });
+    fs.writeFileSync(path.join(application, 'Info.plist'), '<plist/>');
+    fs.writeFileSync(path.join(application, 'MacOS', 'Kungfu Episodes'), 'bin');
+    const policy = {
+      schema: 'kungfu.macos-credential-island-policy/v1',
+      environment: 'buildchain-artifact-signing',
+      platformId: 'macos-arm64-credential',
+      app: { bundleId: 'com.kungfu.app', architecture: 'arm64' },
+      requiredVerifications: ['codesignStrict', 'appStaple'],
+    };
+    const policyFile = path.join(
+      root,
+      'docs',
+      'qualification',
+      'gates',
+      'macos-credential-island-policy.json',
+    );
+    fs.mkdirSync(path.dirname(policyFile), { recursive: true });
+    fs.writeFileSync(policyFile, JSON.stringify(policy));
+
+    assert.deepEqual(verifyDarwin(root), {
+      kind: 'credential-island-deferred',
+      functionalArtifact: true,
+      finalSignature: 'deferred',
+      finalNotarization: 'deferred',
+      authority: 'buildchain-artifact-signing',
+      platformId: 'macos-arm64-credential',
+      bundleId: 'com.kungfu.app',
+      architecture: 'arm64',
+      requiredFinalVerifications: ['codesignStrict', 'appStaple'],
+      artifactIntegrity: 'signed-channel-digest',
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('native campaign evidence signs every retained artifact without persisting a private key', () => {
   const { manifest, evidence: fixtureEvidence } = signedFixture();
   manifest.artifacts.push({
@@ -328,6 +380,36 @@ test('native campaign evidence signs every retained artifact without persisting 
   assert.equal(
     verifyUpgradeQualificationEvidence(manifest, evidence, 'cli', CONTRACT),
     evidence,
+  );
+});
+
+test('unadvertised platforms retain signed artifact evidence without inventing update campaigns', () => {
+  const { manifest } = signedFixture();
+  const evidence = buildUnadvertisedQualificationEvidence({
+    manifest,
+    contract: CONTRACT,
+    nativeSigning: { kind: 'credential-island-deferred' },
+    generatedAt: '2026-07-15T00:00:00.000Z',
+  });
+  assert.equal(evidence.tier, 'source-fixture');
+  assert.deepEqual(evidence.campaigns, []);
+  assert.equal(evidence.checks.oneCommandUpdate, false);
+  assert.deepEqual(evidence.promotion, {
+    advertised: false,
+    promotionEligible: false,
+    blocker:
+      'signed and notarized old-to-new archive and package-manager campaigns are not retained',
+  });
+  assert.equal(evidence.artifacts.length, manifest.artifacts.length);
+  assert.throws(
+    () =>
+      verifyUpgradeQualificationEvidence(
+        manifest,
+        evidence,
+        'desktop',
+        CONTRACT,
+      ),
+    (error) => error.code === 'qualification-tier-insufficient',
   );
 });
 

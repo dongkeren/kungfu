@@ -34,6 +34,11 @@ concurrency:
 jobs:
   qualify:
     name: ${{ inputs.mode == 'smoke' && 'macOS JIT runner profile smoke' || 'Trusted exact-source full macOS qualification' }}
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      id-token: write
     if: >-
       ${{
         github.repository == 'kungfu-systems/kungfu' &&
@@ -43,9 +48,9 @@ jobs:
           (inputs.mode == 'full' && inputs.qualification-id == 'mac-full-01')
         )
       }}
-    uses: kungfu-systems/buildchain/.github/workflows/.build.yml@376fb92fa014102366111b9aaef4856486c1e499
+    uses: kungfu-systems/buildchain/.github/workflows/.build.yml@v3
     with:
-      buildchain-ref: 376fb92fa014102366111b9aaef4856486c1e499
+      buildchain-ref: train/v3/v3.0/aws-macos-burst-20260811
       runner-preset: aws-us-ec2-macos-jit
       aws-ec2-macos-runner-label: ${{ inputs.runner-label }}
       setup-rust: true

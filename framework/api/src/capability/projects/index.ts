@@ -529,6 +529,18 @@ export type ProjectWorkRunPlan = {
       version: string | null;
       error: string | null;
     };
+    projectTrust: {
+      schema: 'kungfu.agent-project-trust/v1';
+      provider: 'codex';
+      workspaceRoot: string;
+      scope: 'single-invocation';
+      allows: [
+        'project-local-config',
+        'project-local-hooks',
+        'project-local-exec-policies',
+      ];
+      persistent: false;
+    } | null;
   };
   effects: Array<{ stage: string; label: string }>;
   skippedEffects: string[];
@@ -724,6 +736,14 @@ export type Projects = {
     approved: boolean,
   ) => Promise<ProjectWorkRunSnapshot>;
   endRun: (runId: string) => Promise<ProjectWorkRunSnapshot>;
+};
+
+type ProjectAgentSessionFinalization = {
+  schema: 'kungfu.work-start.agent-session-finalization/v1';
+  status: 'agent-finished';
+  reportPath: string;
+  agentReport: Record<string, unknown>;
+  writeOccurred: true;
 };
 
 function parse<T>(raw: string, schema: string): T {
@@ -1017,6 +1037,38 @@ export function openProjects(options: ProjectCommandOptions): Projects {
     }));
     return retainedRuns.find((candidate) => candidate.id === runId) ?? null;
   };
+  const controlActorId = 'kungfu-project-work';
+  const ensureProjectWorkControl = async (
+    ref: ProjectAgentSessionRef,
+  ): Promise<void> => {
+    const status = await sessionInvoke({ operation: 'status', session: ref });
+    const controller = status.controller as
+      | { holderId?: unknown }
+      | null
+      | undefined;
+    if (controller?.holderId === controlActorId) return;
+    const payload = {};
+    const plan = await sessionInvoke({
+      operation: 'plan-control',
+      controlOperation: 'acquire-control',
+      session: ref,
+      payload,
+    });
+    const receipt = await sessionInvoke({
+      operation: 'acquire-control',
+      actorId: controlActorId,
+      client: options.agentSessionClient ?? 'gui',
+      plan,
+      expectedPlanRoot: plan.root,
+      payload,
+      automatic: false,
+    });
+    if (!['granted', 'duplicate'].includes(String(receipt.status))) {
+      throw new Error(
+        `Agent Session control is unavailable: ${String(receipt.reason ?? receipt.status ?? 'controller lease denied')}`,
+      );
+    }
+  };
   const controlRun = async (
     runId: string,
     operation: 'instruct' | 'send-key' | 'respond-control' | 'end',
@@ -1031,6 +1083,7 @@ export function openProjects(options: ProjectCommandOptions): Projects {
       );
     }
     const ref = sessionRef(run);
+    await ensureProjectWorkControl(ref);
     const plan = await sessionInvoke({
       operation: 'plan-control',
       controlOperation: operation,
@@ -1039,7 +1092,7 @@ export function openProjects(options: ProjectCommandOptions): Projects {
     });
     await sessionInvoke({
       operation,
-      actorId: 'kungfu-project-work',
+      actorId: controlActorId,
       client: options.agentSessionClient ?? 'gui',
       plan,
       expectedPlanRoot: plan.root,
@@ -1907,6 +1960,68 @@ export function openProjects(options: ProjectCommandOptions): Projects {
       await controlRun(runId, 'send-key', { key: approved ? 'y' : 'n' }, false);
       return controlRun(runId, 'send-key', { key: 'Enter' }, false);
     },
-    endRun: (runId) => controlRun(runId, 'end', {}, false),
+    endRun: async (runId) => {
+      const ended = await controlRun(runId, 'end', {}, false);
+      const receipt = ended.receipt;
+      const report = receipt?.agentReport as
+        | { episode?: { reportPath?: unknown } }
+        | undefined;
+      const work = receipt?.work;
+      const workspace = receipt?.workspace?.workspace_root;
+      if (
+        !receipt ||
+        typeof report?.episode?.reportPath !== 'string' ||
+        !report.episode.reportPath ||
+        !workspace ||
+        !work?.initiativeId ||
+        !work.assignmentId
+      ) {
+        return ended;
+      }
+      const finalized = await invoke<ProjectAgentSessionFinalization>(
+        [
+          'work',
+          'finalize-agent-session',
+          report.episode.reportPath,
+          '--workspace',
+          workspace,
+          '--initiative-id',
+          work.initiativeId,
+          '--assignment-id',
+          work.assignmentId,
+        ],
+        'kungfu.work-start.agent-session-finalization/v1',
+      );
+      const resumed = await invoke<{
+        schema: 'kungfu.work-start.resume/v1';
+        status: 'retained-agent-run' | 'no-retained-agent-run';
+        workReceipt: ProjectWorkResume['workReceipt'] | null;
+        writeOccurred: false;
+      }>(
+        [
+          'work',
+          'start-resume',
+          '--workspace',
+          workspace,
+          '--initiative-id',
+          work.initiativeId,
+          '--assignment-id',
+          work.assignmentId,
+        ],
+        'kungfu.work-start.resume/v1',
+      );
+      if (!resumed.workReceipt) {
+        throw new Error(
+          `Kungfu finalized ${finalized.reportPath} but did not return a canonical Work receipt`,
+        );
+      }
+      const canonicalReceipt = resumed.workReceipt;
+      updateRun(runId, (current) => ({
+        ...current,
+        lastEventAt: Date.now(),
+        receipt: canonicalReceipt,
+      }));
+      return retainedRuns.find((candidate) => candidate.id === runId) ?? ended;
+    },
   };
 }

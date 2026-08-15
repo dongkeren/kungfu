@@ -107,6 +107,42 @@ def validate_manager(value: dict[str, Any]) -> None:
     _validate("manager", value, "skill manager")
 
 
+def validate_definition_v2(value: dict[str, Any]) -> None:
+    _validate("definitionV2", value, "Skill v2 definition")
+
+
+def validate_authoring_spec_v1(value: dict[str, Any]) -> None:
+    _validate("authoringSpecV1", value, "Skill authoring spec")
+
+
+def validate_authoring_plan_v1(value: dict[str, Any]) -> None:
+    _validate("authoringPlanV1", value, "Skill authoring plan")
+
+
+def validate_authoring_receipt_v1(value: dict[str, Any]) -> None:
+    _validate("authoringReceiptV1", value, "Skill authoring receipt")
+
+
+def validate_registry_state_v2(value: dict[str, Any]) -> None:
+    _validate("registryStateV2", value, "Skill registry v2 state")
+
+
+def validate_lifecycle_plan_v2(value: dict[str, Any]) -> None:
+    _validate("lifecyclePlanV2", value, "Skill lifecycle v2 plan")
+
+
+def validate_lifecycle_receipt_v2(value: dict[str, Any]) -> None:
+    _validate("lifecycleReceiptV2", value, "Skill lifecycle v2 receipt")
+
+
+def validate_dependency_plan_v2(value: dict[str, Any]) -> None:
+    _validate("dependencyPlanV2", value, "Skill dependency v2 plan")
+
+
+def validate_dependency_receipt_v2(value: dict[str, Any]) -> None:
+    _validate("dependencyReceiptV2", value, "Skill dependency v2 receipt")
+
+
 def _validate(schema_name: str, value: dict[str, Any], label: str) -> None:
     contract_runtime.validate_json_schema(
         value,

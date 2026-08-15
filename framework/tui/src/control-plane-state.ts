@@ -19,14 +19,23 @@ export function initialProductSurface({
   playbackMode,
   firstLaunch,
   emptyState,
+  openLab = false,
 }: {
   playbackMode: boolean;
   firstLaunch: boolean;
   emptyState: boolean;
+  openLab?: boolean;
 }): ProductSurface {
   if (playbackMode) return 'lab';
-  if (firstLaunch) return 'onboarding';
-  return emptyState ? 'all-work' : 'loading';
+  if (openLab) return 'lab';
+  if (emptyState) return 'all-work';
+  return firstLaunch ? 'onboarding' : 'loading';
+}
+
+export function onboardingContinueSurface(
+  firstLaunch: boolean,
+): ProductSurface {
+  return firstLaunch ? 'projects' : 'all-work';
 }
 
 type SearchableQuickCommand = {
@@ -306,6 +315,19 @@ export function directWorkspaceNavigationFromInput(
     return 'projects';
   }
   return null;
+}
+
+export function projectWorkOwnsInput(
+  current: ControlPlaneState,
+  input: string,
+  surface: string,
+): boolean {
+  return (
+    surface === 'project-work' &&
+    current.mode === 'closed' &&
+    current.focus === 'workspace' &&
+    input === 'i'
+  );
 }
 
 export function quickCommandMatches(

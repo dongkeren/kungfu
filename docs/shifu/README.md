@@ -38,13 +38,106 @@ execution; Shifu owns how the task is executed after source checkout.
   content, and submission roots. Kungfu's compatibility submission is
   [`../../shifu.documentation.json`](../../shifu.documentation.json).
 - [`production-graph-contract.json`](production-graph-contract.json) defines the
-  project-independent Production Graph v0 description and verification
-  boundary. Its content-addressed graph, plan, execution-event, receipt,
-  failure, recovery, and verification-receipt schemas retain exact source,
+  project-independent Production Graph v0 description, verification, and
+  bounded local execution boundary. Its content-addressed graph, plan,
+  execution-event, receipt, failure, recovery, executor-policy, local-execution,
+  and verification-receipt schemas retain exact source,
   project-authority, and Xinfa selection roots without executing nodes or
-  acquiring Assignment or Work Control authority. Run
+  acquiring Assignment or Work Control authority. Kungfu's compiler seam in
+  [`framework/production-graph/compiler/index.mjs`](../../framework/production-graph/compiler/index.mjs)
+  accepts only an exact checkout, canonical authority roots and opaque IDs,
+  and a source-matched verified Xinfa selection. Its polyglot fixture retains
+  Cargo, pnpm, GYP, uv, Conan, CMake, wheel, freezer, KFX, TUI, GUI, product,
+  and Buildchain handoff executor references while keeping execution external.
+  The bounded
+  [`core-production-subgraph-contract.json`](core-production-subgraph-contract.json)
+  specializes that describe-only seam for the `journal` Core profile. It
+  exposes exactly `dependency-bootstrap`, `native-build`, and `artifact-stage`
+  in dependency order, gives each node one responsibility, and binds every
+  source, toolchain, profile, project-authority, Xinfa-selection, and stage
+  output declaration by root. These nodes are not independent commands: the
+  unchanged `./shifu build:core` route remains the only execution owner, and
+  the compiler and verifier start no stage and perform no cutover.
+  Run
   `./shifu check:production-graph` to emit the exact protected-CI verification
   receipt over the deterministic conformance fixtures.
+  Before any node starts, `./shifu production-graph:admit --request REQUEST`
+  verifies one exact native `kungfu.work-ref/v1`, Work Control query and run-gate
+  roots, external authorization evidence, actor, attempt, executor policy,
+  intended node set, source, graph, plan, project-authority, Xinfa selection,
+  lease, and expiry. Missing, stale, drifted, expired, mismatched, replayed, or
+  denied evidence produces a content-addressed rejection with
+  `nodesStarted=false` and `authorityMutations=[]`. An admitted decision is
+  only permission for its exact node set until `expiresAt`; admission itself
+  never starts a node. Shifu does not mint or modify Assignment, Work Control,
+  Warrant, approval, merge, or close authority.
+  `./shifu production-graph:execute --graph GRAPH --plan PLAN
+  --verification-receipt RECEIPT --execution-admission-request REQUEST
+  --execution-admission-decision DECISION --executor-policy POLICY --execute`
+  is the v0 local executor. It accepts only a clean exact source, the same
+  rooted graph, plan, policy, and non-expired admitted node set, plus exact
+  `production-graph:fixture:*` tasks allowlisted by the policy, plus exactly
+  one bounded real `build:core` node only when the policy binds
+  `KUNGFU_BUILD_PROFILE=journal`. Concurrency is fixed to one. It emits
+  deterministic started, terminal, timeout, and
+  dependency-skip events and one rooted receipt. Replaying the same inputs
+  returns the existing exact receipt without starting a process. It is not a
+  scheduler, and it cannot mutate Work or Assignment authority.
+  `./shifu production-graph:build-result --execution-receipt RECEIPT
+  --output-dir DIR [--expected-receipt-root ROOT]` deterministically settles
+  one exact terminal local-execution receipt into a content-addressed
+  build-result projection and settlement receipt. Successful node output roots
+  become typed-position digests bound to their node evidence and exact run;
+  partial output, failure, cancellation, skipped nodes, retained evidence,
+  completeness, and next action remain explicit. This projection is not a
+  Core Cut or Project Cut, Buildchain or KFD evidence, stored artifact,
+  signature, publication decision, or Release Cut. Those authorities must
+  independently consume and qualify the projection if it is useful to them.
+  `./shifu production-graph:local-ci-parity run --lane protected-ci
+  --output-dir DIR` runs one fixture-safe, conformance-admitted Production
+  Graph slice in the additive Linux shadow job of the protected PR workflow.
+  The retained artifact binds the exact source, contract, graph, plan,
+  verification, admission, executor policy, node set, events, outputs, local
+  execution receipt, and build-result roots. From the exact source, use
+  `./shifu production-graph:local-ci-parity replay --artifact-dir CI_DIR
+  --output-dir LOCAL_DIR` to execute the same slice locally and emit a rooted
+  parity report. Only platform, architecture, and Node version are declared
+  environment variance; every semantic-root difference blocks parity. The
+  lane has read-only repository permission, uses synthetic conformance
+  evidence that grants no real Work authority, and cannot approve, merge,
+  publish, release, or weaken another check.
+  `./shifu build:core:graph-shadow` is an additive comparison route. After the
+  same exact admission is reverified, it runs the unchanged
+  `./shifu build:core` command once as the authoritative lane and once through
+  the admitted one-node local executor, both with the bounded `journal`
+  profile. Its rooted receipt retains exact command, environment, stdout,
+  stderr, exit, event, failure, local receipt, and evidence roots and classifies
+  every compared dimension as parity, explainable nondeterminism, authority or
+  source drift, executor drift, or blocker. It does not cut over or modify the
+  authoritative `build:core` route.
+  The additive `./shifu core:affected:graph-shadow` route is the first bounded
+  external consumer. It requires an exact graph, compiled plan,
+  `./shifu production-graph:verify` receipt, execution-admission request, and
+  matching admitted decision. Immediately before spawn it re-verifies the full
+  request, exact decision, source, roots, node set, and live expiry; only then
+  does it admit one dependency-free `core:affected` node with the Core native
+  qualification authority and delegate to the unchanged `core:affected`
+  command.
+  Shadow events and receipts bind the current plan, toolchain, raw current
+  receipt, exit status, and parity result under the operating system temporary
+  root. Nonzero exits and cancellation remain non-qualifying. Removing or
+  disabling this route leaves the independently authoritative
+  `./shifu core:affected` path unchanged.
+  `./shifu production-graph:feedback --graph GRAPH --plan PLAN
+  --shadow-receipt RECEIPT [--json]` reads those bounded artifacts without
+  executing recovery. Human and JSON modes expose the same source, authority,
+  Xinfa selection, node, event, output, receipt, parity, failure owner,
+  retained-evidence, and next-action facts while omitting receipt bodies. Its
+  one decision is `complete`, `inspect`, `resume-eligible`,
+  `restart-required`, or `blocked-by-drift`; source, graph, project-authority,
+  selection, plan, toolchain, and retained-output drift always fail closed.
+  Exit `0` means complete, `1` means a bounded human action is required, `2`
+  means drift blocks recovery, and `3` means the command or input is invalid.
 - [`.xinfa/project.json`](../../.xinfa/project.json) is the project-owned semantic declaration consumed by Xinfa. [`shifu.documentation.surfaces.json`](../../shifu.documentation.surfaces.json) is only a compatibility alias and carries no independent policy.
   classifies every tracked human-readable surface plus explicit product and
   Agent surfaces. Shifu closes the exact-path inventory; Xinfa remains the sole

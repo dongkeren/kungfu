@@ -113,18 +113,17 @@ function makeContractRepo(t) {
   return root;
 }
 
-test('keeps stable and Alpha Buildchain KFD metadata on their declared lines', () => {
+test('keeps stable and dev Buildchain KFD metadata on their declared lines', () => {
   const stableKfd = buildchainRequire('@kungfu-tech/kfd/package.json');
-  const alphaKfd = buildchainAlphaRequire('@kungfu-tech/kfd/package.json');
+  const devKfd = buildchainAlphaRequire('@kungfu-tech/kfd/package.json');
   assert.equal(
     stableKfd.version,
     buildchainPackage.dependencies['@kungfu-tech/kfd'],
   );
   assert.equal(
-    alphaKfd.version,
+    devKfd.version,
     buildchainAlphaPackage.dependencies['@kungfu-tech/kfd'],
   );
-  assert.notEqual(stableKfd.version, alphaKfd.version);
 });
 
 for (const [surface, source] of [
@@ -445,12 +444,12 @@ test('kfd check verifies the packaged KFD-3 registry projection', () => {
   assert.match(data.supportMatrix.sha256, /^sha256:[0-9a-f]{64}$/);
   assert.equal(data.query.kfd.kfd3, 'declared');
   assert.equal(data.query.kfd.kfd4, 'verified-candidate-not-shipped');
-  assert.equal(data.standards['kfd-1'].status, 'source-supported');
-  assert.equal(data.standards['kfd-2'].status, 'source-supported');
-  assert.equal(data.standards['kfd-3'].status, 'source-supported');
+  assert.equal(data.standards['kfd-1'].status, 'candidate');
+  assert.equal(data.standards['kfd-2'].status, 'candidate');
+  assert.equal(data.standards['kfd-3'].status, 'candidate');
   assert.equal(data.standards['kfd-4'].status, 'candidate');
   assert.equal(data.standards['kfd-6'].status, 'unsupported');
-  assert.equal(data.standards['kfd-7'].status, 'source-supported');
+  assert.equal(data.standards['kfd-7'].status, 'candidate');
   assert.equal(data.standards['kfd-13'].status, 'draft-adopter-evidence');
 });
 
@@ -460,7 +459,7 @@ test('kfd status exposes the governed KFD-1 through KFD-13 support matrix', () =
   assert.equal(data.packages.kfd, kfdPackage.version);
   assert.equal(data.packages.buildchain, buildchainPackage.version);
   assert.equal(data.matrix.rowCount, 13);
-  assert.equal(data.matrix.shippedSupportCount, 4);
+  assert.equal(data.matrix.shippedSupportCount, 0);
   assert.deepEqual(
     Object.keys(data.standards).sort((left, right) => {
       const leftNumber = Number(left.slice(4));
@@ -469,14 +468,14 @@ test('kfd status exposes the governed KFD-1 through KFD-13 support matrix', () =
     }),
     Array.from({ length: 13 }, (_, index) => `kfd-${index + 1}`),
   );
-  assert.equal(data.standards['kfd-1'].status, 'source-supported');
+  assert.equal(data.standards['kfd-1'].status, 'candidate');
   assert.equal(data.standards['kfd-2'].mode, 'release-claims');
-  assert.equal(data.standards['kfd-3'].status, 'source-supported');
+  assert.equal(data.standards['kfd-3'].status, 'candidate');
   assert.equal(data.standards['kfd-4'].status, 'candidate');
   assert.ok(data.standards['kfd-4'].schemaCount >= 1);
   assert.equal(data.standards['kfd-5'].status, 'candidate');
   assert.equal(data.standards['kfd-6'].status, 'unsupported');
-  assert.equal(data.standards['kfd-7'].status, 'source-supported');
+  assert.equal(data.standards['kfd-7'].status, 'candidate');
   for (const number of [8, 9, 10, 11, 12, 13]) {
     assert.equal(
       data.standards[`kfd-${number}`].status,

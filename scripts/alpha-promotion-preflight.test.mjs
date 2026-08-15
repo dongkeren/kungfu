@@ -496,6 +496,23 @@ test('fast sentinels fail the representative recent invalid fixtures', () => {
   );
 });
 
+test('auditable-demo fast sentinel rejects Buildchain v3 rendition drift', () => {
+  const scenario = JSON.parse(
+    fs.readFileSync('.buildchain/auditable-demo.json', 'utf8'),
+  );
+  const transportScenario = JSON.parse(
+    fs.readFileSync('.buildchain/auditable-demo-transport-smoke.json', 'utf8'),
+  );
+  transportScenario.renditions[1].columns = 100;
+  const issues = inspectAuditableDemoFastSentinel({
+    workflow: fs.readFileSync('.github/workflows/build.yml', 'utf8'),
+    scenario,
+    transportScenario,
+    product: fs.readFileSync('product/scripts/dist.mjs', 'utf8'),
+  });
+  assert.match(issues.join('\n'), /native rendition profiles/u);
+});
+
 test('patrol, normal Alpha builds and sentinels keep one controller authority', () => {
   const patrol = fs.readFileSync(
     '.github/workflows/dev-alpha-candidate-patrol.yml',
@@ -559,6 +576,22 @@ test('patrol, normal Alpha builds and sentinels keep one controller authority', 
     /windows-fast-sentinel:[\s\S]*always\(\)[\s\S]*inputs\.fast-sentinels-only[\s\S]*needs\.preflight\.result == 'skipped'/u,
   );
   assert.match(build, /build:[\s\S]*!inputs\.fast-sentinels-only/u);
+  assert.match(
+    build,
+    /RELEASE_CUT_SOURCE_REF: \$\{\{ fromJSON\(inputs\.macos-overflow-request-json \|\| '\{\}'\)\.releaseCutSourceRef \|\| '' \}\}[\s\S]*RELEASE_CUT_SOURCE_SHA: \$\{\{ fromJSON\(inputs\.macos-overflow-request-json \|\| '\{\}'\)\.sourceSha \|\| '' \}\}/u,
+  );
+  assert.match(
+    build,
+    /Verify explicit Release Cut source lock[\s\S]*publish-gate\/anchor[\s\S]*kungfu\.alpha-release-cut-build-lock\/v1[\s\S]*v4\.0\.0-alpha\.2[\s\S]*r20[\s\S]*f9e6b0e34bcdd6407b2a18206ace7982d64de2c8[\s\S]*buildchainRef == "v3-alpha"[\s\S]*devMirrorIsBuildInput == false/u,
+  );
+  assert.match(
+    build,
+    /buildchain-ref: \$\{\{ inputs\.buildchain-ref \|\| 'v3-alpha' \}\}[\s\S]*publish-source-ref: \$\{\{ fromJSON\(inputs\.macos-overflow-request-json \|\| '\{\}'\)\.releaseCutSourceRef \|\| '' \}\}[\s\S]*publish-anchor-request-json: \$\{\{ fromJSON\(inputs\.macos-overflow-request-json \|\| '\{\}'\)\.releaseCutSourceRef && toJSON/u,
+  );
+  assert.match(
+    build,
+    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@v3-alpha/u,
+  );
   const preBuild = build.slice(0, build.indexOf('\n  build:'));
   assert.doesNotMatch(
     preBuild,

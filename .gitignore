@@ -49,11 +49,14 @@ dist/
 .buildchain/*
 !.buildchain/buildchain.toml
 !.buildchain/auditable-demo.json
+!.buildchain/auditable-demo-transport-smoke.json
 !.buildchain/alpha-contract-lock.json
 !.buildchain/contract-lock.json
 product/.buildchain/
 !.buildchain/kfd/
 .buildchain/kfd/*
+!.buildchain/kfd/adopter-manifest.json
+!.buildchain/kfd/adopter-manifest-gate.json
 !.buildchain/kfd/kfd-1/
 !.buildchain/kfd/kfd-1/**
 !.buildchain/kfd/kfd-2/

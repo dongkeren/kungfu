@@ -11,18 +11,23 @@ from pathlib import Path
 import kungfu
 import pytest
 
-from kungfu import profile_composition, profile_sdk, runtime_broker, runtime_service
+from kungfu import profile_composition, profile_sdk, runtime_service
 from kungfu.atlas import importer, mission_bundle, mission_control, payloads
 from kungfu.atlas import store as atlas_store
 from kungfu.atlas import CARRIER_ATLAS_ACTION
 from kungfu.rewind import reporting as rewind_reporting
 from kungfu.sources import store as source_store
 from kungfu.storage import service as storage_service
+from atlas_storage_fixtures import admit_profile_runtime as _admit_profile_runtime
 
 
 MISSION_PROFILE_SOURCE = (
     Path(__file__).resolve().parents[4] / "extensions" / "work-control"
 )
+
+
+def _mission_control_process_runner():
+    return mission_control._tracked_completion_evidence.__globals__["subprocess"]
 
 
 def _activate_mission_profile(runtime_dir, *, materialize=True):
@@ -57,49 +62,6 @@ def _import_atlas(runtime_dir, repo_root):
         authorized_action=True,
     )
     return receipt["result"]["coreReceipt"]
-
-
-def _admit_profile_runtime(monkeypatch, runtime_dir, config_home):
-    runtime_path = Path(runtime_dir).resolve()
-    evidence = {
-        "schema": "kungfu.runtime.native-readiness-evidence/v1",
-        "workspaceId": runtime_broker.workspace_id(runtime_path),
-        "runtimeHome": str(runtime_path.parent),
-        "dataRoot": str(runtime_path),
-        "minimumCut": {
-            "stream_id": "1",
-            "container_epoch": "1",
-            "sequence": "1",
-            "frame_uid": "1",
-        },
-        "durability": {
-            "requestId": "17",
-            "requestedProfile": "durable_sync",
-            "writerResourceId": "00000007.0000000b",
-            "qualificationProfile": "test/disposable-powercut/v1",
-        },
-        "projection": None,
-    }
-    path = runtime_broker.native_readiness_evidence_path(runtime_dir, config_home)
-    _write_json(path, evidence)
-
-    class AdmittingBroker:
-        def invoke(self, plan, callback):
-            activation = {"outcome": "activated"}
-            return {
-                "schema": "kungfu.runtime.invocation-receipt/v1",
-                "planId": plan["planId"],
-                "operationId": plan["operation"]["id"],
-                "accepted": True,
-                "activation": activation,
-                "result": callback(activation),
-            }
-
-    monkeypatch.setattr(
-        runtime_broker.RuntimeCapabilityBroker,
-        "for_process",
-        classmethod(lambda cls, *_args, **_kwargs: AdmittingBroker()),
-    )
 
 
 def _write_json(path, data):
@@ -1044,7 +1006,7 @@ def test_mission_control_native_go_completion_claim_fails_closed_then_passes(
         ],
         env=cli_env,
     )
-    assert cli.exit_code == 0, cli.output
+    assert cli.exit_code == 0, cli.output + cli.stderr
     cli_report = json.loads(cli.output)
     assert cli_report["fitness"] == "fit"
     assert cli_report["assessment_key"] == completed["assessment_key"]
@@ -1106,7 +1068,7 @@ def test_tracked_completion_selects_claimed_cut_in_multi_cut_commit(
         }
         return subprocess.CompletedProcess(argv, 1, json.dumps(reconcile), "")
 
-    monkeypatch.setattr(mission_control.subprocess, "run", fake_run)
+    monkeypatch.setattr(_mission_control_process_runner(), "run", fake_run)
     state = {
         "goals": [
             {
@@ -1171,7 +1133,7 @@ def test_native_assignment_completion_treats_starting_project_cut_as_context(
         }
         return subprocess.CompletedProcess(argv, 0, values[argv[-1]] + "\n", "")
 
-    monkeypatch.setattr(mission_control.subprocess, "run", fake_run)
+    monkeypatch.setattr(_mission_control_process_runner(), "run", fake_run)
     state = {
         "goals": [
             {
@@ -1685,7 +1647,7 @@ def test_tracked_completion_evidence_rejects_fault_campaign(tmp_path, monkeypatc
             return subprocess.CompletedProcess(args, 0, json.dumps(reconcile), "")
         return real_run(args, **kwargs)
 
-    monkeypatch.setattr(mission_control.subprocess, "run", fake_run)
+    monkeypatch.setattr(_mission_control_process_runner(), "run", fake_run)
     valid = mission_control._tracked_completion_evidence(
         str(checkout), state, "parent-go", claim
     )
