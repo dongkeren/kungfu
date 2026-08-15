@@ -222,7 +222,11 @@ test('publication and recovery clear activation commands while preserving public
   );
   assert.match(
     jobs[1][1],
-    /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=\$\{\{ inputs\.resume-candidate-source-sha \}\} node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/u,
+    /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/u,
+  );
+  assert.doesNotMatch(
+    jobs[1][1],
+    /publication-commit-command:.*BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=/u,
   );
 });
 

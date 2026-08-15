@@ -181,7 +181,7 @@ test('publication commit owns Kungfu release assets but no site repository opera
   );
 });
 
-test('sealed-candidate recovery passes the immutable candidate source only to the publication tail', () => {
+test('sealed-candidate recovery preserves the resolved artifact source for the publication tail', () => {
   const source = fs.readFileSync(
     new URL('./alpha-publication-commit.mjs', import.meta.url),
     'utf8',
@@ -196,7 +196,11 @@ test('sealed-candidate recovery passes the immutable candidate source only to th
   );
   assert.match(
     workflow,
-    /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=\$\{\{ inputs\.resume-candidate-source-sha \}\} node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/u,
+    /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/u,
+  );
+  assert.doesNotMatch(
+    workflow,
+    /publication-commit-command:.*BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=/u,
   );
   assert.match(source, /root: PRODUCT_ROOT,[\s\S]*expectedSourceCommit:/u);
   assert.match(source, /expectedSourceSha: sourceSha/u);

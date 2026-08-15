@@ -438,9 +438,15 @@ export function validateWorkflowSources(root, contract, overrides = {}) {
   );
   requirePattern(
     recovery,
-    /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=\$\{\{ inputs\.resume-candidate-source-sha \}\} node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/,
+    /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/,
     findings,
-    'release-candidate recovery must run the pinned controller against the immutable candidate product root',
+    'release-candidate recovery must run the pinned controller against the immutable candidate product root without overriding the resolved artifact source',
+  );
+  forbidPattern(
+    recovery,
+    /publication-commit-command:.*BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=/,
+    findings,
+    'release-candidate recovery must preserve Buildchain resolved artifact source identity',
   );
   requirePattern(
     promote,
