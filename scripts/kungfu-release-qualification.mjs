@@ -195,6 +195,8 @@ export async function createKungfuConsumerPublicationDecision({
   predicateId,
   predicateDigest,
   createDecision,
+  expectedRuntimeSha = '',
+  expectedContractDigest = '',
   now = new Date(),
 } = {}) {
   const policy = readJson(path.resolve(root, POLICY));
@@ -220,9 +222,20 @@ export async function createKungfuConsumerPublicationDecision({
   exact(capability?.environment, policy.publication.environment, 'environment');
   exact(capability?.product, policy.publication.product, 'product');
   exact(capability?.target, policy.publication.target, 'target');
-  exact(capability?.runtimeSha, runtime.publicationRuntimeSha, 'runtime SHA');
+  if (Boolean(expectedRuntimeSha) !== Boolean(expectedContractDigest))
+    throw new Error(
+      'recovery runtime and contract overrides must be provided together',
+    );
+  const publicationRuntimeSha =
+    expectedRuntimeSha || runtime.publicationRuntimeSha;
+  if (!/^[0-9a-f]{40}$/.test(publicationRuntimeSha))
+    throw new Error('recovery publication runtime SHA is invalid');
+  exact(capability?.runtimeSha, publicationRuntimeSha, 'runtime SHA');
+  const publicationContractDigests = expectedContractDigest
+    ? [expectedContractDigest]
+    : runtime.publicationContractDigests;
   if (
-    !runtime.publicationContractDigests
+    !publicationContractDigests
       .map((value) =>
         normalizeDigest(value, 'policy.publicationContractDigests'),
       )
@@ -290,6 +303,9 @@ async function main() {
     predicateId: process.env.BUILDCHAIN_PUBLICATION_PREDICATE_ID,
     predicateDigest: process.env.BUILDCHAIN_PUBLICATION_PREDICATE_DIGEST,
     createDecision: createConsumerPublicationDecision,
+    expectedRuntimeSha: process.env.BUILDCHAIN_EXPECTED_PUBLICATION_RUNTIME_SHA,
+    expectedContractDigest:
+      process.env.BUILDCHAIN_EXPECTED_PUBLICATION_CONTRACT_DIGEST,
   });
   fs.mkdirSync(path.dirname(path.resolve(ROOT, resultPath)), {
     recursive: true,

@@ -23,13 +23,6 @@ const CONTRACT = JSON.parse(
     'utf8',
   ),
 );
-const RELEASE_ADMISSION = JSON.parse(
-  fs.readFileSync(
-    path.join(ROOT, 'docs/qualification/gates/release-admission-policy.json'),
-    'utf8',
-  ),
-);
-
 test('the committed Buildchain promotion consumer contract is coherent', () => {
   const result = validatePromotionContract(ROOT);
   assert.equal(result.ok, true, JSON.stringify(result.findings, null, 2));
@@ -163,7 +156,7 @@ test('promotion caller grants the write permissions required by Buildchain', () 
   }
 });
 
-test('promotion caller and recovery use the v3-alpha floating router', () => {
+test('promotion caller and recovery use the exact reviewed publication shell', () => {
   const workflow = fs.readFileSync(
     path.join(ROOT, CONTRACT.workflows.promotion),
     'utf8',
@@ -172,9 +165,11 @@ test('promotion caller and recovery use the v3-alpha floating router', () => {
   assert.ok(promote);
   assert.match(
     promote,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/release-candidate-promote\.yml@v3/u,
+    new RegExp(
+      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.release-candidate-promote\\.yml@${CONTRACT.buildchain.promotion_workflow_shell_ref}`,
+      'u',
+    ),
   );
-  assert.doesNotMatch(promote, /release-candidate-promote\.yml@[0-9a-f]{40}/u);
 });
 
 test('publication and recovery clear activation commands while preserving publication surfaces', () => {
@@ -260,7 +255,7 @@ test('promotion rehearsal rejects restored activation or passport evidence comma
   }
 });
 
-test('Alpha recovery reuses a verified sealed candidate through the reviewed floating contract', () => {
+test('Alpha recovery reuses a verified sealed candidate through the exact reviewed shell', () => {
   const workflow = fs.readFileSync(
     path.join(ROOT, CONTRACT.workflows.promotion),
     'utf8',
@@ -270,12 +265,11 @@ test('Alpha recovery reuses a verified sealed candidate through the reviewed flo
   assert.match(
     recovery,
     new RegExp(
-      `uses: kungfu-systems/buildchain/\\.github/workflows/release-candidate-promote\\.yml@${RELEASE_ADMISSION.buildchain.runtimes.alpha.ref}`,
+      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.release-candidate-promote\\.yml@${CONTRACT.buildchain.promotion_workflow_shell_ref}`,
       'u',
     ),
   );
   for (const binding of [
-    'buildchain-channel: auto',
     'buildchain-ref: ${{ inputs.resume-buildchain-runtime-sha }}',
     'target-ref: ${{ inputs.target-ref }}',
     'target-sha: ${{ inputs.target-sha }}',
@@ -288,13 +282,14 @@ test('Alpha recovery reuses a verified sealed candidate through the reviewed flo
     'resume-buildchain-runtime-sha: ${{ inputs.resume-buildchain-runtime-sha }}',
     'resume-transaction-id: ${{ inputs.resume-transaction-id }}',
     'publication-gate-controller-sha: ${{ inputs.resume-publication-gate-controller-sha }}',
+    'publication-consumer-qualification-command: BUILDCHAIN_EXPECTED_PUBLICATION_RUNTIME_SHA=${{ inputs.resume-buildchain-runtime-sha }} BUILDCHAIN_EXPECTED_PUBLICATION_CONTRACT_DIGEST=sha256:f4755b0aff08c4e1e170b6760ca16a2073ead712fa658c40b91cd66d5dc7867d node scripts/kungfu-release-qualification.mjs',
+    'publication-consumer-qualification-controller-sha: ${{ github.sha }}',
     'publish-command: node .buildchain/publication-controller/scripts/buildchain-custom-publish-evidence.mjs',
     'publish-transaction-override: ${{ inputs.publish-transaction-override }}',
     'dry-run: false',
   ]) {
     assert.ok(recovery.includes(binding), binding);
   }
-  assert.doesNotMatch(recovery, /release-candidate-promote\.yml@[0-9a-f]{40}/u);
   assert.doesNotMatch(recovery, /^\s+strategy:\s*$/mu);
   assert.doesNotMatch(workflow, /test "\$CANDIDATE_RUN_ID" = "[0-9]+"/u);
   assert.doesNotMatch(workflow, /test "\$PREFLIGHT_RUN_ID" = "[0-9]+"/u);

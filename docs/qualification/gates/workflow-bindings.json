@@ -610,14 +610,13 @@
       "adapter": {
         "type": "buildchain-release-admission",
         "kind": "job-uses",
-        "uses": "kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@v3-alpha",
+        "uses": "kungfu-systems/buildchain/.github/workflows/.release-candidate-promote.yml@2d6c37a5084555a88bdeaf23318168a0f9675edc",
         "job": {
           "needs": "promotion-contract",
           "if": "${{ (github.event_name == 'workflow_dispatch' && inputs.resume-candidate-run-id == '') || github.event.pull_request.merged == true }}"
         },
         "with": {
           "channel": "${{ startsWith(inputs.target-ref || github.event.pull_request.base.ref, 'alpha/') && 'alpha' || 'release' }}",
-          "buildchain-channel": "${{ startsWith(inputs.target-ref || github.event.pull_request.base.ref, 'alpha/') && 'alpha' || 'stable' }}",
           "buildchain-ref": "${{ startsWith(inputs.target-ref || github.event.pull_request.base.ref, 'alpha/') && 'v3-alpha' || 'v3' }}",
           "target-sha": "${{ inputs.target-sha || github.event.pull_request.merge_commit_sha || github.sha }}",
           "required-status-check": "build / Finalize build controller evidence",
@@ -655,13 +654,12 @@
       "adapter": {
         "type": "buildchain-release-candidate-recovery",
         "kind": "job-uses",
-        "uses": "kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@v3-alpha",
+        "uses": "kungfu-systems/buildchain/.github/workflows/.release-candidate-promote.yml@2d6c37a5084555a88bdeaf23318168a0f9675edc",
         "job": {
           "needs": "recovery-preflight",
           "if": "${{ always() && github.event_name == 'workflow_dispatch' && inputs.resume-candidate-run-id != '' && needs.recovery-preflight.result == 'success' }}"
         },
         "with": {
-          "buildchain-channel": "auto",
           "buildchain-ref": "${{ inputs.resume-buildchain-runtime-sha }}",
           "channel": "alpha",
           "target-ref": "${{ inputs.target-ref }}",
@@ -677,7 +675,8 @@
           "publish-transaction-override": "${{ inputs.publish-transaction-override }}",
           "required-status-check": "build / Finalize build controller evidence",
           "publication-auto-admission": true,
-          "publication-consumer-qualification-command": "node scripts/kungfu-release-qualification.mjs",
+          "publication-consumer-qualification-command": "BUILDCHAIN_EXPECTED_PUBLICATION_RUNTIME_SHA=${{ inputs.resume-buildchain-runtime-sha }} BUILDCHAIN_EXPECTED_PUBLICATION_CONTRACT_DIGEST=sha256:f4755b0aff08c4e1e170b6760ca16a2073ead712fa658c40b91cd66d5dc7867d node scripts/kungfu-release-qualification.mjs",
+          "publication-consumer-qualification-controller-sha": "${{ github.sha }}",
           "publication-consumer-predicate-id": "kungfu.release-admission/v1",
           "publish-command": "node .buildchain/publication-controller/scripts/buildchain-custom-publish-evidence.mjs",
           "runner-preset": "kungfu-v4-native",
