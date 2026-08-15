@@ -952,6 +952,68 @@ test('candidate finalization seals one rooted product admission receipt into its
   });
 });
 
+test('sealed product admission accepts a same-tree recovery promotion source', () => {
+  withFixture((value) => {
+    const promotedSource = 'c'.repeat(40);
+    const sourceTree = 'd'.repeat(40);
+    const outputRoot = path.join(value.payloadRoot, 'kungfu-product-admission');
+    writeUpgradePublicationAdmission({
+      payloadRoot: value.payloadRoot,
+      releaseCandidatePassportPath: value.passportPath,
+      expectedVersion: VERSION,
+      outputPath: path.join(
+        outputRoot,
+        PRODUCT_UPGRADE_PUBLICATION_ADMISSION_FILE,
+      ),
+      capsulePath: path.join(
+        outputRoot,
+        PRODUCT_UPGRADE_PUBLICATION_CAPSULE_FILE,
+      ),
+    });
+    const recoveryReceiptPath = path.join(
+      value.payloadRoot,
+      'recovery-receipt.json',
+    );
+    const recovery = {
+      schemaVersion: 1,
+      contract: 'kungfu-buildchain-release-candidate-recovery',
+      action: 'reused',
+      originalCandidate: { sourceSha: SOURCE, tree: sourceTree },
+      target: { sha: promotedSource, tree: sourceTree, version: VERSION },
+      recovered: { candidateRoot: `sha256:${'e'.repeat(64)}` },
+      skippedBuildStages: ['install', 'build', 'verify', 'platform-matrix'],
+      payloadBytes: 'unchanged',
+    };
+    recovery.root = contentRoot(recovery);
+    writeJson(recoveryReceiptPath, recovery);
+
+    const verified = verifyUpgradePublicationAdmission({
+      payloadRoot: value.payloadRoot,
+      releaseCandidatePassportPath: value.passportPath,
+      expectedVersion: VERSION,
+      expectedSourceSha: promotedSource,
+      recoveryReceiptPath,
+    });
+    assert.equal(verified.receiptRoot.startsWith('sha256:'), true);
+
+    recovery.target.tree = 'f'.repeat(40);
+    Reflect.deleteProperty(recovery, 'root');
+    recovery.root = contentRoot(recovery);
+    writeJson(recoveryReceiptPath, recovery);
+    assert.throws(
+      () =>
+        verifyUpgradePublicationAdmission({
+          payloadRoot: value.payloadRoot,
+          releaseCandidatePassportPath: value.passportPath,
+          expectedVersion: VERSION,
+          expectedSourceSha: promotedSource,
+          recoveryReceiptPath,
+        }),
+      /does not bind the promotion source/,
+    );
+  });
+});
+
 test('candidate finalization ignores root-manifest-only artifact projections', () => {
   withFixture((value) => {
     for (const [name, manifestPath] of [

@@ -89,6 +89,8 @@ function main() {
       ),
     expectedVersion: version,
     expectedSourceSha: requireEnv('BUILDCHAIN_SOURCE_SHA'),
+    recoveryReceiptPath:
+      process.env.BUILDCHAIN_RELEASE_CANDIDATE_RECOVERY_RECEIPT_PATH || '',
   });
   console.log(
     `buildchain custom publish verified sealed upgrade admission ${upgradeAdmission.receiptRoot} for ${upgradeAdmission.platforms.join(', ')}`,

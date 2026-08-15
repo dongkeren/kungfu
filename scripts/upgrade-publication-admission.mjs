@@ -15,6 +15,8 @@ import {
 const RELEASE_MANIFEST_SCHEMA = 'kungfu.product-upgrade.manifest/v1';
 const RELEASE_CANDIDATE_CONTRACT =
   'kungfu-buildchain-release-candidate-passport';
+const RELEASE_CANDIDATE_RECOVERY_CONTRACT =
+  'kungfu-buildchain-release-candidate-recovery';
 const CREDENTIAL_POLICY_PATH =
   'docs/qualification/gates/macos-credential-island-policy.json';
 const CREDENTIAL_EVIDENCE_FILE = 'credential-island-evidence.json';
@@ -981,6 +983,47 @@ function releaseCandidateSources(passport) {
   return sources;
 }
 
+function verifyRecoveryPromotionSource({
+  recoveryReceiptPath,
+  expectedSourceSha,
+  expectedVersion,
+  acceptedSources,
+}) {
+  if (!recoveryReceiptPath || !fs.existsSync(recoveryReceiptPath)) {
+    return false;
+  }
+  const recovery = readJson(
+    recoveryReceiptPath,
+    'release-candidate recovery receipt',
+  );
+  const { root, ...body } = recovery;
+  if (
+    recovery.schemaVersion !== 1 ||
+    recovery.contract !== RELEASE_CANDIDATE_RECOVERY_CONTRACT ||
+    recovery.action !== 'reused' ||
+    recovery.payloadBytes !== 'unchanged' ||
+    root !== contentRoot(body)
+  ) {
+    throw new Error('release-candidate recovery receipt is not authoritative');
+  }
+  if (
+    !SHA1_PATTERN.test(recovery.originalCandidate?.sourceSha || '') ||
+    !acceptedSources.has(recovery.originalCandidate.sourceSha) ||
+    !SHA1_PATTERN.test(recovery.originalCandidate?.tree || '') ||
+    recovery.originalCandidate.tree !== recovery.target?.tree ||
+    recovery.target?.sha !== expectedSourceSha ||
+    recovery.target?.version !== expectedVersion ||
+    !SHA256_PATTERN.test(recovery.recovered?.candidateRoot || '') ||
+    JSON.stringify(recovery.skippedBuildStages || []) !==
+      JSON.stringify(['install', 'build', 'verify', 'platform-matrix'])
+  ) {
+    throw new Error(
+      'release-candidate recovery receipt does not bind the promotion source',
+    );
+  }
+  return true;
+}
+
 export function promotableUpgradePlatforms(
   contract = loadUpgradeQualificationContract(),
 ) {
@@ -1461,6 +1504,7 @@ export function verifyUpgradePublicationAdmission({
   releaseCandidatePassportPath,
   expectedVersion,
   expectedSourceSha,
+  recoveryReceiptPath,
   receiptPath,
   capsulePath,
 } = {}) {
@@ -1592,7 +1636,13 @@ export function verifyUpgradePublicationAdmission({
   }
   if (
     expectedSourceSha &&
-    !receipt.identity?.sources?.includes(expectedSourceSha)
+    !receipt.identity?.sources?.includes(expectedSourceSha) &&
+    !verifyRecoveryPromotionSource({
+      recoveryReceiptPath,
+      expectedSourceSha,
+      expectedVersion: receipt.identity?.version,
+      acceptedSources: new Set(sources),
+    })
   ) {
     throw new Error('product admission source is stale');
   }
