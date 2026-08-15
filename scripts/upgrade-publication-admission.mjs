@@ -16,7 +16,7 @@ const RELEASE_MANIFEST_SCHEMA = 'kungfu.product-upgrade.manifest/v1';
 const RELEASE_CANDIDATE_CONTRACT =
   'kungfu-buildchain-release-candidate-passport';
 const RELEASE_CANDIDATE_RECOVERY_CONTRACT =
-  'kungfu-buildchain-release-candidate-recovery';
+  'kungfu-buildchain-release-candidate-recovery/v1';
 const RELEASE_PROMOTION_GATE_AGGREGATE_CONTRACT =
   'buildchain.shifu-gate-aggregate/v1';
 const CREDENTIAL_POLICY_PATH =

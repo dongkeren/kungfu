@@ -976,7 +976,7 @@ test('sealed product admission accepts a same-tree recovery promotion source', (
     );
     const recovery = {
       schemaVersion: 1,
-      contract: 'kungfu-buildchain-release-candidate-recovery',
+      contract: 'kungfu-buildchain-release-candidate-recovery/v1',
       action: 'reused',
       originalCandidate: { sourceSha: SOURCE, tree: sourceTree },
       target: { sha: promotedSource, tree: sourceTree, version: VERSION },
