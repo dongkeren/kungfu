@@ -53,6 +53,17 @@ test('candidate finalization owns product qualification and release tails only v
   }
 });
 
+test('recovery publication reads the exact Buildchain action input environment', () => {
+  const source = fs.readFileSync(
+    path.join(ROOT, 'scripts/buildchain-custom-publish-evidence.mjs'),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /process\.env\['INPUT_PUBLICATION-GATE-AGGREGATE-JSON'\]/u,
+  );
+});
+
 test('the expensive build retains preflight when additional fast sentinels are required', () => {
   const buildPath = CONTRACT.workflows.build;
   const original = fs.readFileSync(path.join(ROOT, buildPath), 'utf8');
