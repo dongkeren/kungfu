@@ -166,7 +166,7 @@ test('promotion caller and recovery use the exact reviewed publication shell', (
   assert.match(
     promote,
     new RegExp(
-      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.release-candidate-promote\\.yml@${CONTRACT.buildchain.promotion_workflow_shell_ref}`,
+      `uses: kungfu-systems/buildchain/\\.github/workflows/release-candidate-promote\\.yml@${CONTRACT.buildchain.promotion_workflow_shell_ref}`,
       'u',
     ),
   );
@@ -265,7 +265,7 @@ test('Alpha recovery reuses a verified sealed candidate through the exact review
   assert.match(
     recovery,
     new RegExp(
-      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.release-candidate-promote\\.yml@${CONTRACT.buildchain.promotion_workflow_shell_ref}`,
+      `uses: kungfu-systems/buildchain/\\.github/workflows/release-candidate-promote\\.yml@${CONTRACT.buildchain.promotion_workflow_shell_ref}`,
       'u',
     ),
   );

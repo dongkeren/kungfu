@@ -296,10 +296,10 @@ export function validateWorkflowSources(root, contract, overrides = {}) {
   requirePattern(
     promote,
     new RegExp(
-      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.release-candidate-promote\\.yml@${escapeRegExp(contract.buildchain.promotion_workflow_shell_ref)}`,
+      `uses: kungfu-systems/buildchain/\\.github/workflows/release-candidate-promote\\.yml@${escapeRegExp(contract.buildchain.promotion_workflow_shell_ref)}`,
     ),
     findings,
-    'promotion must consume the exact reviewed Buildchain publication shell',
+    'promotion must consume the reviewed Buildchain publication router',
   );
   requirePattern(
     promote,
@@ -333,10 +333,10 @@ export function validateWorkflowSources(root, contract, overrides = {}) {
   requirePattern(
     recovery,
     new RegExp(
-      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.release-candidate-promote\\.yml@${escapeRegExp(contract.buildchain.promotion_workflow_shell_ref)}`,
+      `uses: kungfu-systems/buildchain/\\.github/workflows/release-candidate-promote\\.yml@${escapeRegExp(contract.buildchain.promotion_workflow_shell_ref)}`,
     ),
     findings,
-    'recovery must consume the exact reviewed Buildchain publication shell',
+    'recovery must consume the reviewed Buildchain publication router',
   );
   requirePattern(
     recovery,
