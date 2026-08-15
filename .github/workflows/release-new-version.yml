@@ -421,7 +421,7 @@ jobs:
       issues: write
       id-token: write
       pull-requests: write
-    uses: kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@f3ccf05b728713854df764b97c85fc01853a8ec5
+    uses: kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@ae17435e9b0a84be673545935e5b3414f5adb1e2
     with:
       channel: ${{ startsWith(inputs.target-ref || github.event.pull_request.base.ref, 'alpha/') && 'alpha' || 'release' }}
       buildchain-ref: ${{ startsWith(inputs.target-ref || github.event.pull_request.base.ref, 'alpha/') && 'v3-alpha' || 'v3' }}
@@ -516,7 +516,7 @@ jobs:
       issues: write
       id-token: write
       pull-requests: write
-    uses: kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@f3ccf05b728713854df764b97c85fc01853a8ec5
+    uses: kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@ae17435e9b0a84be673545935e5b3414f5adb1e2
     with:
       buildchain-ref: ${{ inputs.resume-buildchain-runtime-sha }}
       channel: alpha

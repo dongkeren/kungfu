@@ -8,7 +8,7 @@
   "buildchain": {
     "workflow_shell_ref": "v3-alpha",
     "workflow_shell_resolved_sha": "a60957e3ffc8f9a02f0e9419deebc8d35a3f7198",
-    "promotion_workflow_shell_ref": "f3ccf05b728713854df764b97c85fc01853a8ec5",
+    "promotion_workflow_shell_ref": "ae17435e9b0a84be673545935e5b3414f5adb1e2",
     "alpha": {
       "workflow_ref": "v3-alpha",
       "resolved_sha": "82701ca66f5366ade6ec694c9950d5d8d6db082d",
