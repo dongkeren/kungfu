@@ -1016,6 +1016,28 @@ test('sealed product admission accepts a same-tree recovery promotion source', (
     capsule.capsuleRoot = contentRoot(capsule);
     writeJson(capsulePath, capsule);
 
+    assert.throws(
+      () =>
+        verifyUpgradePublicationAdmission({
+          payloadRoot: value.payloadRoot,
+          releaseCandidatePassportPath: value.passportPath,
+          expectedVersion: VERSION,
+          expectedSourceSha: promotedSource,
+          recoveryReceiptPath,
+        }),
+      /product admission tooling root drift/,
+    );
+
+    const buildchainValidated = verifyUpgradePublicationAdmission({
+      payloadRoot: value.payloadRoot,
+      releaseCandidatePassportPath: value.passportPath,
+      expectedVersion: VERSION,
+      expectedSourceSha: promotedSource,
+      recoveryReceiptPath,
+      recoveryAuthority: 'buildchain-validated',
+    });
+    assert.equal(buildchainValidated.receiptRoot, receipt.receiptRoot);
+
     const controllerSha = '2'.repeat(40);
     const gateAggregate = {
       contract: 'buildchain.shifu-gate-aggregate/v1',

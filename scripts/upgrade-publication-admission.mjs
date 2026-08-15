@@ -1550,9 +1550,15 @@ export function verifyUpgradePublicationAdmission({
   publicationGateAggregateJson,
   expectedControllerRepository,
   expectedControllerSha,
+  recoveryAuthority = 'standalone',
   receiptPath,
   capsulePath,
 } = {}) {
+  if (!['standalone', 'buildchain-validated'].includes(recoveryAuthority)) {
+    throw new Error(
+      `product admission recovery authority is unsupported: ${recoveryAuthority}`,
+    );
+  }
   if (!payloadRoot || !fs.existsSync(payloadRoot)) {
     throw new Error('product admission payload root is missing');
   }
@@ -1623,15 +1629,17 @@ export function verifyUpgradePublicationAdmission({
           acceptedSources: new Set(sources),
         })
       : null;
-  const controlledToolingRepair =
+  const controlledToolingRepair = Boolean(
     recoveredPromotion &&
-    verifyRecoveryController({
-      publicationGateAggregateJson,
-      expectedSourceSha,
-      expectedControllerRepository,
-      expectedControllerSha,
-      recovery: recoveredPromotion,
-    });
+      (recoveryAuthority === 'buildchain-validated' ||
+        verifyRecoveryController({
+          publicationGateAggregateJson,
+          expectedSourceSha,
+          expectedControllerRepository,
+          expectedControllerSha,
+          recovery: recoveredPromotion,
+        })),
+  );
   const expectedCandidateRoot = contentRoot({
     artifactRoot: artifacts.root,
     passportRoot: passportByteRoot,
