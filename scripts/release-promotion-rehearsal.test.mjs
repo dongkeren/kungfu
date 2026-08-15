@@ -53,14 +53,14 @@ test('candidate finalization owns product qualification and release tails only v
   }
 });
 
-test('recovery publication consumes the Buildchain-validated recovery result', () => {
+test('recovery publication reads the verified Buildchain gate aggregate', () => {
   const source = fs.readFileSync(
     path.join(ROOT, 'scripts/buildchain-custom-publish-evidence.mjs'),
     'utf8',
   );
   assert.match(
     source,
-    /recoveryAuthority:\s*process\.env\s*\.BUILDCHAIN_RELEASE_CANDIDATE_RECOVERY_RECEIPT_PATH[\s\S]*?'buildchain-validated'/u,
+    /process\.env\.BUILDCHAIN_PUBLICATION_GATE_AGGREGATE_JSON/u,
   );
 });
 

@@ -610,7 +610,7 @@
       "adapter": {
         "type": "buildchain-release-admission",
         "kind": "job-uses",
-        "uses": "kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@004c6dbfaf721a59bf4b473d43e1cdbcfee243b5",
+        "uses": "kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@5b851be87b45e023ceb06e9fa92cc509abbf081a",
         "job": {
           "needs": "promotion-contract",
           "if": "${{ (github.event_name == 'workflow_dispatch' && inputs.resume-candidate-run-id == '') || github.event.pull_request.merged == true }}"
@@ -654,7 +654,7 @@
       "adapter": {
         "type": "buildchain-release-candidate-recovery",
         "kind": "job-uses",
-        "uses": "kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@004c6dbfaf721a59bf4b473d43e1cdbcfee243b5",
+        "uses": "kungfu-systems/buildchain/.github/workflows/release-candidate-promote.yml@5b851be87b45e023ceb06e9fa92cc509abbf081a",
         "job": {
           "needs": "recovery-preflight",
           "if": "${{ always() && github.event_name == 'workflow_dispatch' && inputs.resume-candidate-run-id != '' && needs.recovery-preflight.result == 'success' }}"
