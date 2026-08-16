@@ -1,7 +1,7 @@
 {
   "contract": "kungfu.kfx-site-impact-proof/v1",
-  "baseRevision": "68e966d778bee893fee395af9587f687f2dc2b72",
-  "changeRoot": "sha256:baa5262892eb70f8e2396d65c245f7a83f8fd40a81fd9224fae5d511624360d4",
+  "baseRevision": "f7c01a2f084d2c5939353a24c4bb920c1045eda4",
+  "changeRoot": "sha256:5e98a4eb7e911fd83237cf339281e12a974f7a1c5400eccf0dd9f72d7818847b",
   "changes": [
     {
       "baseContentRoot": "sha256:80c8a3af23c3ae9f965c54e3ba1548876a17b6e82ee5250af6ec01bf43edb824",
@@ -57,7 +57,7 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:0bb3a67de678d637b5324b501a32209ca6f0596737fd0f10450bf7b913326394",
+      "baseContentRoot": "sha256:42d497233a301f0e1f96c489fbe6bc1292cda71d19b7d0f53b65021ad1092341",
       "contentRoot": "sha256:3e80d7465f0a5a1fc7f5f40454829713fe3cd8dda97688eb64c0d92e73890970",
       "path": ".buildchain/kfd/kfd-2/release-claims.json",
       "status": "modified"
@@ -75,7 +75,7 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:b79c234f4aea01e3e5fafd5294e74a0f0db32fb7a8de0ffc6606846538881cc6",
+      "baseContentRoot": "sha256:dd993c8155c955086c89db317fd0d9d00ea3dfc301872d89d216d86ea94f1d5a",
       "contentRoot": "sha256:91a0ca87c596114571a828f18c1992e32e8773363dfbb5202b034ce4015d8ae3",
       "path": ".buildchain/kfd/kfd-3/collaboration-interface.prebuild.json",
       "status": "modified"
@@ -87,20 +87,20 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:b2495e5d9b1ee68f2d50e7e57e7d797966d9258da3516c0b0a7936e06827e40d",
+      "baseContentRoot": "sha256:472f8359934f79236bbe60c43fda34624c6ce04e7d88c4b555501506b0564803",
       "contentRoot": "sha256:9bb3b1c62e221b0e47d1f2001d316d49530924c7f6b3f0f67018e05b1ff6feee",
       "path": ".buildchain/kfd/support-matrix.json",
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:ac1b0194b01b73479b70fc5faaf771f462102a5ae58d5d412d8cbb911b20b132",
-      "contentRoot": "sha256:8c7f74a8f54ce1d80619087a931fa0014f3765a2cfe547d0f52f7cc540e6ba62",
+      "baseContentRoot": "sha256:962bc2462c8112fb34118de68ef57863cab6a87fdaeae59ccd5bf81478bc0bff",
+      "contentRoot": "sha256:a7d4a8d27a25e07ac8e561b9a2129dc15b7e551317ba5c414074ea4a4cead124",
       "path": ".xinfa/portable-atlas-classification.json.gz",
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:188fa36a57ffc1ec6de58b4b40ca11fa07b2cd6b49e2be968779971412b1347a",
-      "contentRoot": "sha256:a4369fb3215533a70415714f97266d66264ce8226894b4a190f35597e803feba",
+      "baseContentRoot": "sha256:8a2de385dbd7fa98b7590082a95c3b887ed5f699be363593b8690d301911d42b",
+      "contentRoot": "sha256:850d9bd1b73fe38cd67d8b1d04f4b440434eaab39f6827104d02859192ee2cb5",
       "path": ".xinfa/product-atlas-bundle.json",
       "status": "modified"
     },
@@ -243,7 +243,7 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:0bb3a67de678d637b5324b501a32209ca6f0596737fd0f10450bf7b913326394",
+      "baseContentRoot": "sha256:42d497233a301f0e1f96c489fbe6bc1292cda71d19b7d0f53b65021ad1092341",
       "contentRoot": "sha256:3e80d7465f0a5a1fc7f5f40454829713fe3cd8dda97688eb64c0d92e73890970",
       "path": "developer/sdk/kfd/kfd-2/release-claims.json",
       "status": "modified"
@@ -255,7 +255,7 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:d10bac32566c3636a8118f8d9f602f4fb976cfda7e4f54690a3d302f53e94e69",
+      "baseContentRoot": "sha256:48cb619f97848eaf3d5ee17d44be80f93958e00fe44f366d6535899716d00b00",
       "contentRoot": "sha256:60028d2cf33f09a0bfc60fe2830c0355fa4333c3555e539976ba4d53637ca149",
       "path": "developer/sdk/kfd/support-matrix.json",
       "status": "modified"
@@ -1616,8 +1616,8 @@
       "status": "modified"
     },
     {
-      "baseContentRoot": "sha256:0283c98cfc3d036044a0b7ee2a511fbaeb28750089ad4d662f1b483e582e41e4",
-      "contentRoot": "sha256:11613634cf12cc79fd950f6a7636ffbdf66eb683aaccfd791b3fa070d2c33f30",
+      "baseContentRoot": "sha256:1a89634d2bec657ebc72052d395b0ce1b1f744bbd31a3f36ec8ca84f14ca4302",
+      "contentRoot": "sha256:40b3bebca6a438b7eceeb734697b7ea2c5ed99b51251243ac83056162cb4be6e",
       "path": "package.json",
       "status": "modified"
     },
@@ -1893,11 +1893,11 @@
     "qualification-status",
     "registry-admission-lifecycle"
   ],
-  "rationale": "Current-base zero-residue successor removes retired project-specific compatibility and regenerates internal contract evidence without changing KFX Site Bundle material, routes, or public presentation.",
+  "rationale": "The successor removes repository-internal legacy Atlas and complexity-signature surfaces without changing KFX Site Bundle source, routing, assets, or runtime facets; the proof binds the exact refreshed protected base and changed-path closure.",
   "attestation": {
     "publicBehaviorUnchanged": true,
     "publicContractUnchanged": true,
     "readerJourneyUnchanged": true
   },
-  "proofRoot": "sha256:e70a18d8082b69fa394801b2694606a38dcd99de6aa365fa48572d8df2b5be70"
+  "proofRoot": "sha256:af7f481eaf608484faaea2a961b56f118437efefca22de7102e00d0ab2ae07fe"
 }
