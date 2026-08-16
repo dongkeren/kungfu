@@ -234,7 +234,7 @@ test('current Kungfu catalog, docs, matrix, actions, and workflows align', () =>
   const controllers = result.workflowFacts.filter(
     (fact) => fact.execution === 'controller',
   );
-  assert.equal(controllers.length, 11);
+  assert.equal(controllers.length, 12);
   assert.ok(controllers.every((fact) => fact.gates.length > 0));
   assert.equal(result.workflowAuthority.workflows.length, 38);
   const agentPatrol = result.workflowAuthority.workflows.find(
@@ -955,6 +955,31 @@ test('rogue, duplicate, missing, and invalid controller adapters fail closed', (
       issue.includes('dev-source: adapter object is required'),
     ),
   );
+});
+
+test('unregistered Buildchain reusable workflow revisions fail closed', () => {
+  for (const revision of [
+    '0000000000000000000000000000000000000000',
+    'v3-alpha',
+  ]) {
+    const root = fixture();
+    const workflow = path.join(
+      root,
+      '.github/workflows/aws-us-macos-burst-qualification.yml',
+    );
+    fs.appendFileSync(
+      workflow,
+      `\n  rogue-qualify:\n    uses: kungfu-systems/buildchain/.github/workflows/.build.yml@${revision}\n    with:\n      buildchain-ref: ${revision}\n`,
+    );
+    assert.ok(
+      checkKungfuGateCatalog(root).issues.some((issue) =>
+        issue.includes(
+          `.github/workflows/aws-us-macos-burst-qualification.yml#rogue-qualify:job-uses:kungfu-systems/buildchain/.github/workflows/.build.yml@${revision}: invocation has no matching binding`,
+        ),
+      ),
+      revision,
+    );
+  }
 });
 
 test('direct Gate invocations are discovered from YAML and must have one binding', () => {
