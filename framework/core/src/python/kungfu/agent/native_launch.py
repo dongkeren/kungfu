@@ -26,6 +26,7 @@ from kungfu.agent.provider_bootstrap import (
     COMMAND_WRAPPER_SUFFIXES as _COMMAND_WRAPPER_SUFFIXES,
     encode_wrapper_prompt as _encode_wrapper_prompt,
     prepare_native_skill_runtime_audit,
+    provider_runtime_health as provider_runtime_health,
     resolve_command_wrapper as _resolve_command_wrapper,
 )
 from kungfu.skill import build_skill_context
@@ -646,6 +647,7 @@ class NativeLaunchCoordinator:
         semantic_root: Callable[[Any], str],
         heartbeat_observation: Callable[[Mapping[str, Any]], Mapping[str, Any]],
         finalize_environment: Callable[[Mapping[str, str]], None],
+        provider_health: Callable[..., Mapping[str, Any]] | None = None,
     ) -> None:
         self.verify_profile = verify_profile
         self.resolve_cwd = resolve_cwd
@@ -656,6 +658,7 @@ class NativeLaunchCoordinator:
         self.semantic_root = semantic_root
         self.heartbeat_observation = heartbeat_observation
         self.finalize_environment = finalize_environment
+        self.provider_health = provider_health
 
     def run(
         self,
@@ -685,6 +688,19 @@ class NativeLaunchCoordinator:
             profile, workspace_root=workspace_root, home=runtime_home
         )
         provider = str(profile["provider"])
+        if self.provider_health is not None:
+            health = self.provider_health(profile, cwd=cwd)
+            if health.get("ok") is not True:
+                diagnostic = str(
+                    health.get("diagnostic") or "provider runtime probe failed"
+                )
+                raise ValueError(
+                    "Codex Windows sandbox is unavailable: "
+                    f"{diagnostic}. Kungfu did not launch the Agent or disable "
+                    "sandboxing. Run Codex directly from a local Windows terminal, "
+                    "use `/setup-default-sandbox`, and retry; use the deterministic "
+                    "Mock Agent onboarding while the provider sandbox is unavailable."
+                )
         adapter_id = str((profile.get("bootstrap") or {}).get("adapter") or provider)
         if adapter_id != provider:
             raise ValueError(

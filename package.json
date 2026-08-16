@@ -169,7 +169,7 @@
     "test:cli-surface-contract": "node scripts/require-shifu.mjs test:cli-surface-contract && uv run --project framework/core --frozen ruff format --check framework/core/src/python/kungfu/cli/surface_contract.py framework/core/src/python/kungfu/cli/catalog_projection.py framework/core/src/python/kungfu/cli/help_projection.py framework/core/src/python/kungfu/cli/help_manifest.py framework/core/src/python/kungfu/cli/commands/__init__.py framework/core/src/python/kungfu/cli/commands/contract.py framework/core/src/python/kungfu/cli/commands/primitive.py framework/core/src/python/kungfu/cli/commands/dev.py framework/core/tests/python/test_cli_surface_contract.py framework/core/tests/python/test_cli_progressive_help.py framework/core/tests/python/test_cli_help_manifest.py framework/core/tests/python/test_primitive_commands.py && PYTHONPATH=framework/core/src/python:${KUNGFU_NATIVE_PATH:-framework/core/build/Release} uv run --project framework/core --frozen pytest -q framework/core/tests/python/test_cli_surface_contract.py framework/core/tests/python/test_cli_progressive_help.py framework/core/tests/python/test_cli_help_manifest.py framework/core/tests/python/test_primitive_commands.py",
     "check:cli-catalog-parity": "node scripts/require-shifu.mjs check:cli-catalog-parity && node scripts/check-cli-catalog-parity.mjs && PYTHONPATH=framework/core/src/python:${KUNGFU_NATIVE_PATH:-framework/core/build/Release} uv run --project framework/core --frozen python -m kungfu.cli.catalog_projection --check",
     "cli-surface:qualify": "node scripts/require-shifu.mjs cli-surface:qualify && node product/scripts/cli-surface-qualification.mjs",
-    "test:cli-surface-qualification": "node scripts/require-shifu.mjs test:cli-surface-qualification && node --test product/scripts/archive.test.mjs product/scripts/cli-launcher.test.mjs product/scripts/cli-surface-qualification.test.mjs product/scripts/finalize-signed-cli-qualification.test.mjs product/scripts/finalize-macos-release-artifacts.test.mjs product/scripts/dist.test.mjs product/scripts/dist-kfx.test.mjs product/scripts/dist-cli-executable-layout.test.mjs product/scripts/installed-kungfu/index.test.mjs",
+    "test:cli-surface-qualification": "node scripts/require-shifu.mjs test:cli-surface-qualification && node --test product/scripts/archive.test.mjs product/scripts/cli-launcher.test.mjs product/scripts/cli-surface-qualification.test.mjs product/scripts/finalize-signed-cli-qualification.test.mjs product/scripts/finalize-macos-release-artifacts.test.mjs product/scripts/dist.test.mjs product/scripts/dist-windows-trunk.test.mjs product/scripts/dist-kfx.test.mjs product/scripts/dist-cli-executable-layout.test.mjs product/scripts/installed-kungfu/index.test.mjs",
     "qualify:product-cache-home": "node scripts/require-shifu.mjs qualify:product-cache-home && node product/scripts/qualify-product-cache-home.mjs --json",
     "test:product-cache-home": "node scripts/require-shifu.mjs test:product-cache-home && node --test product/scripts/qualify-product-cache-home.test.mjs",
     "check:health-diagnostics-contract": "node scripts/require-shifu.mjs check:health-diagnostics-contract && node --test scripts/check-health-diagnostics-contract.test.mjs",
@@ -364,8 +364,8 @@
     "test:agent-profile-sdk": "node scripts/require-shifu.mjs test:agent-profile-sdk && uv run --project framework/core --frozen node scripts/run-agent-profile-sdk-tests.mjs",
     "test:agent-console-contract": "node scripts/require-shifu.mjs test:agent-console-contract && node scripts/run-agent-console-contract-tests.mjs",
     "test:runtime-upgrade": "node scripts/require-shifu.mjs test:runtime-upgrade && node scripts/run-runtime-upgrade-tests.mjs",
-    "test:release-channel": "node scripts/require-shifu.mjs test:release-channel && node --test product/scripts/release-channel-index.test.mjs product/scripts/release-channel-trust.test.mjs product/scripts/bootstrap-installer.test.mjs scripts/upgrade-publication-admission.test.mjs && node scripts/run-runtime-upgrade-tests.mjs",
-    "test:upgrade-qualification": "node scripts/require-shifu.mjs test:upgrade-qualification && node --test scripts/check-upgrade-qualification.test.mjs scripts/upgrade-publication-admission.test.mjs",
+    "test:release-channel": "node scripts/require-shifu.mjs test:release-channel && node --test product/scripts/release-channel-index.test.mjs product/scripts/release-channel-trust.test.mjs product/scripts/bootstrap-installer.test.mjs && node scripts/run-runtime-upgrade-tests.mjs",
+    "test:upgrade-qualification": "node scripts/require-shifu.mjs test:upgrade-qualification && node --test scripts/check-upgrade-qualification.test.mjs",
     "upgrade:qualify:native": "node scripts/require-shifu.mjs upgrade:qualify:native && node scripts/run-upgrade-native-qualification.mjs",
     "test:desktop-update": "node scripts/require-shifu.mjs test:desktop-update && node scripts/run-desktop-update-tests.mjs",
     "test:agent-session-contract": "node scripts/require-shifu.mjs test:agent-session-contract && node --test scripts/check-agent-session-contract.test.mjs",
@@ -423,6 +423,7 @@
     "github-slugger": "2.0.0",
     "markdown-it": "14.2.0",
     "markdownlint-cli2": "0.22.1",
+    "tar-stream": "2.2.0",
     "typescript": "^5.6.0",
     "yaml": "2.9.0"
   }
