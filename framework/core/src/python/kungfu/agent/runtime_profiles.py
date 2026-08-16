@@ -492,7 +492,7 @@ def _probe_version(
     executable: str,
     version_argv: list[str],
     *,
-    timeout_seconds: float = _VERSION_TIMEOUT_SECONDS,
+    timeout_seconds: float | None = _VERSION_TIMEOUT_SECONDS,
 ) -> str | None:
     return VerificationProbe(
         schema=VERIFY_SCHEMA,

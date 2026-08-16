@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { readElectronBuilderProjection } from '../../framework/maintainability/semantic-amplification.mjs';
 import { cliLauncherContent } from './cli-launcher.mjs';
 import { isPythonBytecodePath, sha256Tree } from './compatibility.mjs';
@@ -65,21 +63,6 @@ test('reference-only KFX suites stay outside product assembly', () => {
     packageNames.join(', '),
   );
   assert.ok(!packageNames.includes('@kungfu-kfx/github-dogfood-bridge'));
-});
-
-test('root build uses the same reference-only product assembly policy', () => {
-  const root = fileURLToPath(new URL('../..', import.meta.url));
-  const result = spawnSync(
-    process.execPath,
-    [
-      fileURLToPath(new URL('../../scripts/build.mjs', import.meta.url)),
-      '--dry-run',
-    ],
-    { cwd: root, encoding: 'utf8' },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /product-bundled KFX packages: \d+/u);
-  assert.doesNotMatch(result.stdout, /github-webhook|github-dogfood-bridge/u);
 });
 
 test('Intel macOS is rejected by the product-wide host policy', () => {

@@ -11,6 +11,7 @@ import {
   type ControlPlaneState,
   QUICK_COMMANDS,
   type QuickCommand,
+  controlPlaneBarModel,
 } from './control-plane-state.js';
 import { resolveListWindow } from './list-window/index.js';
 import { boundedIndex } from './navigation.js';
@@ -32,6 +33,7 @@ export {
   CLOSED_CONTROL_PLANE,
   QUICK_COMMANDS,
   contextualProjectRestoreCanCommit,
+  controlPlaneBarModel,
   createControlPlaneInputFence,
   directWorkspaceNavigationFromInput,
   buildTuiProductSearchDocuments,
@@ -1769,38 +1771,14 @@ export function ControlPlaneBar({
   controlsHint?: string;
   workspaceInputActive?: boolean;
 }) {
-  const modalOpen = state.mode !== 'closed';
-  const inputFocused =
-    !workspaceInputActive && (modalOpen || state.focus === 'input');
-  const acceptsText =
-    state.mode === 'closed' ||
-    state.mode === 'commands' ||
-    state.mode === 'search';
-  const value =
-    state.mode === 'commands' || state.mode === 'search' || !modalOpen
-      ? state.query
-      : '';
-  const prompt = workspaceInputActive
-    ? 'Focused panel accepts text'
-    : state.mode === 'help'
-      ? 'Help open'
-      : state.mode === 'detail'
-        ? 'Details open'
-        : value || (!modalOpen && !inputFocused ? 'Press i to type' : '');
-  const modeLabel = modalOpen ? state.mode.toUpperCase() : controlsLabel;
-  const hint = workspaceInputActive
-    ? controlsHint
-    : (state.notice ??
-      (state.mode === 'commands'
-        ? `${resultCount} action${resultCount === 1 ? '' : 's'} · Enter Run · Esc Close`
-        : state.mode === 'search'
-          ? `${resultCount} result${resultCount === 1 ? '' : 's'} · Enter Open · Esc Close`
-          : state.mode === 'help' || state.mode === 'detail'
-            ? 'Esc Back'
-            : state.focus === 'workspace'
-              ? `${controlsHint} · i Input`
-              : 'Esc Controls · ? Help · / Actions · Ctrl+K Search'));
-  const tone = inputFocused || workspaceInputActive ? 'cyan' : 'gray';
+  const { acceptsText, glyph, hint, inputFocused, modeLabel, prompt, tone } =
+    controlPlaneBarModel({
+      state,
+      resultCount,
+      controlsLabel,
+      controlsHint,
+      workspaceInputActive,
+    });
   return (
     <Box
       position="absolute"
@@ -1824,9 +1802,7 @@ export function ControlPlaneBar({
             {hint}
           </Text>,
           <Text key="prompt" color={tone} wrap="truncate-end">
-            <Text bold>
-              {workspaceInputActive ? '◆' : inputFocused ? '›' : '◇'}
-            </Text>
+            <Text bold>{glyph}</Text>
             {prompt ? ` ${prompt}` : ' '}
             {acceptsText && !workspaceInputActive ? (
               <BlinkingInputCursor active={inputFocused} />

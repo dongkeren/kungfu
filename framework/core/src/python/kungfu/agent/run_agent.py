@@ -687,23 +687,23 @@ def _wait_for_session(
 ) -> Mapping[str, Any]:
     if event_driven:
         while True:
-            latest = invoke({"operation": "status", "session": dict(ref)})
-            if predicate(latest):
-                return latest
-            change_sequence = latest.get("changeSequence")
+            event_status = invoke({"operation": "status", "session": dict(ref)})
+            if predicate(event_status):
+                return event_status
+            change_sequence = event_status.get("changeSequence")
             if not isinstance(change_sequence, int) or change_sequence < 0:
                 raise ValueError(
                     "Deterministic Mock Agent requires event-driven Session status"
                 )
-            latest = invoke(
+            event_status = invoke(
                 {
                     "operation": "wait-status-change",
                     "session": dict(ref),
                     "afterChangeSequence": change_sequence,
                 }
             )
-            if predicate(latest):
-                return latest
+            if predicate(event_status):
+                return event_status
     if timeout_seconds is None:
         raise ValueError("Non-Mock Agent Session wait requires a timeout")
     deadline = time.monotonic() + timeout_seconds

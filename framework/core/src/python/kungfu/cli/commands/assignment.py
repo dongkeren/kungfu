@@ -31,6 +31,7 @@ from kungfu.cli.commands import (
     kfc,
 )
 from kungfu.cli.commands import assignment_review
+from kungfu.cli.commands import assignment_session
 from kungfu.cli.surface_contract import surface
 from kungfu.storage import service as storage_service
 from kungfu.workspace import prepare_workspace_write, resolve_workspace_target
@@ -548,49 +549,14 @@ _EVIDENCE_SERVICES = assignment_evidence.EvidenceServices(
 )
 
 
-@assignment.command(
-    name="finalize-agent-session",
-    help="retain the ended Agent Session as immutable independent-review evidence",
+assignment_session.register_finalize_agent_session_command(
+    assignment,
+    assignment_context=assignment_context,
+    runtime=_runtime,
+    emit=_emit,
+    run_operation=_run,
+    agent_report_summary=_agent_report_summary,
 )
-@click.argument(
-    "agent_report_file",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-)
-@click.option("--workspace", "workspace_root", type=click.Path(file_okay=False))
-@click.option("--home", is_flag=True)
-@click.option("--initiative-id", required=True)
-@click.option("--assignment-id", required=True)
-@assignment_context
-def finalize_agent_session(
-    ctx,
-    agent_report_file,
-    workspace_root,
-    home,
-    initiative_id,
-    assignment_id,
-):
-    _ = ctx
-
-    def operation():
-        identity, runtime_dir, _receipt = _runtime(
-            workspace_root, home, "semantic-write"
-        )
-        report_path, report = assignment_evidence.finalize_session_agent_report(
-            agent_report_file,
-            runtime_dir,
-            initiative_id,
-            assignment_id,
-            workspace_root=identity.workspace_root or "",
-        )
-        return {
-            "schema": "kungfu.work-start.agent-session-finalization/v1",
-            "status": "agent-finished",
-            "reportPath": str(report_path),
-            "agentReport": _agent_report_summary(report),
-            "writeOccurred": True,
-        }
-
-    _emit(_run(operation))
 
 
 @assignment.command(
