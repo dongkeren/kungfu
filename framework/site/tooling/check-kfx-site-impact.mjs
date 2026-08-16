@@ -624,9 +624,10 @@ export function repositoryChanges(baseRevision, changedFiles) {
       ? fs.readFileSync(currentPath)
       : null;
     if (
-      baseBytes !== null &&
-      currentBytes !== null &&
-      baseBytes.equals(currentBytes)
+      (baseBytes === null && currentBytes === null) ||
+      (baseBytes !== null &&
+        currentBytes !== null &&
+        baseBytes.equals(currentBytes))
     ) {
       return [];
     }

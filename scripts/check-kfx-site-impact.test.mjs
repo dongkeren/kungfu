@@ -83,6 +83,10 @@ test('repository changes ignore net-zero paths from union inventories', () => {
     encoding: 'utf8',
   }).trim();
   assert.deepEqual(repositoryChanges(exactSource, ['AGENTS.md']), []);
+  assert.deepEqual(
+    repositoryChanges(exactSource, ['.nonexistent-kfx-union-path']),
+    [],
+  );
 });
 
 test('ignores changes outside KFX ownership', () => {
