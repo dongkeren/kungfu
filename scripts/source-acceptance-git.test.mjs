@@ -10,6 +10,7 @@ import {
   fetchSourceAcceptanceCommit,
   readSourceAcceptanceGit,
   sourceAcceptanceMergeBaseCandidates,
+  sourceAcceptancePlan,
   sourceMergeGroupBase,
 } from './source-acceptance.mjs';
 
@@ -96,6 +97,22 @@ test('source acceptance rejects a merge-group event for another checkout', () =>
         fetchCommit: () => assert.fail('mismatched event must not fetch'),
       }),
     /does not match source checkout/u,
+  );
+});
+
+test('source plan binds protected ratchets to the exact evidence base', () => {
+  const evidenceBaseCommit = 'a'.repeat(40);
+  const plan = sourceAcceptancePlan(
+    ['scripts/example.mjs'],
+    evidenceBaseCommit,
+  );
+  assert.deepEqual(
+    plan.find((step) => step.label === 'code complexity budget ratchet').env,
+    { KUNGFU_COMPLEXITY_PROTECTED_REF: evidenceBaseCommit },
+  );
+  assert.deepEqual(
+    plan.find((step) => step.label === 'documentation contracts').env,
+    { KUNGFU_ADR_EVIDENCE_BASE_SHA: evidenceBaseCommit },
   );
 });
 

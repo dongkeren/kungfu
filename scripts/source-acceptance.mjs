@@ -865,9 +865,16 @@ export function sourceAcceptancePlan(
       command: process.execPath,
       args,
       env:
-        label === 'documentation contracts' && evidenceBaseCommit
+        evidenceBaseCommit &&
+        (label === 'documentation contracts' ||
+          label === 'code complexity budget ratchet')
           ? {
-              KUNGFU_ADR_EVIDENCE_BASE_SHA: evidenceBaseCommit,
+              ...(label === 'documentation contracts'
+                ? { KUNGFU_ADR_EVIDENCE_BASE_SHA: evidenceBaseCommit }
+                : {}),
+              ...(label === 'code complexity budget ratchet'
+                ? { KUNGFU_COMPLEXITY_PROTECTED_REF: evidenceBaseCommit }
+                : {}),
             }
           : undefined,
     })),
