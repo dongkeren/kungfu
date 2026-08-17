@@ -6,7 +6,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { readSourceAcceptanceGit } from './source-acceptance.mjs';
+import {
+  readSourceAcceptanceGit,
+  sourceAcceptanceMergeBaseCandidates,
+} from './source-acceptance.mjs';
+
+test('source acceptance falls back to the verified merge-group base ref', () => {
+  assert.deepEqual(
+    sourceAcceptanceMergeBaseCandidates(['origin/dev/v4/v4.0']),
+    ['origin/dev/v4/v4.0', 'refs/buildchain/source-proof/current-base'],
+  );
+});
 
 test('source acceptance retains Git patches larger than the spawnSync default buffer', (t) => {
   const repository = fs.mkdtempSync(

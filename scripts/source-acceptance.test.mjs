@@ -24,7 +24,6 @@ import {
   runSourceAcceptanceStep,
   selectKfdEvidenceSourceSha,
   sourceAcceptanceChildEnv,
-  sourceAcceptanceMergeBaseCandidates,
   sourceAcceptancePlan,
   sourceClangFormatCommand,
   sourceMypyCommand,
@@ -32,13 +31,6 @@ import {
 } from './source-acceptance.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-test('source acceptance falls back to the verified merge-group base ref', () => {
-  assert.deepEqual(
-    sourceAcceptanceMergeBaseCandidates(['origin/dev/v4/v4.0']),
-    ['origin/dev/v4/v4.0', 'refs/buildchain/source-proof/current-base'],
-  );
-});
 
 test('source acceptance owns one external runtime for every writable tool surface', (t) => {
   const runtime = prepareSourceAcceptanceRuntime(ROOT);
