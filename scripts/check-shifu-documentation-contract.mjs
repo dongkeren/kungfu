@@ -37,6 +37,7 @@ export function ensurePinnedCommitAvailable(root, commit, spawn = spawnSync) {
       'fetch',
       '--no-tags',
       '--no-write-fetch-head',
+      '--filter=tree:0',
       '--depth=1',
       'origin',
       commit,

@@ -51,6 +51,7 @@ test('documentation contract hydrates an absent pinned source commit in a shallo
         'fetch',
         '--no-tags',
         '--no-write-fetch-head',
+        '--filter=tree:0',
         '--depth=1',
         'origin',
         commit,

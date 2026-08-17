@@ -7,14 +7,95 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import {
+  fetchSourceAcceptanceCommit,
   readSourceAcceptanceGit,
   sourceAcceptanceMergeBaseCandidates,
+  sourceMergeGroupBase,
 } from './source-acceptance.mjs';
+
+test('source acceptance fetches only merge-group base trees', () => {
+  const commit = 'a'.repeat(40);
+  const calls = [];
+  fetchSourceAcceptanceCommit(commit, (command, args, options) => {
+    calls.push({ command, args, options });
+    return { status: 0, stderr: '' };
+  });
+  assert.deepEqual(calls[0].command, 'git');
+  assert.deepEqual(calls[0].args, [
+    'fetch',
+    '--no-tags',
+    '--no-write-fetch-head',
+    '--filter=blob:none',
+    '--depth=1',
+    'origin',
+    commit,
+  ]);
+  assert.equal(calls[0].options.encoding, 'utf8');
+});
 
 test('source acceptance falls back to the verified merge-group base ref', () => {
   assert.deepEqual(
     sourceAcceptanceMergeBaseCandidates(['origin/dev/v4/v4.0']),
     ['origin/dev/v4/v4.0', 'refs/buildchain/source-proof/current-base'],
+  );
+});
+
+test('source acceptance hydrates and directly diffs an exact merge-group base', () => {
+  const baseSha = 'a'.repeat(40);
+  const headSha = 'b'.repeat(40);
+  let hydrated = false;
+  const calls = [];
+  const result = sourceMergeGroupBase({
+    env: {
+      GITHUB_EVENT_NAME: 'merge_group',
+      GITHUB_EVENT_PATH: '/event.json',
+    },
+    readFile: () =>
+      JSON.stringify({
+        merge_group: { base_sha: baseSha, head_sha: headSha },
+      }),
+    gitRead: (args) => {
+      calls.push(args);
+      if (args[0] === 'rev-parse') return headSha;
+      if (args[0] === 'cat-file') return hydrated ? 'commit' : '';
+      return '';
+    },
+    fetchCommit: (commit) => {
+      assert.equal(commit, baseSha);
+      hydrated = true;
+    },
+  });
+
+  assert.deepEqual(result, {
+    ref: 'github.merge_group.base_sha',
+    sha: baseSha,
+    diffOperator: '..',
+  });
+  assert.deepEqual(calls, [
+    ['rev-parse', 'HEAD'],
+    ['cat-file', '-t', baseSha],
+    ['cat-file', '-t', baseSha],
+  ]);
+});
+
+test('source acceptance rejects a merge-group event for another checkout', () => {
+  const baseSha = 'a'.repeat(40);
+  const headSha = 'b'.repeat(40);
+  assert.throws(
+    () =>
+      sourceMergeGroupBase({
+        env: {
+          GITHUB_EVENT_NAME: 'merge_group',
+          GITHUB_EVENT_PATH: '/event.json',
+        },
+        readFile: () =>
+          JSON.stringify({
+            merge_group: { base_sha: baseSha, head_sha: headSha },
+          }),
+        gitRead: () => 'c'.repeat(40),
+        fetchCommit: () => assert.fail('mismatched event must not fetch'),
+      }),
+    /does not match source checkout/u,
   );
 });
 
