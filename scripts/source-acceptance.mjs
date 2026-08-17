@@ -148,7 +148,7 @@ export function sourceClangFormatCommand(
 }
 
 export function sourceMergeBase() {
-  const candidates = devMergeBaseCandidates();
+  const candidates = sourceAcceptanceMergeBaseCandidates();
   for (const ref of candidates) {
     const sha = gitMaybe(['merge-base', ref, 'HEAD']);
     if (sha) return { ref, sha };
@@ -156,6 +156,12 @@ export function sourceMergeBase() {
   throw new Error(
     `cannot resolve source-acceptance merge base from: ${candidates.join(', ')}`,
   );
+}
+
+export function sourceAcceptanceMergeBaseCandidates(
+  devCandidates = devMergeBaseCandidates(),
+) {
+  return [...devCandidates, 'refs/buildchain/source-proof/current-base'];
 }
 
 export function sourceChangedFiles() {
