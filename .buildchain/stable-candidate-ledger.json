@@ -6,7 +6,7 @@
   "hold": {
     "enabled": false,
     "reason": "",
-    "updatedAt": "2026-08-19T19:27:33.202Z"
+    "updatedAt": "2026-08-20T19:36:43.602Z"
   },
   "candidates": [
     {
@@ -18,7 +18,7 @@
       "state": "soaking",
       "qualification": {
         "ok": false,
-        "observedAt": "2026-08-19T19:27:33.202Z",
+        "observedAt": "2026-08-20T19:36:43.602Z",
         "soakStartedAt": "",
         "soakElapsedSeconds": 0,
         "requiredSeconds": 86400,
@@ -33,11 +33,11 @@
       },
       "decision": {
         "reason": "checks-incomplete",
-        "updatedAt": "2026-08-19T19:27:33.202Z",
+        "updatedAt": "2026-08-20T19:36:43.602Z",
         "actor": "buildchain-patrol"
       }
     }
   ],
-  "updatedAt": "2026-08-19T19:27:33.202Z",
+  "updatedAt": "2026-08-20T19:36:43.602Z",
   "stableReleases": []
 }
