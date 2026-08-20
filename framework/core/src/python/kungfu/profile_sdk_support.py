@@ -166,6 +166,37 @@ def _root(value: Any) -> str:
     return "sha256:" + _sha256(_canonical(value))
 
 
+def decision_card(
+    kind: str,
+    question: str,
+    *,
+    choices: list[str],
+    basis: Mapping[str, Any],
+    required_authority: str,
+    resume_command: str,
+) -> dict[str, Any]:
+    """Build and validate a stable Profile decision card."""
+
+    identity = {
+        "kind": kind,
+        "question": question,
+        "choices": choices,
+        "basis": basis,
+        "requiredAuthority": required_authority,
+    }
+    card = {
+        "schema": DECISION_CARD_SCHEMA,
+        "cardId": _root(identity),
+        **identity,
+        "status": "open",
+        "expiry": {"mode": "basis-root-change", "staleWhen": "any basis value changes"},
+        "resumeCommand": resume_command,
+        "answer": None,
+    }
+    _validate_sdk_value("decisionCardSchema", card, "decision card")
+    return card
+
+
 COMMAND_CONTRACT_SCHEMA = "kungfu.profile-lifecycle-command-contract/v1"
 _PLACEHOLDER = re.compile(r"^\{([a-z][a-z0-9_]*)\}$")
 _SHELL_TOKENS = {"sh", "bash", "zsh", "cmd", "powershell", "-c", "/c"}

@@ -43,6 +43,24 @@ encode_wrapper_prompt = _encode_wrapper_prompt
 resolve_command_wrapper = _resolve_command_wrapper
 
 
+def provider_interactive_argv(profile: Mapping[str, Any]) -> list[str]:
+    """Build provider-native argv without managed-run prompt flags."""
+
+    launch = dict(profile.get("launch") or {})
+    executable = str(launch.get("executable") or "")
+    if not executable:
+        raise ValueError("Agent Runtime Profile executable is required")
+    if launch.get("shellMode") is True:
+        raise ValueError(
+            "kungfu native Agent launch requires an exact executable profile; "
+            "shellMode is unsupported"
+        )
+    return [
+        executable,
+        *(str(value) for value in launch.get("interactiveArgv") or []),
+    ]
+
+
 def apply_platform_tls_trust(
     env: dict[str, str], *, platform: str | None = None
 ) -> None:

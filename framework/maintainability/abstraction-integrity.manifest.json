@@ -88,7 +88,14 @@
       "paths": [
         "framework/core/src/python/kungfu/assignment_close.py",
         "framework/core/src/python/kungfu/assignment_evidence.py",
-        "framework/core/src/python/kungfu/cli/commands/assignment_session.py"
+        "framework/core/src/python/kungfu/cli/commands/assignment_session.py",
+        "framework/core/src/python/kungfu/cli/commands/assignment_review/__init__.py"
+      ]
+    },
+    {
+      "owner": "core/python-assignment-binding-provenance",
+      "paths": [
+        "framework/core/src/python/kungfu/assignment_provenance/__init__.py"
       ]
     },
     {
@@ -148,6 +155,18 @@
       ]
     },
     {
+      "owner": "core/python-agent-advisory-policy",
+      "paths": [
+        "framework/core/src/python/kungfu/agent/advisory.py"
+      ]
+    },
+    {
+      "owner": "core/python-agent-work-lab-evidence",
+      "paths": [
+        "framework/core/src/python/kungfu/agent_work_lab_evidence.py"
+      ]
+    },
+    {
       "owner": "product/agent-first-value-qualification",
       "paths": [
         "scripts/qualify-agent-first-value-codex.mjs"
@@ -194,6 +213,7 @@
     {
       "owner": "core/python-agent-session-run-interface",
       "paths": [
+        "framework/core/src/python/kungfu/agent/context_surface.py",
         "framework/core/src/python/kungfu/agent/provider_output.py",
         "framework/core/src/python/kungfu/agent/run_intent.py",
         "framework/core/src/python/kungfu/agent/work_projection.py"

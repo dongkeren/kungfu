@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import base64
+from functools import partial
 import json
 import os
 import sys
@@ -18,9 +19,9 @@ from kungfu.agent import agent_hub_qualification
 from kungfu.agent import first_value as first_value_protocol
 from kungfu.agent import runtime_profiles
 from kungfu.agent import run_agent
+from kungfu.agent import context_surface
 from kungfu.agent import session_surface
 from kungfu.agent import work_profile
-from kungfu.agent import documentation as documentation_pack
 from kungfu.agent.kfd3 import (
     api_help,
     kfd3_api,
@@ -48,57 +49,10 @@ def agent(ctx):
     pass
 
 
-def _context(ctx):
-    native_raw = os.environ.get("KUNGFU_AGENT_CONTEXT", "").strip()
-    if native_raw:
-        native = json.loads(native_raw)
-        if (
-            not isinstance(native, dict)
-            or native.get("schema") != "kungfu.native-agent-context/v1"
-            or native.get("environment") != "native-interactive"
-        ):
-            raise ValueError("invalid native Agent context envelope")
-        console_raw = os.environ.get("KUNGFU_AGENT_CONSOLE_ENVELOPE", "").strip()
-        if console_raw:
-            envelope = json.loads(console_raw)
-            kungfu_config.validate_value("agentConsoleEnvelope", envelope)
-            work_binding = dict(native.get("workBinding") or {})
-            effective_work_ref = session_surface.effective_work_ref(envelope)
-            work_binding["launchState"] = (
-                "bound" if effective_work_ref is not None else "unbound"
-            )
-            work_binding["workRef"] = effective_work_ref
-            native["workBinding"] = work_binding
-        return native
-    config = resolve_config(runtime_home=ctx.home)
-    index = agent_pack.index()
-    return {
-        "schema": "kungfu.agent-context/v1",
-        "entrypoint": "kungfu agent",
-        "config": config,
-        "runtime": {
-            "home": ctx.home,
-            "runtimeDir": ctx.runtime_dir,
-        },
-        "interfaces": {
-            "config": "kungfu config show --json",
-            "skills": "kungfu skill list --json",
-            "skillCatalog": "kungfu skill catalog --json",
-            "skillRegistry": "kungfu skill inspect --json",
-            "kfx": "kungfu kfx list --json",
-        },
-        "skillRegistry": agent_pack.skill_registry(ctx.home),
-        "docs": documentation_pack.discovery_context(
-            agent_work_lab_commands.find_repo_root()
-        ),
-        "agentPack": {
-            "packRoot": str(agent_pack.pack_root()),
-            "documents": index["documents"],
-            "skills": index["skills"],
-            "commands": agent_pack.commands(),
-            "collaborationInterface": registry_summary(),
-        },
-    }
+_context = partial(
+    context_surface.project_agent_context,
+    repo_root_finder=agent_work_lab_commands.find_repo_root,
+)
 
 
 _json = agent_work_lab_commands.agent_json_output

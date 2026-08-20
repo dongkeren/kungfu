@@ -33,6 +33,7 @@ from kungfu.agent.native_launch import (
     encode_wrapper_prompt as _encode_windows_wrapper_prompt,
     native_environment as _native_environment,
     native_provider_adapter,
+    provider_interactive_argv as interactive_launch_argv,
     provider_runtime_health as _provider_runtime_health,
     resolve_command_wrapper as _resolve_windows_command_wrapper,
 )
@@ -497,24 +498,6 @@ def _direct_process_transport(
         prompt = values[-1]
         return values[:-1], f"\x1b[200~{prompt}\x1b[201~\r"
     return [*values[:-1], "-"], values[-1]
-
-
-def interactive_launch_argv(profile: Mapping[str, Any]) -> list[str]:
-    """Build the provider-native argv without managed-run prompt flags."""
-
-    launch = dict(profile.get("launch") or {})
-    executable = str(launch.get("executable") or "")
-    if not executable:
-        raise ValueError("Agent Runtime Profile executable is required")
-    if launch.get("shellMode") is True:
-        raise ValueError(
-            "kungfu native Agent launch requires an exact executable profile; "
-            "shellMode is unsupported"
-        )
-    return [
-        executable,
-        *(str(value) for value in launch.get("interactiveArgv") or []),
-    ]
 
 
 def native_environment(*args, **kwargs) -> dict[str, str]:

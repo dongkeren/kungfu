@@ -20,6 +20,7 @@ import subprocess
 import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
+from functools import partial
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
@@ -58,14 +59,15 @@ from kungfu.profile_sdk_support import (
     _sha256 as _sha256,
     _validate_sdk_value as _validate_sdk_value,
     _validate_source_bundle as _validate_source_bundle,
+    decision_card as decision_card,
 )
 from kungfu.profile_sdk_source import (
     _collaboration_closure as _collaboration_closure,
-    _package_dirs as _package_dirs,
     _read_ref_json as _read_ref_json,
     _source_files as _source_files,
     _validate_action_registry as _validate_action_registry,
     package_content_root as package_content_root,
+    resolve_profile_source as _resolve_profile_source,
 )
 from kungfu.profile_sdk_kfd3 import (
     Kfd3Operations as Kfd3Operations,
@@ -538,87 +540,7 @@ def apply_scaffold(plan: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def resolve_source(source: str | Path) -> dict[str, Any]:
-    suite_dir = Path(source).expanduser().resolve()
-    manifest = kfx_contract.read_manifest_from_dir(str(suite_dir))
-    config = manifest.get("kungfuConfig") or {}
-    suite = config.get("suite")
-    if not isinstance(suite, Mapping):
-        raise ProfileSdkError(
-            "suite-manifest-required", "source is not a KFX Suite package"
-        )
-    profile_rel = str(suite.get("profile") or "")
-    if not profile_rel:
-        raise ProfileSdkError(
-            "profile-path-required", "Suite manifest does not declare suite.profile"
-        )
-    profile_path = _confined(suite_dir, profile_rel)
-    try:
-        profile = json.loads(profile_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ProfileSdkError(
-            "profile-unreadable", str(error), path=str(profile_path)
-        ) from error
-    members = list(suite.get("members") or [])
-    kfx_contract.validate_profile_suite(profile, suite_members=members)
-    expected = sorted(set(members))
-    candidates: dict[str, list[Path]] = {key: [] for key in expected}
-    for directory in _package_dirs(suite_dir):
-        try:
-            candidate = kfx_contract.read_manifest_from_dir(str(directory))
-        except (OSError, ValueError, json.JSONDecodeError):
-            continue
-        key = kfx_contract.package_key(candidate)
-        if key in candidates:
-            candidates[key].append(directory)
-    duplicate = {
-        key: [str(p) for p in paths]
-        for key, paths in candidates.items()
-        if len(paths) > 1
-    }
-
-    missing = [key for key, paths in candidates.items() if not paths]
-    if missing or duplicate:
-        cards = []
-        if missing:
-            cards.append(
-                decision_card(
-                    "profile-member-missing",
-                    "One or more declared Suite members cannot be resolved.",
-                    choices=["supply-member-package", "remove-member-and-replan"],
-                    basis={"source": str(suite_dir), "members": missing},
-                    required_authority="profile-author",
-                    resume_command=f"kungfu profile validate {suite_dir} --json",
-                )
-            )
-        if duplicate:
-            cards.append(
-                decision_card(
-                    "profile-member-duplicate",
-                    "A Suite member identity resolves to multiple package closures.",
-                    choices=["remove-duplicate", "rename-and-redeclare-member"],
-                    basis={"duplicates": duplicate},
-                    required_authority="profile-author",
-                    resume_command=f"kungfu profile validate {suite_dir} --json",
-                )
-            )
-        raise ProfileSdkError(
-            "member-resolution-failed",
-            "Suite members did not resolve exactly once",
-            decisionCards=cards,
-        )
-    roots = {key: package_content_root(paths[0]) for key, paths in candidates.items()}
-    return {
-        "schema": "kungfu.profile-source-resolution/v1",
-        "source": str(suite_dir),
-        "suiteKey": kfx_contract.package_key(manifest),
-        "profilePath": str(profile_path),
-        "profile": profile,
-        "memberRoots": roots,
-        "memberPackages": {key: str(paths[0]) for key, paths in candidates.items()},
-        "contract": kfx_contract.contract_metadata(),
-        "verified": True,
-    }
+resolve_source = partial(_resolve_profile_source, decision_factory=decision_card)
 
 
 def invoke_member_adapter(
@@ -1881,35 +1803,6 @@ def authorized_action_invoke(
             "decision-basis-mismatch", "decision answer does not bind this action plan"
         )
     return invoke_action(runtime_dir, plan, str(answer.get("authorizationId") or ""))
-
-
-def decision_card(
-    kind: str,
-    question: str,
-    *,
-    choices: list[str],
-    basis: Mapping[str, Any],
-    required_authority: str,
-    resume_command: str,
-) -> dict[str, Any]:
-    identity = {
-        "kind": kind,
-        "question": question,
-        "choices": choices,
-        "basis": basis,
-        "requiredAuthority": required_authority,
-    }
-    card = {
-        "schema": DECISION_CARD_SCHEMA,
-        "cardId": _root(identity),
-        **identity,
-        "status": "open",
-        "expiry": {"mode": "basis-root-change", "staleWhen": "any basis value changes"},
-        "resumeCommand": resume_command,
-        "answer": None,
-    }
-    _validate_sdk_value("decisionCardSchema", card, "decision card")
-    return card
 
 
 def _source_plan_identity(

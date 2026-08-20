@@ -966,60 +966,7 @@ def _work_review_plan(
     return {**body, "planRoot": initiative_family.semantic_root(body)}
 
 
-def _find_retained_reviewer_evidence(runtime_dir, plan):
-    expected_prompt_root = run_agent.canonical_root(
-        assignment_review.review_agent_prompt(plan)
-    )
-    reports = sorted(
-        (Path(runtime_dir) / "agent-runs").glob("*/bundle/report.json"),
-        key=lambda path: path.stat().st_mtime_ns,
-        reverse=True,
-    )
-    for report_path in reports:
-        try:
-            _, report = assignment_evidence.load_execution_agent_report(
-                report_path,
-                runtime_dir,
-                plan["work"]["initiativeId"],
-                plan["work"]["assignmentId"],
-            )
-            work_ref = report["work"]["workRef"]
-            runtime_profile = report["runtimeProfile"]
-            launch = report["launch"]
-            privacy = report["privacy"]
-            argv = list(launch.get("argvWithoutPrompt") or [])
-            read_only_launch = launch.get("permissionMode") == "read-only" or (
-                "--sandbox" in argv and "read-only" in argv
-            )
-            if (
-                work_ref.get("workspaceId") != plan["workspace"]["id"]
-                or work_ref.get("profileId") != "kungfu.work-control"
-                or work_ref.get("profileRoot")
-                != plan["execution"]["workRef"]["profileRoot"]
-                or work_ref.get("entityRoot") != plan["work"]["assignmentRoot"]
-                or work_ref.get("purpose") != "independent-completion-review"
-                or runtime_profile.get("id") != plan["reviewer"]["id"]
-                or runtime_profile.get("root") != plan["reviewer"]["profileRoot"]
-                or launch.get("cwd") != plan["workspace"]["root"]
-                or launch.get("promptRoot") != expected_prompt_root
-                or not read_only_launch
-                or privacy.get("priorTranscriptBytesGivenToAgent") != 0
-                or privacy.get("privateProviderSessionStoreRead") is not False
-            ):
-                continue
-            assessment = assignment_review.parse_reviewer_result(
-                report, plan["work"]["acceptanceChecks"]
-            )
-            if assessment["verdict"] != "fit":
-                continue
-        except (KeyError, OSError, ValueError, json.JSONDecodeError):
-            continue
-        return {
-            "reportPath": str(report_path),
-            "report": report,
-            "assessment": assessment,
-        }
-    return None
+_find_retained_reviewer_evidence = assignment_review.find_passing_evidence
 
 
 def _mint_review_settlement_lease(runtime_dir, plan, actor):

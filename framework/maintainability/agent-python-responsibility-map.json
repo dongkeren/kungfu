@@ -1,0 +1,174 @@
+{
+  "schema": "kungfu.agent-python-responsibility-map/v1",
+  "baselineRevision": "431eb6728e1a08ee9879b14afdf315d3d0d78b87",
+  "measurement": {
+    "functionRisk": "framework/maintainability/function-risk.mjs extractFunctions baseRisk",
+    "physicalLines": "UTF-8 source splitlines",
+    "responsibilities": "top-level classes/functions plus distinct kungfu imports"
+  },
+  "targets": [
+    {
+      "sourcePath": "framework/core/src/python/kungfu/agent/resources.py",
+      "baseline": {
+        "physicalLines": 1020,
+        "responsibilities": 41,
+        "functionRisk": { "functions": 39, "total": 889, "maximum": 203 }
+      },
+      "current": {
+        "physicalLines": 533,
+        "responsibilities": 39,
+        "functionRisk": { "functions": 36, "total": 274, "maximum": 41 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/agent/advisory.py"
+      ],
+      "ownedDefinitions": [
+        "normalize_work_signals",
+        "evaluate_work_advisory",
+        "normalize_skill_signals",
+        "evaluate_skill_decision"
+      ],
+      "facadeSymbols": [
+        "validate_work_advisory_signals",
+        "assess_work_advisory",
+        "validate_skill_decision_signals",
+        "assess_skill_decision"
+      ],
+      "responsibility": "Agent resource discovery and bootstrap remain here; deterministic Work and Skill advisory policy is owned by kungfu.agent.advisory."
+    },
+    {
+      "sourcePath": "framework/core/src/python/kungfu/agent/run_agent.py",
+      "baseline": {
+        "physicalLines": 1221,
+        "responsibilities": 35,
+        "functionRisk": { "functions": 22, "total": 171, "maximum": 28 }
+      },
+      "current": {
+        "physicalLines": 1204,
+        "responsibilities": 34,
+        "functionRisk": { "functions": 21, "total": 143, "maximum": 27 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/agent/native_launch.py"
+      ],
+      "ownedDefinitions": ["provider_interactive_argv"],
+      "facadeSymbols": ["interactive_launch_argv"],
+      "responsibility": "Agent process execution remains here; provider-specific interactive launch construction is owned by kungfu.agent.native_launch."
+    },
+    {
+      "sourcePath": "framework/core/src/python/kungfu/agent_work_lab.py",
+      "baseline": {
+        "physicalLines": 1707,
+        "responsibilities": 46,
+        "functionRisk": { "functions": 38, "total": 472, "maximum": 63 }
+      },
+      "current": {
+        "physicalLines": 1523,
+        "responsibilities": 36,
+        "functionRisk": { "functions": 31, "total": 318, "maximum": 53 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/agent_work_lab_evidence.py"
+      ],
+      "ownedDefinitions": [
+        "load_suite_catalog",
+        "work_reference",
+        "open_episode",
+        "close_episode",
+        "publish_event"
+      ],
+      "facadeSymbols": [
+        "_load_suite_catalog",
+        "_work_ref",
+        "_open_session_episode",
+        "_close_session_episode",
+        "_publish_event"
+      ],
+      "responsibility": "Work Lab commands and projections remain here; Suite discovery and exact Episode evidence are owned by kungfu.agent_work_lab_evidence."
+    },
+    {
+      "sourcePath": "framework/core/src/python/kungfu/assignment_orchestration.py",
+      "baseline": {
+        "physicalLines": 1566,
+        "responsibilities": 34,
+        "functionRisk": { "functions": 32, "total": 1337, "maximum": 325 }
+      },
+      "current": {
+        "physicalLines": 1470,
+        "responsibilities": 33,
+        "functionRisk": { "functions": 31, "total": 1082, "maximum": 325 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/assignment_provenance/__init__.py"
+      ],
+      "ownedDefinitions": ["inspect_binding", "installed_runtime_entrypoint"],
+      "facadeSymbols": ["binding_provenance"],
+      "responsibility": "Captured Assignment state remains here; exact native-binding classification is owned by kungfu.assignment_provenance."
+    },
+    {
+      "sourcePath": "framework/core/src/python/kungfu/cli/commands/agent.py",
+      "baseline": {
+        "physicalLines": 1591,
+        "responsibilities": 61,
+        "functionRisk": { "functions": 55, "total": 899, "maximum": 70 }
+      },
+      "current": {
+        "physicalLines": 1545,
+        "responsibilities": 60,
+        "functionRisk": { "functions": 54, "total": 845, "maximum": 70 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/agent/context_surface.py"
+      ],
+      "ownedDefinitions": ["project_agent_context"],
+      "facadeSymbols": ["_context"],
+      "responsibility": "Click command registration remains here; native and local Agent context projection is owned by kungfu.agent.context_surface."
+    },
+    {
+      "sourcePath": "framework/core/src/python/kungfu/cli/commands/assignment.py",
+      "baseline": {
+        "physicalLines": 2003,
+        "responsibilities": 68,
+        "functionRisk": { "functions": 71, "total": 1022, "maximum": 157 }
+      },
+      "current": {
+        "physicalLines": 1950,
+        "responsibilities": 67,
+        "functionRisk": { "functions": 70, "total": 865, "maximum": 57 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/cli/commands/assignment_review/__init__.py"
+      ],
+      "ownedDefinitions": ["find_passing_evidence"],
+      "facadeSymbols": ["_find_retained_reviewer_evidence"],
+      "responsibility": "Work CLI orchestration remains here; exact retained independent-review matching is owned by assignment_review."
+    },
+    {
+      "sourcePath": "framework/core/src/python/kungfu/profile_sdk.py",
+      "baseline": {
+        "physicalLines": 2123,
+        "responsibilities": 60,
+        "functionRisk": { "functions": 55, "total": 585, "maximum": 95 }
+      },
+      "current": {
+        "physicalLines": 2016,
+        "responsibilities": 58,
+        "functionRisk": { "functions": 53, "total": 485, "maximum": 66 }
+      },
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/profile_sdk_source.py",
+        "framework/core/src/python/kungfu/profile_sdk_support.py"
+      ],
+      "ownedDefinitions": ["resolve_profile_source", "decision_card"],
+      "facadeSymbols": ["resolve_source", "decision_card"],
+      "responsibility": "Profile SDK orchestration remains here; source resolution and decision-card construction are owned by the existing source and support layers."
+    }
+  ],
+  "invariants": [
+    "All seven public module paths and facade symbols remain importable.",
+    "CLI command names and parameters remain unchanged.",
+    "Native fact, schema, discovery, and recovery authority remain single-owned.",
+    "Every original module has fewer responsibilities, fewer physical lines, and lower aggregate function risk than the protected baseline.",
+    "The current Python import graph has no strongly connected component."
+  ]
+}

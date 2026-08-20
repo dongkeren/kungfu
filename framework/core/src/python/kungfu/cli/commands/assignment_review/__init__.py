@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 
+from kungfu import assignment_evidence
 from kungfu import assignment_orchestration as orchestration
 from kungfu.initiative_family.canonical import semantic_root
 from kungfu import profile_sdk
@@ -176,6 +177,61 @@ def parse_reviewer_result(report, acceptance_checks):
         "criteria": normalized,
         "evidenceRequests": [row.strip() for row in requests],
     }
+
+
+def find_passing_evidence(runtime_dir, plan):
+    """Return only an exact, read-only passing review from a fresh process."""
+
+    expected_prompt_root = run_agent.canonical_root(review_agent_prompt(plan))
+    reports = sorted(
+        (Path(runtime_dir) / "agent-runs").glob("*/bundle/report.json"),
+        key=lambda candidate: candidate.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for report_path in reports:
+        try:
+            _, report = assignment_evidence.load_execution_agent_report(
+                report_path,
+                runtime_dir,
+                plan["work"]["initiativeId"],
+                plan["work"]["assignmentId"],
+            )
+            work_ref = report["work"]["workRef"]
+            runtime_profile = report["runtimeProfile"]
+            launch = report["launch"]
+            privacy = report["privacy"]
+            argv = list(launch.get("argvWithoutPrompt") or [])
+            read_only_launch = launch.get("permissionMode") == "read-only" or (
+                "--sandbox" in argv and "read-only" in argv
+            )
+            matches = (
+                work_ref.get("workspaceId") == plan["workspace"]["id"]
+                and work_ref.get("profileId") == "kungfu.work-control"
+                and work_ref.get("profileRoot")
+                == plan["execution"]["workRef"]["profileRoot"]
+                and work_ref.get("entityRoot") == plan["work"]["assignmentRoot"]
+                and work_ref.get("purpose") == "independent-completion-review"
+                and runtime_profile.get("id") == plan["reviewer"]["id"]
+                and runtime_profile.get("root") == plan["reviewer"]["profileRoot"]
+                and launch.get("cwd") == plan["workspace"]["root"]
+                and launch.get("promptRoot") == expected_prompt_root
+                and read_only_launch
+                and privacy.get("priorTranscriptBytesGivenToAgent") == 0
+                and privacy.get("privateProviderSessionStoreRead") is False
+            )
+            if not matches:
+                continue
+            assessment = parse_reviewer_result(report, plan["work"]["acceptanceChecks"])
+            if assessment["verdict"] != "fit":
+                continue
+        except (KeyError, OSError, ValueError, json.JSONDecodeError):
+            continue
+        return {
+            "reportPath": str(report_path),
+            "report": report,
+            "assessment": assessment,
+        }
+    return None
 
 
 def exact_pending_fit_review(current, *, missing_message, conflicting_message):
