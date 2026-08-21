@@ -10,6 +10,7 @@
 #include <chrono>
 #include <kungfu/runtime/state_cache/manager.h>
 #include <kungfu/view/action_envelope.h>
+#include <memory>
 #include <sstream>
 #include <typeinfo>
 #include <utility>
@@ -675,15 +676,17 @@ void Watcher::QueueSnapshot() {
     ++snapshot_coalesced_;
     return;
   }
-  auto event = new bridge_event{this, bridge_event_kind::snapshot_ready};
-  const auto status = worker_bridge_.NonBlockingCall(event, [](Napi::Env env, Napi::Function, bridge_event *event) {
+  auto event = std::make_unique<bridge_event>(bridge_event{this, bridge_event_kind::snapshot_ready});
+  const auto status = worker_bridge_.NonBlockingCall(event.get(), [](Napi::Env env, Napi::Function, bridge_event *raw) {
+    const std::unique_ptr<bridge_event> event(raw);
     event->watcher->HandleBridgeEvent(env, event->kind);
-    delete event;
   });
   if (status != napi_ok) {
-    delete event;
     snapshot_pending_ = false;
     ++bridge_failures_;
+  } else {
+    // The accepted bridge callback now owns the event through its unique_ptr.
+    (void)event.release();
   }
 }
 
@@ -692,20 +695,22 @@ void Watcher::QueueWorkerStopped() {
     worker_bridge_.Release();
     return;
   }
-  auto event = new bridge_event{this, bridge_event_kind::worker_stopped};
+  auto event = std::make_unique<bridge_event>(bridge_event{this, bridge_event_kind::worker_stopped});
   napi_status status = napi_queue_full;
   while (status == napi_queue_full && not environment_closing_.load()) {
-    status = worker_bridge_.NonBlockingCall(event, [](Napi::Env env, Napi::Function, bridge_event *event) {
+    status = worker_bridge_.NonBlockingCall(event.get(), [](Napi::Env env, Napi::Function, bridge_event *raw) {
+      const std::unique_ptr<bridge_event> event(raw);
       event->watcher->HandleBridgeEvent(env, event->kind);
-      delete event;
     });
     if (status == napi_queue_full) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
   if (status != napi_ok) {
-    delete event;
     ++bridge_failures_;
+  } else {
+    // The accepted bridge callback now owns the event through its unique_ptr.
+    (void)event.release();
   }
   worker_bridge_.Release();
 }
@@ -850,10 +855,18 @@ void Watcher::RequestDeregister() {
 
 void Watcher::AfterCoordinatorDown(Napi::Env env) {
   SPDLOG_INFO("after coordinator down");
-  // disjoin(get_coordinator_command_uid());
   reader_->clear();
-  writers_.clear();
-  off_thread_writers_.clear();
+  {
+    std::lock_guard<std::mutex> lock(writers_mtx_);
+    writers_.clear();
+    coordinator_cmd_writer_for_thread_.reset();
+    public_writer_.reset();
+    thread_writer_.reset();
+  }
+  {
+    std::lock_guard<std::mutex> lock(off_thread_mtx_);
+    off_thread_writers_.clear();
+  }
   serialize::InitObjectReference(env, app_states_ref_);
   serialize::InitStateMap(env, ledger_ref_, "ledger");
 }

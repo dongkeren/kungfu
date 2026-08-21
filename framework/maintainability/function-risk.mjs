@@ -597,16 +597,33 @@ function entrypointGraph(policy) {
   return { ...body, graphRoot: digest(body) };
 }
 
-function buildReport() {
+function findingMatchesLanguage(finding, family, functionsById) {
+  return finding.paths.some((value) => {
+    if (value.startsWith(`${family}:`)) return true;
+    const metric = functionsById.get(value);
+    if (metric) return metric.language === family;
+    return family === 'c-cpp' && languageFamily(value) === family;
+  });
+}
+
+function buildReport(options = {}) {
   const policy = readJson(POLICY_PATH);
   const layers = readJson('framework/core/architecture/layers.json');
   const ownership = readJson(
     'framework/maintainability/abstraction-integrity.manifest.json',
   ).ownership;
+  const selectedLanguage = options.languageFamily || '';
+  if (
+    selectedLanguage &&
+    !Object.hasOwn(policy.languageFamilies, selectedLanguage)
+  )
+    throw new Error(`unknown language family '${selectedLanguage}'`);
+  const baselineRef =
+    policy.languageBaselines?.[selectedLanguage] || policy.baselineRef;
   const baselineRevision = String(
-    runGit(['rev-parse', `${policy.baselineRef}^{commit}`]),
+    runGit(['rev-parse', `${baselineRef}^{commit}`]),
   ).trim();
-  if (baselineRevision !== policy.baselineRef)
+  if (baselineRevision !== baselineRef)
     throw new Error('function-risk baselineRef must be an exact commit SHA');
   const baseline = snapshot(
     trackedFilesAt(baselineRevision),
@@ -622,6 +639,34 @@ function buildReport() {
     baseline.files,
     policy,
   );
+  const selectedFunctions = selectedLanguage
+    ? transition.functions.filter(
+        ({ language: value }) => value === selectedLanguage,
+      )
+    : transition.functions;
+  const selectedTransitions = selectedLanguage
+    ? transition.transitions.filter(
+        ({ current, previous }) =>
+          current?.language === selectedLanguage ||
+          previous?.language === selectedLanguage,
+      )
+    : transition.transitions;
+  const selectedRetiredFunctions = selectedLanguage
+    ? transition.retiredFunctions.filter(
+        ({ language: value }) => value === selectedLanguage,
+      )
+    : transition.retiredFunctions;
+  const functionsById = new Map(
+    [...transition.functions, ...transition.retiredFunctions].map((item) => [
+      item.id,
+      item,
+    ]),
+  );
+  const selectedFindings = selectedLanguage
+    ? transition.findings.filter((finding) =>
+        findingMatchesLanguage(finding, selectedLanguage, functionsById),
+      )
+    : transition.findings;
   const sourceRevision = String(runGit(['rev-parse', 'HEAD^{commit}'])).trim();
   const dirty = Boolean(
     String(
@@ -637,8 +682,11 @@ function buildReport() {
     sourceRoot: current.sourceRoot,
     policyPath: POLICY_PATH,
     policyRoot: digest(policy),
+    view: selectedLanguage
+      ? { kind: 'language-family', language: selectedLanguage }
+      : { kind: 'all-language-families' },
     baseline: {
-      ref: policy.baselineRef,
+      ref: baselineRef,
       revision: baselineRevision,
       sourceRoot: baseline.sourceRoot,
     },
@@ -652,31 +700,40 @@ function buildReport() {
     summary: {
       byLanguage: Object.fromEntries(
         Object.keys(policy.languageFamilies)
+          .filter((family) => !selectedLanguage || family === selectedLanguage)
           .sort()
           .map((family) => [
             family,
-            transition.functions.filter(
-              ({ language: value }) => value === family,
-            ).length,
+            selectedFunctions.filter(({ language: value }) => value === family)
+              .length,
           ]),
       ),
-      functions: transition.functions.length,
-      findings: transition.findings.length,
+      functions: selectedFunctions.length,
+      findings: selectedFindings.length,
       blockingFindings: 0,
     },
-    functions: transition.functions,
-    transitions: transition.transitions,
-    retiredFunctions: transition.retiredFunctions,
-    findings: transition.findings,
+    functions: selectedFunctions,
+    transitions: selectedTransitions,
+    retiredFunctions: selectedRetiredFunctions,
+    findings: selectedFindings,
   };
   return { ...body, reportRoot: digest(body) };
 }
 
 function main(argv = process.argv.slice(2)) {
   const json = argv.includes('--json');
-  const unknown = argv.filter((arg) => !['--json', '--check'].includes(arg));
+  const languageIndex = argv.indexOf('--language');
+  const languageFamily = languageIndex === -1 ? '' : argv[languageIndex + 1];
+  if (languageIndex !== -1 && !languageFamily)
+    throw new Error('--language requires a language family');
+  const consumed = new Set(['--json', '--check']);
+  if (languageIndex !== -1) {
+    consumed.add('--language');
+    consumed.add(languageFamily);
+  }
+  const unknown = argv.filter((arg) => !consumed.has(arg));
   if (unknown.length) throw new Error(`unknown argument '${unknown[0]}'`);
-  const report = buildReport();
+  const report = buildReport({ languageFamily });
   if (json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else
     process.stdout.write(

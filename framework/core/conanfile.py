@@ -366,6 +366,12 @@ class KungfuCoreConan(ConanFile):
             )
         elif scope == "full":
             full_cmake_definitions = {"KUNGFU_WITH_CORE_TESTS": "ON"}
+            sanitizer = os.environ.get("KUNGFU_CORE_SANITIZER", "none").strip()
+            if sanitizer not in ("none", "address-undefined", "thread"):
+                raise ConanInvalidConfiguration(
+                    f"unsupported KUNGFU_CORE_SANITIZER: {sanitizer}"
+                )
+            full_cmake_definitions["KUNGFU_CORE_SANITIZER"] = sanitizer
             self.__run_build(
                 build_type, "node", cmake_definitions=full_cmake_definitions
             )

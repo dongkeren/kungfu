@@ -5,6 +5,33 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(KUNGFU_CORE_SANITIZER "none" CACHE STRING
+    "Core sanitizer profile: none, address-undefined, or thread")
+set_property(CACHE KUNGFU_CORE_SANITIZER PROPERTY STRINGS
+             none address-undefined thread)
+
+if(NOT KUNGFU_CORE_SANITIZER STREQUAL "none")
+  if(MSVC)
+    if(NOT KUNGFU_CORE_SANITIZER STREQUAL "address-undefined")
+      message(FATAL_ERROR
+              "MSVC supports only KUNGFU_CORE_SANITIZER=address-undefined (ASan)")
+    endif()
+    add_compile_options(/fsanitize=address)
+  elseif(KUNGFU_CORE_SANITIZER STREQUAL "address-undefined")
+    add_compile_options(-fsanitize=address,undefined
+                        -fno-sanitize-recover=all
+                        -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+  elseif(KUNGFU_CORE_SANITIZER STREQUAL "thread")
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
+  else()
+    message(FATAL_ERROR
+            "unsupported KUNGFU_CORE_SANITIZER=${KUNGFU_CORE_SANITIZER}")
+  endif()
+  message(STATUS "Kungfu Core sanitizer: ${KUNGFU_CORE_SANITIZER}")
+endif()
+
 ############################################################
 
 # 编译器缓存 launcher：优先 sccache(MSVC 原生 + 远程缓存后端),其次 ccache。命中即用、

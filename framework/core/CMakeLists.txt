@@ -159,6 +159,10 @@ if ("runtime-contracts" IN_LIST KUNGFU_BUILD_COMPONENTS AND
   endif()
 endif()
 
+if(KUNGFU_WITH_CORE_TESTS AND TARGET kungfu_compile_contract)
+  add_subdirectory(tests)
+endif()
+
 # Public-header self-compilation and frozen old-consumer ABI tests are generated
 # from the same architecture authority as the component graph.
 include(${PROJECT_SOURCE_DIR}/architecture/PUBLIC_CONTRACTS.cmake)

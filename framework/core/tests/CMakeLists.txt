@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+
+add_executable(kungfu_node_boundary_contract_tests node_boundary_contract_tests.cpp)
+target_link_libraries(kungfu_node_boundary_contract_tests PRIVATE kungfu_compile_contract)
+target_compile_features(kungfu_node_boundary_contract_tests PRIVATE cxx_std_20)
+add_test(NAME kungfu_node_boundary_contract_tests COMMAND kungfu_node_boundary_contract_tests)

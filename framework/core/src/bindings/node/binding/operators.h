@@ -7,6 +7,7 @@
 #ifndef KUNGFU_NODE_SERIALIZE_H
 #define KUNGFU_NODE_SERIALIZE_H
 
+#include "byte_view.h"
 #include "common.h"
 #include "data_table.h"
 
@@ -283,15 +284,27 @@ private:
   template <typename ValueType>
   std::enable_if_t<kungfu::is_array_of_others_v<ValueType, char>> Get(ValueType &value, const char *name,
                                                                       const Napi::Object &object) {
-    auto buf = object.Get(name).As<Napi::ArrayBuffer>();
-    memcpy(value.value, buf.Data(), buf.ByteLength());
+    const auto field = object.Get(name);
+    if (!field.IsArrayBuffer()) {
+      throw Napi::TypeError::New(object.Env(), fmt::format("{} must be an ArrayBuffer", name));
+    }
+    auto buffer = field.As<Napi::ArrayBuffer>();
+    const auto status = boundary::copy_exact(buffer.Data(), buffer.ByteLength(), value.value);
+    if (status != boundary::byte_view_error::none) {
+      throw Napi::RangeError::New(object.Env(), fmt::format("{} byte length must equal {}", name, sizeof(value.value)));
+    }
   }
 
   template <typename ValueType> void Get(std::vector<ValueType> &value, const char *name, const Napi::Object &object) {
-    auto buf = object.Get(name).As<Napi::ArrayBuffer>();
-    for (int i = 0; i < buf.ByteLength(); i += sizeof(ValueType)) {
-      auto addr = reinterpret_cast<uintptr_t>(buf.Data()) + i;
-      value.push_back(*reinterpret_cast<ValueType *>(addr));
+    const auto field = object.Get(name);
+    if (!field.IsArrayBuffer()) {
+      throw Napi::TypeError::New(object.Env(), fmt::format("{} must be an ArrayBuffer", name));
+    }
+    auto buffer = field.As<Napi::ArrayBuffer>();
+    const auto status = boundary::replace_vector(buffer.Data(), buffer.ByteLength(), value);
+    if (status != boundary::byte_view_error::none) {
+      throw Napi::RangeError::New(object.Env(),
+                                  fmt::format("{} byte length must be a multiple of {}", name, sizeof(ValueType)));
     }
   }
 

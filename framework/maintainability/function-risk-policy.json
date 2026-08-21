@@ -2,6 +2,9 @@
   "schema": "kungfu.function-risk-policy/v1",
   "status": "advisory-observation",
   "baselineRef": "c8fd32f901b3af15532a11599c9b34af0b0f42bc",
+  "languageBaselines": {
+    "c-cpp": "1510515e7d61eafc3182b769efacd171ba489198"
+  },
   "languageFamilies": {
     "c-cpp": [".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"],
     "javascript-typescript": [".cjs", ".js", ".mjs", ".ts", ".tsx"],

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -332,7 +333,8 @@ episode_frame_verification verify_episode_frame_claims(const storage_fsck_reques
         const auto frame = reader->current_frame();
         const auto wanted_iter = wanted.find(frame->frame_uid());
         if (wanted_iter != wanted.end() && found.insert(frame->frame_uid()).second) {
-          const auto &header = *reinterpret_cast<const yjj::types::frame_header *>(frame->address());
+          yjj::types::frame_header header{};
+          std::memcpy(&header, reinterpret_cast<const void *>(frame->address()), sizeof(header));
           const auto *payload = static_cast<const uint8_t *>(frame->data_address());
           for (const auto *context : wanted_iter->second) {
             const auto &claim = context->claim;

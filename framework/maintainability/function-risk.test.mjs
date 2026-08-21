@@ -166,3 +166,18 @@ test('live report is rooted, advisory, four-language, and maps every entrypoint'
     'retained-exception',
   );
 });
+
+test('C++ view uses its exact protected-head baseline and excludes other languages', () => {
+  const report = buildReport({ languageFamily: 'c-cpp' });
+  assert.deepEqual(report.view, {
+    kind: 'language-family',
+    language: 'c-cpp',
+  });
+  assert.equal(report.baseline.ref, '1510515e7d61eafc3182b769efacd171ba489198');
+  assert.deepEqual(Object.keys(report.summary.byLanguage), ['c-cpp']);
+  assert.ok(report.functions.length > 0);
+  assert.ok(report.functions.every(({ language }) => language === 'c-cpp'));
+  assert.ok(
+    report.retiredFunctions.every(({ language }) => language === 'c-cpp'),
+  );
+});

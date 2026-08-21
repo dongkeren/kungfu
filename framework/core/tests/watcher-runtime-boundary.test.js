@@ -35,7 +35,7 @@ function runProbe(mode, environment = {}) {
     cwd: path.resolve(coreDir, '..', '..'),
     env: { ...process.env, ...environment },
     encoding: 'utf8',
-    timeout: 10_000,
+    timeout: mode === 'reconnect' ? 35_000 : 10_000,
   });
   assert.equal(
     result.error,
@@ -103,9 +103,35 @@ test(
 );
 
 test(
+  'concurrent watcher shutdown preserves bridge event ownership',
+  nativeTest,
+  () => {
+    const result = runProbe('lifecycle-race');
+    assert.equal(result.stats.length, 4);
+    for (const stats of result.stats) {
+      assert.equal(stats.running, false);
+      assert.equal(stats.stopRequested, true);
+      assert.equal(stats.bridgeFailures, '0');
+    }
+  },
+);
+
+test(
   'environment cleanup stops and joins a live watcher during addon exit',
   nativeTest,
   () => {
     assert.equal(runProbe('addon-exit'), null);
+  },
+);
+
+test(
+  'watcher reconnects after coordinator exit without losing callback ownership',
+  nativeTest,
+  () => {
+    const result = runProbe('reconnect');
+    assert.equal(result.reconnected, true);
+    assert.equal(result.stats.running, false);
+    assert.equal(result.stats.stopRequested, true);
+    assert.equal(result.stats.bridgeFailures, '0');
   },
 );
