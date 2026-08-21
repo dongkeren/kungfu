@@ -67,9 +67,11 @@
     "framework/tui/src/profile-shell.tsx": {
       "action": "decomposed-control-state",
       "extractedPaths": [
-        "framework/tui/src/control-plane-state.ts"
+        "framework/tui/src/control-plane-state.ts",
+        "framework/tui/src/session-workbench-state.ts",
+        "framework/tui/src/session-workbench-view.tsx"
       ],
-      "residualResponsibility": "Ink rendering and bounded product-shell composition"
+      "residualResponsibility": "Profile navigation, evidence rendering, control-plane overlay, and terminal shell composition"
     },
     "scripts/affected-native-proof.mjs": {
       "action": "decomposed-remote-artifact-discovery",

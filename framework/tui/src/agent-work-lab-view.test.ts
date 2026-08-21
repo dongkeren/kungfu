@@ -47,13 +47,12 @@ import {
 import { IncrementalTerminalOutput } from './terminal-canvas.js';
 
 test('generic workbench has no product-specific test or oracle vocabulary', () => {
-  const moduleSource = readFileSync(
-    new URL('./profile-shell.tsx', import.meta.url),
-    'utf8',
-  );
-  const source = moduleSource.slice(
-    moduleSource.indexOf('// Generic two-session workbench'),
-  );
+  const source = [
+    './session-workbench-state.ts',
+    './session-workbench-view.tsx',
+  ]
+    .map((relative) => readFileSync(new URL(relative, import.meta.url), 'utf8'))
+    .join('\n');
   assert.doesNotMatch(
     source,
     /Agent Work Lab|offline-demo|same-agent|cross-agent|agent-work-lab|oracle/i,
@@ -355,7 +354,7 @@ test('TUI Agent Work Lab layout keeps two Sessions and the verdict dock fixed', 
     'utf8',
   );
   const frameworkSource = readFileSync(
-    new URL('./profile-shell.tsx', import.meta.url),
+    new URL('./session-workbench-view.tsx', import.meta.url),
     'utf8',
   );
 
@@ -755,7 +754,7 @@ test('TUI host streams events and preserves the one-second rhythm', () => {
     'utf8',
   );
   const playbackSource = readFileSync(
-    new URL('./profile-shell.tsx', import.meta.url),
+    new URL('./session-workbench-state.ts', import.meta.url),
     'utf8',
   );
 

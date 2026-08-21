@@ -242,6 +242,13 @@
       ]
     },
     {
+      "owner": "tui/session-workbench",
+      "paths": [
+        "framework/tui/src/session-workbench-state.ts",
+        "framework/tui/src/session-workbench-view.tsx"
+      ]
+    },
+    {
       "owner": "core/python-workspace-federation-read-model",
       "paths": [
         "framework/core/src/python/kungfu/assignment_graph.py",
