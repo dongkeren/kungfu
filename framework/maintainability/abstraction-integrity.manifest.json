@@ -303,6 +303,18 @@
       ]
     },
     {
+      "owner": "shifu/promotion-catalog",
+      "paths": [
+        "crates/shifu/src/promote_catalog.rs"
+      ]
+    },
+    {
+      "owner": "shifu/promotion-desktop-filesystem",
+      "paths": [
+        "crates/shifu/src/promote_desktop_fs.rs"
+      ]
+    },
+    {
       "owner": "core/python-agent-documentation-cli",
       "paths": [
         "framework/core/src/python/kungfu/cli/commands/agent_docs.py"

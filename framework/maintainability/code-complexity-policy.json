@@ -64,6 +64,20 @@
     "retainedAdvisoryReview": "Every retained advisory crossing requires exact-head independent cohesion review in terminal evidence"
   },
   "advisoryDispositions": {
+    "crates/shifu/src/promote.rs": {
+      "action": "decomposed-promotion-catalog",
+      "extractedPaths": [
+        "crates/shifu/src/promote_catalog.rs"
+      ],
+      "residualResponsibility": "Build selection, promotion orchestration, installation, and adoption"
+    },
+    "crates/shifu/src/promote_desktop.rs": {
+      "action": "decomposed-desktop-filesystem",
+      "extractedPaths": [
+        "crates/shifu/src/promote_desktop_fs.rs"
+      ],
+      "residualResponsibility": "Recoverable promotion transaction, receipts, native handoff, and retained rollback"
+    },
     "framework/tui/src/profile-shell.tsx": {
       "action": "decomposed-control-state",
       "extractedPaths": [
