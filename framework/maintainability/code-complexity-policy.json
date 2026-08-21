@@ -74,7 +74,8 @@
     "scripts/affected-native-proof.mjs": {
       "action": "decomposed-remote-artifact-discovery",
       "extractedPaths": [
-        "framework/release/affected-native-artifact-lookup.mjs"
+        "framework/release/affected-native-artifact-lookup.mjs",
+        "framework/release/affected-native-proof-cli.mjs"
       ],
       "residualResponsibility": "Affected-native proof construction, validation, sealing, and cache authority"
     },

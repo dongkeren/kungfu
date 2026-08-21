@@ -16,6 +16,7 @@ import {
   lookupReusableArtifact,
   requireSha,
 } from '../framework/release/affected-native-artifact-lookup.mjs';
+import { runAffectedNativeProofCli } from '../framework/release/affected-native-proof-cli.mjs';
 import { parseFamilyQueueLeaseMarker } from './project-cut-merge-queue-admission.mjs';
 
 export {
@@ -1581,394 +1582,39 @@ export function verifyCachePromotionAuthority(authorityDir, options) {
   return authority;
 }
 
-function git(...args) {
-  const result = spawnSync('git', args, { encoding: 'utf8', shell: false });
-  if (result.status !== 0) {
-    throw new Error(result.stderr.trim() || `git ${args.join(' ')} failed`);
-  }
-  return result.stdout.trim();
-}
-
-function parseArgs(argv) {
-  const [command, ...rest] = argv;
-  const options = { command };
-  for (let index = 0; index < rest.length; index += 1) {
-    const argument = rest[index];
-    if (!argument.startsWith('--'))
-      throw new Error(`unknown argument: ${argument}`);
-    options[argument.slice(2)] = rest[++index];
-  }
-  return options;
-}
-
-function appendGithubOutput(file, values) {
-  if (!file) return;
-  fs.appendFileSync(
-    file,
-    `${Object.entries(values)
-      .map(([key, value]) => `${key}=${value}`)
-      .join('\n')}\n`,
-  );
-}
-
-function writeJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function copyDirectory(source, destination) {
-  fs.mkdirSync(destination, { recursive: true });
-  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-    const sourcePath = path.join(source, entry.name);
-    const destinationPath = path.join(destination, entry.name);
-    if (entry.isDirectory()) {
-      copyDirectory(sourcePath, destinationPath);
-    } else if (entry.isFile()) {
-      fs.copyFileSync(sourcePath, destinationPath);
-    }
-  }
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.command === 'source-input') {
-    const receipt = readJson(path.resolve(options['native-receipt']));
-    const result = createSourceQualificationInput({
-      repository: options.repository,
-      protectedBase: options['protected-base'],
-      pullRequestNumber: options['pull-request'],
-      sourceHeadSha: options['source-head'],
-      descriptor: readJson(path.resolve(options.descriptor)),
-      proof: readJson(path.resolve(options.proof)),
-      plan: receipt.plan,
-    });
-    writeJson(path.resolve(options.output), result);
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-  if (options.command === 'queue-lease-verify') {
-    const result = verifyQueueAdmissionLease({
-      view: readJson(path.resolve(options.view)),
-      pullRequestNumber: options['pull-request'],
-      sourceHeadSha: options['source-head'],
-      now: options.now,
-    });
-    writeJson(path.resolve(options.output), result);
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-  if (options.command === 'integration-input') {
-    const result = createIntegrationDeliveryInput({
-      view: readJson(path.resolve(options.view)),
-      deliveryAttempt: readJson(path.resolve(options['delivery-attempt'])),
-      queueEntry: readJson(path.resolve(options['queue-entry'])),
-      queueLeaseReceipt: readJson(path.resolve(options['queue-lease-receipt'])),
-      pullRequestNumber: options['pull-request'],
-      verifiedAt: options['verified-at'],
-    });
-    writeJson(path.resolve(options.output), result);
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-  if (options.command === 'toolchain') {
-    writeJson(
-      path.resolve(options.output),
-      observeNativeToolchain(process.env, { compiler: options.compiler }),
-    );
-    return;
-  }
-  if (options.command === 'describe') {
-    const plan = readJson(path.resolve(options.plan));
-    const deliveryBinding = options['delivery-binding']
-      ? readJson(path.resolve(options['delivery-binding']))
-      : null;
-    const semanticSource = semanticSourceProjectionFromGit(plan);
-    const descriptor = createProofDescriptor(
-      plan,
-      options['source-tree'] || git('rev-parse', 'HEAD^{tree}'),
-      Number(options['partition-count'] || 2),
-      readJson(path.resolve(options.toolchain)),
-      deliveryBinding,
-      semanticSource.semanticSourceRoot,
-    );
-    writeJson(path.resolve(options.output), descriptor);
-    appendGithubOutput(options['github-output'], {
-      'proof-id': descriptor.proofId,
-      'artifact-name': descriptor.artifactName,
-      'native-required': descriptor.nativeRequired,
-      'sdk-required': descriptor.sdkRequired,
-    });
-    console.log(JSON.stringify(descriptor, null, 2));
-    return;
-  }
-  if (options.command === 'bind-delivery') {
-    const rules = readJson(path.resolve(options['rules-file']));
-    const binding = createDeliveryBinding({
-      event: options.event,
-      pullRequest: options['pull-request'],
-      pullRequestHead: options['pull-request-head'],
-      devHead: options['dev-head'],
-      candidateHead: options['candidate-head'],
-      candidateTree: options['candidate-tree'],
-      pullRequestBody: fs.readFileSync(
-        path.resolve(options['pr-body']),
-        'utf8',
-      ),
-      combinedStatus: readJson(path.resolve(options['status-file'])),
-      requiredContexts: requiredContextsFromRules(rules),
-      queueAdmissionContext: options['queue-admission-context'],
-    });
-    writeJson(path.resolve(options.output), binding);
-    appendGithubOutput(options['github-output'], {
-      'binding-root': binding.bindingRoot,
-      'binding-state': binding.state,
-    });
-    console.log(JSON.stringify(binding, null, 2));
-    return;
-  }
-  if (options.command === 'lookup') {
-    const descriptor = readJson(path.resolve(options.descriptor));
-    let result;
-    try {
-      result = await lookupReusableArtifact({
-        apiUrl: options['api-url'],
-        repository: options.repository,
-        artifactName: descriptor.artifactName,
-        headSha: options['head-sha'],
-        token: process.env.GITHUB_TOKEN || '',
-        maxAgeSeconds: Number(
-          options['max-age-seconds'] || DEFAULT_MAX_AGE_SECONDS,
-        ),
-      });
-    } catch (error) {
-      result = { reusable: false, reason: error.message, candidateCount: 0 };
-    }
-    appendGithubOutput(options['github-output'], {
-      'run-id': result.reusable ? result.runId : '',
-      'producer-event': result.reusable ? result.producerEvent : '',
-      'producer-head-sha': result.reusable ? result.producerHeadSha : '',
-      reusable: result.reusable,
-      reason: result.reason,
-    });
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-  if (options.command === 'seal') {
-    const descriptor = readJson(path.resolve(options.descriptor));
-    const inputDir = path.resolve(options['input-dir']);
-    const outputDir = path.resolve(options['output-dir']);
-    const proof = sealProof(descriptor, inputDir, {
-      repository: options.repository,
-      runId: options['run-id'],
-      event: options.event,
-      workflowPath: WORKFLOW_PATH,
-      triggerHeadSha: options['trigger-head-sha'],
-      checkoutSha: options['checkout-sha'] || git('rev-parse', 'HEAD'),
-      createdAt: options['created-at'] || new Date().toISOString(),
-    });
-    fs.mkdirSync(outputDir, { recursive: true });
-    const inputs = receiptFiles(inputDir);
-    for (const { value } of inputs) {
-      writeJson(
-        path.join(
-          outputDir,
-          `partition-${value.executionPartition.index}.receipt.json`,
-        ),
-        value,
-      );
-    }
-    writeJson(path.join(outputDir, 'proof.json'), proof);
-    console.log(JSON.stringify(proof, null, 2));
-    return;
-  }
-  if (options.command === 'verify') {
-    const proof = verifyProofBundle(
-      readJson(path.resolve(options.descriptor)),
-      path.resolve(options.bundle),
-      {
-        repository: options.repository,
-        producerRunId: options['producer-run-id'],
-        producerEvent: options['producer-event'],
-        producerHeadSha: options['producer-head-sha'],
-        maxAgeSeconds: Number(
-          options['max-age-seconds'] || DEFAULT_MAX_AGE_SECONDS,
-        ),
-        now: options.now,
-        deltaPlan: options['dev-delta-plan']
-          ? readJson(path.resolve(options['dev-delta-plan']))
-          : null,
-      },
-    );
-    console.log(
-      JSON.stringify(
-        {
-          status: 'verified',
-          proofId: proof.proofId,
-          proofRoot: proof.proofRoot,
-          baseDelta: proof.baseDelta,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-  if (options.command === 'seal-cache-authority') {
-    const descriptorFile = path.resolve(options.descriptor);
-    const proofBundleDir = path.resolve(options.bundle);
-    const outputDir = path.resolve(options['output-dir']);
-    const authority = createCachePromotionAuthority(
-      readJson(descriptorFile),
-      proofBundleDir,
-      {
-        targetRepository: options.repository,
-        targetRunId: options['target-run-id'],
-        targetEvent: 'merge_group',
-        targetHeadSha: options['target-head-sha'],
-        targetSourceTree:
-          options['target-source-tree'] || git('rev-parse', 'HEAD^{tree}'),
-        producerRepository: options.repository,
-        producerRunId: options['producer-run-id'],
-        producerEvent: options['producer-event'],
-        producerHeadSha: options['producer-head-sha'],
-        maxAgeSeconds: Number(
-          options['max-age-seconds'] || DEFAULT_MAX_AGE_SECONDS,
-        ),
-        now: options.now,
-        deltaPlan: options['dev-delta-plan']
-          ? readJson(path.resolve(options['dev-delta-plan']))
-          : null,
-      },
-    );
-    fs.mkdirSync(outputDir, { recursive: true });
-    fs.copyFileSync(descriptorFile, path.join(outputDir, 'descriptor.json'));
-    copyDirectory(proofBundleDir, path.join(outputDir, 'proof'));
-    writeJson(path.join(outputDir, 'authority.json'), authority);
-    console.log(JSON.stringify(authority, null, 2));
-    return;
-  }
-  if (options.command === 'verify-cache-authority') {
-    const authority = verifyCachePromotionAuthority(
-      path.resolve(options.bundle),
-      {
-        targetRepository: options.repository,
-        targetRunId: options['target-run-id'],
-        targetHeadSha: options['target-head-sha'],
-        targetSourceTree:
-          options['target-source-tree'] || git('rev-parse', 'HEAD^{tree}'),
-        maxAgeSeconds: Number(
-          options['max-age-seconds'] || DEFAULT_MAX_AGE_SECONDS,
-        ),
-        now: options.now,
-      },
-    );
-    appendGithubOutput(options['github-output'], {
-      'authority-digest': authority.authorityDigest,
-      'producer-run-id': authority.producer.runId,
-      'producer-event': authority.producer.event,
-      'producer-trigger-head-sha': authority.producer.triggerHeadSha,
-      'payload-source-sha': authority.payloadSourceSha,
-      'delivery-binding-root': authority.deliveryBindingRoot || '',
-    });
-    console.log(
-      JSON.stringify(
-        {
-          status: 'verified',
-          authorityDigest: authority.authorityDigest,
-          payloadSourceSha: authority.payloadSourceSha,
-          producer: authority.producer,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-  if (options.command === 'verify-attempt') {
-    const attempt = validateDeliveryAttempt(
-      readJson(
-        path.join(path.resolve(options.bundle), 'delivery-attempt.json'),
-      ),
-    );
-    const expected = {
-      repository: requireRepository(options.repository, 'delivery repository'),
-      runId: requireRunId(options['run-id'], 'delivery run id'),
-      headSha: requireSha(options['head-sha'], 'delivery merge-group head'),
-      sourceTree: requireSha(
-        options['source-tree'] || git('rev-parse', 'HEAD^{tree}'),
-        'delivery source tree',
-      ),
-    };
-    if (
-      attempt.workflow.repository !== expected.repository ||
-      attempt.workflow.runId !== expected.runId ||
-      attempt.source.mergeGroupHead !== expected.headSha ||
-      attempt.source.checkout !== expected.headSha ||
-      attempt.source.replayedTree !== expected.sourceTree
-    ) {
-      throw new Error('affected-native delivery attempt target drift');
-    }
-    appendGithubOutput(
-      options['github-output'],
-      deliveryAttemptGithubOutputs(attempt),
-    );
-    console.log(
-      JSON.stringify(
-        {
-          status: 'verified',
-          attemptRoot: attempt.attemptRoot,
-          deliveryBindingRoot: attempt.deliveryBindingRoot,
-          family: attempt.family,
-          source: attempt.source,
-          proofDecision: attempt.proof.decision,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-  if (options.command === 'seal-attempt') {
-    const descriptor = readJson(path.resolve(options.descriptor));
-    const bundle = path.resolve(options.bundle);
-    const untrustedProof = readJson(path.join(bundle, 'proof.json'));
-    const proof = verifyProofBundle(descriptor, bundle, {
-      repository: untrustedProof.producer?.repository,
-      producerRunId: untrustedProof.producer?.runId,
-      producerEvent: untrustedProof.producer?.event,
-      producerHeadSha: untrustedProof.producer?.triggerHeadSha,
-      maxAgeSeconds: Number(
-        options['max-age-seconds'] || DEFAULT_MAX_AGE_SECONDS,
-      ),
-      now: options.now,
-      deltaPlan: options['dev-delta-plan']
-        ? readJson(path.resolve(options['dev-delta-plan']))
-        : null,
-    });
-    const attempt = createDeliveryAttempt(descriptor, proof, options.decision, {
-      repository: options.repository,
-      runId: options['run-id'],
-      event: options.event,
-      triggerHeadSha: options['trigger-head-sha'],
-      checkoutSha: options['checkout-sha'] || git('rev-parse', 'HEAD'),
-    });
-    const outputDir = path.resolve(options['output-dir']);
-    fs.mkdirSync(outputDir, { recursive: true });
-    writeJson(path.join(outputDir, 'delivery-attempt.json'), attempt);
-    console.log(JSON.stringify(attempt, null, 2));
-    return;
-  }
-  throw new Error(
-    'usage: affected-native-proof.mjs <source-input|queue-lease-verify|integration-input|toolchain|bind-delivery|describe|lookup|seal|verify|seal-attempt|verify-attempt|seal-cache-authority|verify-cache-authority>',
-  );
-}
-
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
-    await main();
+    await runAffectedNativeProofCli(
+      {
+        DEFAULT_MAX_AGE_SECONDS,
+        WORKFLOW_PATH,
+        createSourceQualificationInput,
+        verifyQueueAdmissionLease,
+        createIntegrationDeliveryInput,
+        observeNativeToolchain,
+        semanticSourceProjectionFromGit,
+        createProofDescriptor,
+        createDeliveryBinding,
+        requiredContextsFromRules,
+        lookupReusableArtifact,
+        sealProof,
+        receiptFiles,
+        verifyProofBundle,
+        createCachePromotionAuthority,
+        verifyCachePromotionAuthority,
+        validateDeliveryAttempt,
+        deliveryAttemptGithubOutputs,
+        createDeliveryAttempt,
+        requireRepository,
+        requireRunId,
+        requireSha,
+      },
+      process.argv.slice(2),
+      process.env,
+    );
   } catch (error) {
     console.error(`[affected-native-proof] ${error.message}`);
     process.exitCode = 1;

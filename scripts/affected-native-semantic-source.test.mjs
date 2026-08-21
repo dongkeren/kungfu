@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,6 +36,42 @@ const TOOLCHAIN = {
 };
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+test('CLI facade delegates commands to the proof authority', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-proof-cli-'));
+  const output = path.join(root, 'toolchain.json');
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join(ROOT, 'scripts/affected-native-proof.mjs'),
+      'toolchain',
+      '--output',
+      output,
+      '--compiler',
+      process.execPath,
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        RUNNER_ENVIRONMENT: 'test',
+        RUNNER_OS: 'TestOS',
+        RUNNER_ARCH: 'test-arch',
+      },
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const observed = JSON.parse(fs.readFileSync(output, 'utf8'));
+  assert.match(observed.compiler, /^v\d+/u);
+  assert.deepEqual(observed.runner, {
+    environment: 'test',
+    os: 'TestOS',
+    arch: 'test-arch',
+    imageOS: null,
+    imageVersion: null,
+  });
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('delivery attempt sealing preserves the verified dev delta plan', () => {
   const workflow = fs.readFileSync(
     path.join(ROOT, '.github/workflows/affected-native-pr.yml'),
@@ -49,17 +85,21 @@ test('delivery attempt sealing preserves the verified dev delta plan', () => {
     path.join(ROOT, 'scripts/affected-native-proof.mjs'),
     'utf8',
   );
+  const proofCliSource = fs.readFileSync(
+    path.join(ROOT, 'framework/release/affected-native-proof-cli.mjs'),
+    'utf8',
+  );
   assert.match(
-    proofSource,
-    /options\.command === 'seal-attempt'[\s\S]*deltaPlan: options\['dev-delta-plan'\][\s\S]*readJson\(path\.resolve\(options\['dev-delta-plan'\]\)\)/u,
+    proofCliSource,
+    /function handleSealAttempt[\s\S]*deltaPlan: options\['dev-delta-plan'\][\s\S]*readJson\(path\.resolve\(options\['dev-delta-plan'\]\)\)/u,
   );
   assert.match(
     workflow,
     /name: Seal reused-proof cache promotion authority[\s\S]*delta_args=\(\)[\s\S]*--dev-delta-plan "\$delta_plan"[\s\S]*affected-native-proof\.mjs seal-cache-authority[\s\S]*"\$\{delta_args\[@\]\}"/u,
   );
   assert.match(
-    proofSource,
-    /verifyCachePromotionAuthority[\s\S]*deltaPlan: authority\.proof\?\.deltaPlan[\s\S]*options\.command === 'seal-cache-authority'[\s\S]*deltaPlan: options\['dev-delta-plan'\][\s\S]*readJson\(path\.resolve\(options\['dev-delta-plan'\]\)\)/u,
+    `${proofSource}\n${proofCliSource}`,
+    /verifyCachePromotionAuthority[\s\S]*deltaPlan: authority\.proof\?\.deltaPlan[\s\S]*function handleSealCacheAuthority[\s\S]*deltaPlan: options\['dev-delta-plan'\][\s\S]*readJson\(path\.resolve\(options\['dev-delta-plan'\]\)\)/u,
   );
 });
 
