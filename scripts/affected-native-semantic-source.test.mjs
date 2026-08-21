@@ -56,6 +56,8 @@ test('CLI facade delegates commands to the proof authority', () => {
         RUNNER_ENVIRONMENT: 'test',
         RUNNER_OS: 'TestOS',
         RUNNER_ARCH: 'test-arch',
+        ImageOS: '',
+        ImageVersion: '',
       },
     },
   );
