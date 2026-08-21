@@ -289,20 +289,65 @@
   "source_constraints": [
     {
       "file": "src/libkungfu/src/runtime/storage/service.cpp",
-      "responsibility": "Public storage facade and shared application-service composition",
-      "max_lines": 3020,
+      "responsibility": "Storage projection, qualification and journal-derived shared helpers",
+      "max_lines": 1600,
       "required_text": [
-        "class file_storage_service : public storage_service"
+        "episode_fsck_typed_impl",
+        "source_registry_status_view"
       ],
       "forbidden_text": [
         "#include <rocksdb/",
         "rocksdb::",
+        "class file_storage_service : public storage_service",
         "class file_storage_json_edge_service",
         "storage_status_result status_typed_impl",
         "storage_export_bundle_result export_bundle_typed_impl",
         "storage_repair_subject repair_subject",
         "storage_query_result query_journal_projection",
         "std::string base64_encode"
+      ]
+    },
+    {
+      "file": "src/libkungfu/src/runtime/storage/service_facade.cpp",
+      "responsibility": "Stable storage JSON edge and compatibility facade",
+      "max_lines": 1000,
+      "required_text": [
+        "run_storage_service_operation",
+        "storage_service_capabilities"
+      ],
+      "forbidden_text": [
+        "#include <rocksdb/",
+        "rocksdb::",
+        "class file_storage_service : public storage_service"
+      ]
+    },
+    {
+      "file": "src/libkungfu/src/runtime/storage/service_lifecycle.cpp",
+      "responsibility": "Typed storage service composition and lifecycle delegation",
+      "max_lines": 320,
+      "required_text": [
+        "class file_storage_service : public storage_service",
+        "typed_storage_service_instance"
+      ],
+      "forbidden_text": [
+        "#include <rocksdb/",
+        "rocksdb::",
+        "dispatch_storage_service"
+      ]
+    },
+    {
+      "file": "src/libkungfu/src/runtime/storage/service_projection.cpp",
+      "responsibility": "Episode projection and stable JSON rendering",
+      "max_lines": 360,
+      "required_text": [
+        "episode_record_row_json",
+        "render_storage_episode_bundle_result"
+      ],
+      "forbidden_text": [
+        "#include <rocksdb/",
+        "rocksdb::",
+        "class file_storage_service : public storage_service",
+        "dispatch_storage_service"
       ]
     },
     {
@@ -918,6 +963,9 @@
       ],
       "entry_points": [
         "src/libkungfu/src/runtime/storage/service.cpp",
+        "src/libkungfu/src/runtime/storage/service_facade.cpp",
+        "src/libkungfu/src/runtime/storage/service_lifecycle.cpp",
+        "src/libkungfu/src/runtime/storage/service_projection.cpp",
         "src/libkungfu/src/runtime/storage/maintenance_service.cpp"
       ],
       "contract_tests": [
@@ -1188,7 +1236,7 @@
     {
       "question": "Storage facade or shared application helpers",
       "component": "runtime-storage-services",
-      "entry_point": "src/libkungfu/src/runtime/storage/service.cpp"
+      "entry_point": "src/libkungfu/src/runtime/storage/service_facade.cpp"
     },
     {
       "question": "Storage status, fsck, rebuild, GC or compact planning",

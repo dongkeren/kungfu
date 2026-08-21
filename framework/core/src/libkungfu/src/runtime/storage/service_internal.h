@@ -220,6 +220,8 @@ parse_source_head_update_options(const nlohmann::json &value);
 [[nodiscard]] nlohmann::json projection_verification_json(const storage_projection_verify_result &report);
 [[nodiscard]] nlohmann::json projection_rebuild_json(const storage_projection_rebuild_result &result);
 [[nodiscard]] nlohmann::json episode_projection_rebuild_json(const storage_projection_rebuild_result &result);
+[[nodiscard]] nlohmann::json projection_status_json(const storage_projection_status_view &status);
+[[nodiscard]] nlohmann::json render_episode_frame_verification_issue(const episode_frame_verification_issue &issue);
 [[nodiscard]] nlohmann::json episode_qualification_json(const episode_qualification_result &result);
 [[nodiscard]] std::optional<episode_repair_descriptor>
 episode_repair_descriptor_for_issue(const episode_qualification_issue &issue);
@@ -234,6 +236,7 @@ render_episode_close_write_result(const yijinjing::storage::episode_close_write_
 [[nodiscard]] nlohmann::json dispatch_episode_control_operation(storage_operation operation,
                                                                 const storage_service_options &options);
 [[nodiscard]] nlohmann::json render_storage_episode_bundle_result(const storage_episode_bundle_result &result);
+[[nodiscard]] nlohmann::json render_storage_episode_inspect_records(const storage_episode_inspect_result &result);
 [[nodiscard]] nlohmann::json render_manifest_entry_view(const yijinjing::storage::manifest_entry_view &entry);
 [[nodiscard]] nlohmann::json render_manifest_document(const yijinjing::storage::manifest_document_view &manifest);
 [[nodiscard]] nlohmann::json render_storage_export_bundle_result(const storage_export_bundle_result &result);
@@ -282,6 +285,13 @@ render_episode_close_write_result(const yijinjing::storage::episode_close_write_
 
 [[nodiscard]] nlohmann::json dispatch_json_edge_operation(storage_operation operation,
                                                           const storage_service_options &options);
+
+[[nodiscard]] const storage_service &typed_storage_service_instance();
+[[nodiscard]] nlohmann::json entries_for_manifest(const nlohmann::json &manifest,
+                                                  const nlohmann::json &range_filter = {});
+[[nodiscard]] nlohmann::json load_latest_manifest_impl(const std::string &runtime_dir, const storage_provider &provider,
+                                                       const std::string &source_id);
+[[nodiscard]] nlohmann::json make_request(storage_operation operation, const storage_service_options &options);
 
 } // namespace kungfu::runtime::storage_service_api::detail
 

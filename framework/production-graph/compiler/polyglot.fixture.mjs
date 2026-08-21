@@ -70,7 +70,7 @@ export const POLYGLOT_COMPILE_REQUEST = Object.freeze({
   source: POLYGLOT_SOURCE,
   authorityReferences: {
     layers:
-      'sha256:54f44d87db79ab8ade2fb4331587f746a955749209689253f0dad0c2e4ac9cf8',
+      'sha256:fcb81e1b5b5b9ce562f0e3afcbdaf3f580816fe5cad460c2e69ec543dd503899',
     buildCapabilities:
       'sha256:229d283aa048b71197393335772f8243ab9e36a0ecaae7d8f3c9b2b11e9ad157',
   },

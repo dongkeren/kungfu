@@ -1188,7 +1188,7 @@
         "kungfu.storage.episode-bundle/v1"
       ],
       "owner": "libkungfu Episode storage service over yijinjing manifest-journal authority",
-      "source": "framework/core/src/libkungfu/src/runtime/storage/service.cpp",
+      "source": "framework/core/src/libkungfu/src/runtime/storage/service_projection.cpp",
       "identityRoot": "manifest.content_root",
       "protocol": "episode-sealed-content-root/v1",
       "modes": [
