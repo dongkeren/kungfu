@@ -24,6 +24,8 @@ target_link_libraries(kungfu_ledger_services PUBLIC ${KUNGFU_TARGET_KUNGFU_LEDGE
 
 set(KUNGFU_STATE_QUERY_SERVICES_SOURCE_FILES
   "${PROJECT_SOURCE_DIR}/src/runtime/query/fact_query.cpp"
+  "${PROJECT_SOURCE_DIR}/src/runtime/query/fact_query_evaluator.cpp"
+  "${PROJECT_SOURCE_DIR}/src/runtime/query/fact_query_parser.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/query/saved_query_catalog.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/state_service.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/state_shadow.cpp"
@@ -93,6 +95,8 @@ set(KUNGFU_EXTENSION_SERVICES_SOURCE_FILES
   "${PROJECT_SOURCE_DIR}/src/runtime/kfx/native_authority.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/kfx/native_contract.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/kfx/native_registry.cpp"
+  "${PROJECT_SOURCE_DIR}/src/runtime/kfx/native_registry_discovery.cpp"
+  "${PROJECT_SOURCE_DIR}/src/runtime/kfx/native_registry_lifecycle.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/profile/initiative_assignment_service.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/profile/profile_lifecycle.cpp"
   "${PROJECT_SOURCE_DIR}/src/runtime/trust/assessment_runtime.cpp"
