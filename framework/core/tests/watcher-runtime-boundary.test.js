@@ -25,6 +25,10 @@ const watcherBenchDriver = path.join(
   'dispatch_bench_watcher.mjs',
 );
 const watcherProbeSource = fs.readFileSync(probe, 'utf8');
+const reconnectProbeSource = watcherProbeSource.slice(
+  watcherProbeSource.indexOf('async function reconnectProbe()'),
+  watcherProbeSource.indexOf("if (mode !== 'reconnect')"),
+);
 const nativeTest = {
   skip: fs.existsSync(bindingPath)
     ? false
@@ -95,7 +99,7 @@ test('watcher dispatch bench follows and proves the load peer carrier', () => {
   assert.match(driver, /coordinator\.kill\(\)/);
 });
 
-test('watcher reconnect fixture owns process trees and bounds Windows transitions', () => {
+test('watcher reconnect fixture sequences readiness, owns process trees, and bounds Windows transitions', () => {
   assert.match(
     watcherProbeSource,
     /watcherConnect: process\.platform === 'win32' \? 30_000 : 8_000/,
@@ -109,6 +113,25 @@ test('watcher reconnect fixture owns process trees and bounds Windows transition
     /\['\/pid', String\(child\.pid\), '\/T', '\/F'\]/,
   );
   assert.match(watcherProbeSource, /process\.kill\(-child\.pid, 'SIGTERM'\)/);
+  const coordinatorReady = reconnectProbeSource.indexOf(
+    "'initial-coordinator-startup'",
+  );
+  const watcherConstruction = reconnectProbeSource.indexOf(
+    'watcher = createWatcher();',
+  );
+  const watcherStart = reconnectProbeSource.indexOf('watcher.start();');
+  assert.ok(
+    coordinatorReady >= 0,
+    'the initial readiness boundary is explicit',
+  );
+  assert.ok(
+    coordinatorReady < watcherConstruction,
+    'the reconnect watcher is constructed only after coordinator readiness',
+  );
+  assert.ok(
+    watcherConstruction < watcherStart,
+    'the reconnect watcher is constructed before its worker starts',
+  );
 });
 
 test(

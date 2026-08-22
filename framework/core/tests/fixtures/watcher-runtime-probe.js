@@ -12,12 +12,16 @@ const coreDir = path.resolve(__dirname, '..', '..');
 const binding = require(path.join(coreDir, 'dist', 'kungfu', 'kungfu_node.node'));
 const temporaryRoot = process.platform === 'win32' ? os.tmpdir() : '/tmp';
 const home = fs.mkdtempSync(path.join(temporaryRoot, 'kfwr.'));
-const watcher = new binding.Watcher(
-  path.join(home, 'runtime'),
-  `runtime_${mode}`,
-  true,
-  2,
-);
+let watcher = null;
+
+function createWatcher() {
+  return new binding.Watcher(
+    path.join(home, 'runtime'),
+    `runtime_${mode}`,
+    true,
+    2,
+  );
+}
 const reconnectDeadlines = Object.freeze({
   coordinatorStartup: process.platform === 'win32' ? 30_000 : 15_000,
   watcherConnect: process.platform === 'win32' ? 30_000 : 8_000,
@@ -27,6 +31,7 @@ const reconnectDeadlines = Object.freeze({
 });
 
 function printableStats() {
+  if (watcher === null) return null;
   return Object.fromEntries(
     Object.entries(watcher.runtimeStats()).map(([key, value]) => [
       key,
@@ -221,6 +226,7 @@ async function reconnectProbe() {
         `coordinator exited during startup: ${JSON.stringify(reconnectContext(coordinator, 'initial-coordinator-startup'))}`,
       );
     }
+    watcher = createWatcher();
     watcher.start();
     await waitFor(
       () => watcher.isLive(),
@@ -271,6 +277,10 @@ async function reconnectProbe() {
     await stopCoordinator(coordinator);
   }
   process.stdout.write(`${JSON.stringify(result)}\n`, () => process.exit(0));
+}
+
+if (mode !== 'reconnect') {
+  watcher = createWatcher();
 }
 
 if (mode === 'pool') {
