@@ -182,6 +182,7 @@ test('watcher reconnect fixture sequences readiness, owns process trees, and bou
 test('peer usability persists one bounded handshake across slow-joiner retries', () => {
   const source = fs.readFileSync(ioSource, 'utf8');
   const header = fs.readFileSync(ioHeader, 'utf8');
+  const watcher = fs.readFileSync(watcherSource, 'utf8');
   const peerUsabilitySource = source.slice(
     source.indexOf('bool io_device_peer::is_usable()'),
     source.indexOf('bool io_device_peer::setup()'),
@@ -189,7 +190,7 @@ test('peer usability persists one bounded handshake across slow-joiner retries',
   assert.match(source, /constexpr int USABILITY_PROBE_ATTEMPTS = 5;/);
   assert.match(
     peerUsabilitySource,
-    /std::lock_guard<std::mutex> guard\(usability_probe_mutex_\)/,
+    /std::unique_lock<std::mutex> guard\(usability_probe_mutex_\)/,
   );
   assert.match(
     peerUsabilitySource,
@@ -198,6 +199,15 @@ test('peer usability persists one bounded handshake across slow-joiner retries',
   assert.match(
     peerUsabilitySource,
     /if \(not observer->setup\(\) or not publisher->setup\(\)\)/,
+  );
+  assert.match(peerUsabilitySource, /usability_probe_condition_\.wait_for\(/);
+  assert.match(
+    peerUsabilitySource,
+    /make_shared<nanomsg_observer_peer>\(\*this, false, true\)/,
+  );
+  assert.match(
+    peerUsabilitySource,
+    /make_shared<nanomsg_publisher_peer>\(\*this, false, true\)/,
   );
   assert.match(
     peerUsabilitySource,
@@ -213,8 +223,18 @@ test('peer usability persists one bounded handshake across slow-joiner retries',
     /usability_probe_publisher_->is_usable\(\) and usability_probe_observer_->is_usable\(\)/,
   );
   assert.match(header, /std::mutex usability_probe_mutex_;/);
+  assert.match(
+    header,
+    /std::atomic<bool> usability_probe_cancelled_\{false\};/,
+  );
+  assert.match(header, /std::condition_variable usability_probe_condition_;/);
   assert.match(header, /publisher_ptr usability_probe_publisher_;/);
   assert.match(header, /observer_ptr usability_probe_observer_;/);
+  assert.equal(
+    watcher.match(/get_io_device\(\)->cancel_usability_probe\(\);/g)?.length,
+    2,
+    'quit and environment cleanup must both cancel an in-flight readiness probe',
+  );
 });
 
 test(
@@ -260,7 +280,9 @@ test(
   'environment cleanup stops and joins a live watcher during addon exit',
   nativeTest,
   () => {
-    assert.equal(runProbe('addon-exit'), null);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      assert.equal(runProbe('addon-exit'), null);
+    }
   },
 );
 
