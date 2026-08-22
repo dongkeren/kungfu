@@ -553,6 +553,30 @@ test('hosted native jobs remain fail-closed behind the exact active Warrant', ()
   );
 });
 
+test('non-native source-only candidates do not acquire or require a Delivery Warrant', () => {
+  const sourceWorkflow = fs.readFileSync(
+    '.github/workflows/affected-native-pr.yml',
+    'utf8',
+  );
+  const warrantStart = sourceWorkflow.indexOf('  warrant_admission:\n');
+  const warrantEnd = sourceWorkflow.indexOf(
+    '\n  affected_native_shards:\n',
+    warrantStart,
+  );
+  const warrantJob = sourceWorkflow.slice(warrantStart, warrantEnd);
+  assert.match(
+    warrantJob,
+    /needs\.candidate_preflight\.outputs\.native-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.sdk-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.shifu-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.kfd-required == 'true'/u,
+  );
+
+  const aggregateStart = sourceWorkflow.indexOf('  affected_native:\n');
+  const aggregateJob = sourceWorkflow.slice(aggregateStart);
+  assert.match(
+    aggregateJob,
+    /Fail closed without the exact active Warrant[\s\S]*needs\.warrant_admission\.result != 'success'[\s\S]*needs\.candidate_preflight\.outputs\.native-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.sdk-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.shifu-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.kfd-required == 'true'/u,
+  );
+});
+
 test('qualified Warrant native proof satisfies the protected native context', () => {
   const workflow = fs.readFileSync(
     '.github/workflows/dev-pr-auto-merge.yml',
