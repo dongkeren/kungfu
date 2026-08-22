@@ -7,6 +7,8 @@
 #ifndef KUNGFU_IO_H
 #define KUNGFU_IO_H
 
+#include <mutex>
+
 #include <kungfu/runtime/common.h>
 
 #include <kungfu/runtime/nanomsg/socket.h>
@@ -132,6 +134,11 @@ public:
   bool is_usable() override;
 
   bool setup() override;
+
+private:
+  std::mutex usability_probe_mutex_;
+  publisher_ptr usability_probe_publisher_;
+  observer_ptr usability_probe_observer_;
 };
 
 DECLARE_PTR(io_device_peer)

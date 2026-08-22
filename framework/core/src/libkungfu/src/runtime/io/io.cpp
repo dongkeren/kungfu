@@ -252,17 +252,25 @@ io_device_peer::io_device_peer(data::location_ptr home, bool low_latency)
     : io_device(std::move(home), low_latency, io_mapping_policy::peer()) {}
 
 bool io_device_peer::is_usable() {
-  nanomsg_publisher_peer publisher(*this, false);
-  nanomsg_observer_peer observer(*this, false);
-  if (not publisher.setup() or not observer.setup()) {
-    return false;
+  std::lock_guard<std::mutex> guard(usability_probe_mutex_);
+  if (not usability_probe_publisher_ or not usability_probe_observer_) {
+    auto observer = std::make_shared<nanomsg_observer_peer>(*this, false);
+    auto publisher = std::make_shared<nanomsg_publisher_peer>(*this, false);
+    if (not observer->setup() or not publisher->setup()) {
+      return false;
+    }
+    usability_probe_observer_ = std::move(observer);
+    usability_probe_publisher_ = std::move(publisher);
   }
-  // Keep the same sockets across this bounded handshake. Recreating the SUB
-  // socket after every missed pong repeats the NNG slow-joiner window on
-  // Windows and can prevent a healthy coordinator from ever becoming usable.
+  // Keep the same sockets across bounded calls. A single call must stay short
+  // because Watcher construction performs this check on the Node thread, while
+  // retaining the pair lets the dedicated worker survive Windows' NNG
+  // slow-joiner window instead of restarting it after every missed pong.
   for (int attempt = 0; attempt < USABILITY_PROBE_ATTEMPTS; ++attempt) {
     std::this_thread::sleep_for(std::chrono::milliseconds(TEST_USABLE_TIMEOUT));
-    if (publisher.is_usable() and observer.is_usable()) {
+    if (usability_probe_publisher_->is_usable() and usability_probe_observer_->is_usable()) {
+      usability_probe_observer_.reset();
+      usability_probe_publisher_.reset();
       return true;
     }
   }
@@ -270,6 +278,11 @@ bool io_device_peer::is_usable() {
 }
 
 bool io_device_peer::setup() {
+  {
+    std::lock_guard<std::mutex> guard(usability_probe_mutex_);
+    usability_probe_observer_.reset();
+    usability_probe_publisher_.reset();
+  }
   publisher_ = std::make_shared<nanomsg_publisher_peer>(*this, is_low_latency());
   observer_ = std::make_shared<nanomsg_observer_peer>(*this, is_low_latency());
   auto is_live_mode = get_home()->mode == mode::LIVE;
