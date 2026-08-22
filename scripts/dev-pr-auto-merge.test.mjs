@@ -241,6 +241,14 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
     bridge,
     /gh api --method POST[\s\S]*actions\/runs\/\$SOURCE_RUN_ID\/rerun-failed-jobs[\s\S]*expected_attempt="\$\(\(prior_attempt \+ 1\)\)"/u,
   );
+  assert.match(
+    bridge,
+    /if \[ "\$prior_attempt" != "1" \]; then[\s\S]*qualified Warrant source bridge permits exactly one retry from the initial source attempt[\s\S]*exit 1[\s\S]*gh api --method POST/u,
+  );
+  assert.doesNotMatch(
+    bridge,
+    /gh api --method POST[\s\S]*if \[ "\$prior_attempt" != "1" \]; then/u,
+  );
   assert.doesNotMatch(bridge, /check-runs\/\$[A-Za-z_]/u);
   assert.match(
     bridge,
