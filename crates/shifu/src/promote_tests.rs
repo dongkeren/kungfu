@@ -280,6 +280,101 @@ fn preview_keeps_mainline_qualification_separate_from_exact_product_provenance()
     let _ = fs::remove_dir_all(root);
 }
 
+#[cfg(unix)]
+#[test]
+fn exact_installed_preview_converges_only_with_matching_native_receipt() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = shifu_core::host::unique_temp_dir("promote-preview-convergence").unwrap();
+    let registry = root.join("registry");
+    let slot = registry.join("qualified-build");
+    let mut entry = qualified_app(&slot);
+    fs::create_dir_all(&slot).unwrap();
+    write_app_manifests(&mut entry);
+    let native_receipt_root = format!("sha256:{}", "e".repeat(64));
+    let updater = slot
+        .join(&entry.artifact)
+        .join("Contents/Resources/kungfu/kungfu");
+    let updater_status = format!(
+        r#"{{"frontendInventory":{{"selected":{{"releaseCutRoot":"{}"}}}},"nativeReceiptRoot":"{}"}}"#,
+        entry.release_cut_root, native_receipt_root
+    );
+    fs::write(
+        &updater,
+        format!("#!/bin/sh\nprintf '%s\\n' '{updater_status}'\n"),
+    )
+    .unwrap();
+    fs::set_permissions(&updater, fs::Permissions::from_mode(0o755)).unwrap();
+    entry.digest = artifact_sha256(&slot.join(&entry.artifact)).unwrap();
+    write_entry_meta(&entry);
+
+    let rollback_id = "prior-build";
+    let rollback_sha = "2".repeat(40);
+    let rollback_slot = registry.join(rollback_id);
+    fs::create_dir_all(rollback_slot.join("Prior.app")).unwrap();
+    fs::write(
+        rollback_slot.join("meta.env"),
+        format!("KUNGFU_BUILD_SHA='{rollback_sha}'\nKUNGFU_BUILD_ARTIFACT='Prior.app'\n"),
+    )
+    .unwrap();
+    let installed_receipt = format!(
+        "KUNGFU_INSTALLED_SHA='{}'\n\
+         KUNGFU_INSTALLED_BUILD_ID='{}'\n\
+         KUNGFU_INSTALLED_ARTIFACT='{}'\n\
+         KUNGFU_INSTALLED_DIGEST='{}'\n\
+         KUNGFU_INSTALLED_MAINLINE_SHA='{}'\n\
+         KUNGFU_INSTALLED_INTEGRATED='true'\n\
+         KUNGFU_INSTALLED_QUALIFIED='true'\n\
+         KUNGFU_INSTALLED_MODE='qualified'\n\
+         KUNGFU_INSTALLED_PRODUCT_VERSION='{}'\n\
+         KUNGFU_INSTALLED_RELEASE_CUT_ROOT='{}'\n\
+         KUNGFU_INSTALLED_PLATFORM_SLICE_ROOT='{}'\n\
+         KUNGFU_INSTALLED_NATIVE_RECEIPT_ROOT='{}'\n\
+         KUNGFU_INSTALLED_NATIVE_UPDATER='{}'\n\
+         KUNGFU_INSTALLED_NATIVE_UPDATER_DIGEST='{}'\n\
+         KUNGFU_ROLLBACK_BUILD_ID='{}'\n\
+         KUNGFU_ROLLBACK_SHA='{}'\n",
+        entry.sha,
+        entry.name,
+        slot.join(&entry.artifact).display(),
+        entry.digest,
+        entry.mainline_sha,
+        entry.product_version,
+        entry.release_cut_root,
+        entry.platform_slice_root,
+        native_receipt_root,
+        updater.display(),
+        bootstrap::sha256_file(&updater).unwrap(),
+        rollback_id,
+        rollback_sha,
+    );
+    fs::write(registry.join("installed.meta.env"), &installed_receipt).unwrap();
+    fs::write(
+        registry.join("last-promotion.json"),
+        format!(
+            r#"{{"schema":"shifu.local-promotion-receipt/v1","product":"kungfu","action":"preview","artifactId":"{}","fromCommit":"{}","toCommit":"{}","relation":"descendant","occurredAt":1}}"#,
+            entry.name, rollback_sha, entry.sha
+        ),
+    )
+    .unwrap();
+
+    let convergence = promote_convergence::inspect_at(&entry, &registry)
+        .unwrap()
+        .expect("exact preview must converge without reinstalling Product bytes");
+    assert_eq!(convergence.from_sha, rollback_sha);
+    assert_eq!(convergence.relation, GitRelation::Descendant);
+    assert_eq!(convergence.installed, slot.join(&entry.artifact));
+
+    let mismatched = set_receipt_value(
+        &installed_receipt,
+        "KUNGFU_INSTALLED_NATIVE_RECEIPT_ROOT",
+        &format!("sha256:{}", "f".repeat(64)),
+    );
+    fs::write(registry.join("installed.meta.env"), mismatched).unwrap();
+    assert!(promote_convergence::inspect_at(&entry, &registry).is_err());
+    let _ = fs::remove_dir_all(root);
+}
+
 #[test]
 fn rollback_coordinate_requires_exact_retained_artifact() {
     let root = shifu_core::host::unique_temp_dir("promote-rollback").unwrap();

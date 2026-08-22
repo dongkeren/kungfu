@@ -41,6 +41,8 @@ use crate::{envfile, native_update, util};
 
 #[path = "promote_catalog.rs"]
 mod promote_catalog;
+#[path = "promote_convergence.rs"]
+mod promote_convergence;
 #[path = "promote_desktop.rs"]
 mod promote_desktop;
 #[path = "promote_desktop_fs.rs"]
@@ -701,8 +703,27 @@ pub fn run_promote(args: &[String]) -> ! {
         select_product_build(&entries, &installed, build_arg.as_deref(), allow_nonlinear)
     };
     let action = if preview { "preview" } else { "promote" };
-    let native_plan = run_native(entry, false, false)
-        .unwrap_or_else(|error| util::die(&format!("native updater preflight failed: {error}")));
+    if !preview
+        && promote_convergence::try_finish(
+            entry,
+            &registry_dir(),
+            &installed,
+            check,
+            launch,
+            &mut promotion_lock,
+        )
+        .unwrap_or_else(|error| util::die(&error))
+    {
+        std::process::exit(0);
+    }
+    let native_plan = match run_native(entry, false, false) {
+        Ok(value) => value,
+        Err(error) => {
+            promote_convergence::release_lock(&mut promotion_lock)
+                .unwrap_or_else(|release_error| util::die(&release_error));
+            util::die(&format!("native updater preflight failed: {error}"));
+        }
+    };
     if check {
         println!(
             "{{\"schema\":\"shifu.local-promotion-plan/v1\",\"ok\":true,\
