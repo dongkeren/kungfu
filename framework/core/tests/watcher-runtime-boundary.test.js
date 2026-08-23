@@ -131,7 +131,7 @@ test('watcher source does not reserve a libuv worker-pool job', () => {
   );
 });
 
-test('coordinator wakes watchers after publishing every exit deregistration', () => {
+test('coordinator flushes exit deregistrations before a blocking shutdown notice', () => {
   const source = fs.readFileSync(coordinatorSource, 'utf8');
   const onExit = source.slice(
     source.indexOf('void coordinator::on_exit()'),
@@ -139,8 +139,33 @@ test('coordinator wakes watchers after publishing every exit deregistration', ()
   );
   assert.match(
     onExit,
-    /notify_deregister_on_exit\(\);\s*notify_coordinator_deregister_on_exit\(\);\s*on_notify\(\);/,
-    'watchers must be notified only after peer and coordinator deregisters are written',
+    /notify_deregister_on_exit\(\);\s*notify_coordinator_deregister_on_exit\(\);\s*flush_deregister_pages_on_exit\(\);/,
+    'shutdown must flush only after writing every deregistration',
+  );
+  assert.doesNotMatch(
+    onExit,
+    /on_notify\(\);/,
+    'the generic notify hook is intentionally a no-op in low-latency mode',
+  );
+
+  const flush = source.slice(
+    source.indexOf('void coordinator::flush_deregister_pages_on_exit()'),
+    source.indexOf('void coordinator::on_notify()'),
+  );
+  assert.match(
+    flush,
+    /get_writer\(location::PUBLIC\)->get_current_page\(\)->flush\(\);/,
+    'the public deregistration page must be visible before coordinator teardown',
+  );
+  assert.match(
+    flush,
+    /get_writer\(location_uid\)->get_current_page\(\)->flush\(\);/,
+    'each private coordinator Deregister page must be flushed before the final notice',
+  );
+  assert.match(
+    flush,
+    /get_io_device\(\)->get_publisher\(\)->publish\("\{\}", 0\);/,
+    'shutdown must bypass the low-latency notify no-op after flushing every deregistration',
   );
 });
 

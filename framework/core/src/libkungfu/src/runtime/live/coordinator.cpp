@@ -61,7 +61,7 @@ void coordinator::on_exit() {
   state_service_.stop();
   notify_deregister_on_exit();
   notify_coordinator_deregister_on_exit();
-  on_notify();
+  flush_deregister_pages_on_exit();
 }
 
 void coordinator::notify_deregister_on_exit() {
@@ -86,6 +86,19 @@ void coordinator::notify_coordinator_deregister_on_exit() {
       SPDLOG_WARN("no writer {} {}", location_uid, get_location_uname(location_uid));
     }
   }
+}
+
+void coordinator::flush_deregister_pages_on_exit() {
+  get_writer(location::PUBLIC)->get_current_page()->flush();
+  for (const auto &[location_uid, registration] : get_registry()) {
+    if (location_uid != coordinator_home_location_->uid && has_writer(location_uid)) {
+      get_writer(location_uid)->get_current_page()->flush();
+    }
+  }
+  // Low-latency publishers intentionally make notify() a no-op.  Shutdown is
+  // different: every peer needs a final blocking notice after the Deregister
+  // pages are visible, including while Windows tears down the coordinator map.
+  get_io_device()->get_publisher()->publish("{}", 0);
 }
 
 void coordinator::on_notify() { get_io_device()->get_publisher()->notify(); }
