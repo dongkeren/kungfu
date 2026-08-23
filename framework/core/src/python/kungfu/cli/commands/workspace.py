@@ -9,6 +9,7 @@ from functools import wraps
 import click
 
 from kungfu.distribution_update import local_dogfood_residency
+from kungfu.cli.surface_contract import surface
 from kungfu.cli.commands import PrioritizedCommandGroup, kfc
 from kungfu.workspace import (
     current_workspace,
@@ -30,6 +31,11 @@ from kungfu.workspace_federation import (
     query_federation,
 )
 from kungfu.workspace_federation_observer import observe_federation
+from kungfu.workspace_history.lifecycle import (
+    apply_work_history_liquidation,
+    plan_work_history_liquidation,
+    save_work_history_liquidation_plan,
+)
 from kungfu.workspace_guidance import (
     WorkspaceGuidanceError,
     advise_workspace,
@@ -447,6 +453,114 @@ def catalog_maintain(
             f"{change['after']['lifecycle']['state']} "
             f"{change.get('locator') or 'Home'}"
         )
+
+
+@workspace.command(
+    name="work-history-liquidate",
+    help="plan or apply rooted terminal dispositions for one exact Work History cut",
+)
+@click.option(
+    "--evidence",
+    "evidence_path",
+    type=click.Path(exists=True, dir_okay=False),
+    help="rooted evidence declaration for a fresh dry-run plan",
+)
+@click.option(
+    "--save-plan",
+    type=click.Path(dir_okay=False),
+    help="explicitly persist the dry-run plan for expected-root execution",
+)
+@click.option(
+    "--execute-plan",
+    type=click.Path(exists=True, dir_okay=False),
+    help="apply this previously saved exact plan",
+)
+@click.option(
+    "--expected-plan-root",
+    help="execute only when the saved plan has this exact root",
+)
+@click.option(
+    "--transitioned-at",
+    help="fixed ISO-8601 lifecycle time for a reproducible dry-run plan",
+)
+@click.option(
+    "--max-workers",
+    type=click.IntRange(1, 16),
+    default=4,
+    show_default=True,
+    help="bounded read-only component readers used during planning",
+)
+@click.option("--json", "as_json", is_flag=True, help="machine-readable output")
+@surface(mutation_class="write")
+def work_history_liquidate(
+    evidence_path,
+    save_plan,
+    execute_plan,
+    expected_plan_root,
+    transitioned_at,
+    max_workers,
+    as_json,
+):
+    try:
+        if execute_plan:
+            if evidence_path or save_plan or transitioned_at:
+                raise click.UsageError(
+                    "--execute-plan cannot be combined with planning options"
+                )
+            if not expected_plan_root:
+                raise click.UsageError(
+                    "--expected-plan-root is required with --execute-plan"
+                )
+            with open(execute_plan, encoding="utf-8") as stream:
+                saved_plan = json.load(stream)
+            payload = apply_work_history_liquidation(
+                saved_plan,
+                expected_plan_root,
+            )
+        else:
+            if not evidence_path:
+                raise click.UsageError("--evidence is required for planning")
+            if expected_plan_root:
+                raise click.UsageError(
+                    "--expected-plan-root is only valid with --execute-plan"
+                )
+            with open(evidence_path, encoding="utf-8") as stream:
+                evidence = json.load(stream)
+            identity = _identity_or_error(None, True)
+            query = query_federation(
+                identity,
+                scope="all",
+                include_excluded=True,
+                include_settled=True,
+                max_workers=max_workers,
+            )
+            payload = plan_work_history_liquidation(
+                query,
+                load_workspace_catalog(),
+                evidence,
+                transitioned_at=transitioned_at,
+            )
+            if save_plan:
+                payload = {
+                    **payload,
+                    "saved_plan": save_work_history_liquidation_plan(
+                        save_plan, payload
+                    ),
+                }
+    except click.UsageError:
+        raise
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise click.ClickException(str(error)) from error
+    if as_json:
+        _json(payload)
+        return
+    verb = "applied" if payload.get("executed") else "planned"
+    counts = payload["counts"]
+    click.echo(
+        f"{verb} {counts['component_disposition_count']} component and "
+        f"{counts['reference_disposition_count']} reference dispositions "
+        f"with unchecked=0 at {payload['plan_root']}"
+    )
 
 
 @workspace.command(

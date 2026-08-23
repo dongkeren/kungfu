@@ -42,6 +42,8 @@ from kungfu.workspace import (
     load_workspace_catalog,
     semantic_root,
 )
+from kungfu.workspace_history import query as history_query
+from kungfu.workspace_history.lifecycle import load_work_history_dispositions
 from kungfu.workspace_federation_projection import (
     CANONICAL_WORK_IDENTITY_SCHEMA as CANONICAL_WORK_IDENTITY_SCHEMA,
     CANONICAL_WORK_SCHEMA as CANONICAL_WORK_SCHEMA,
@@ -105,6 +107,7 @@ def query_federation(
     if max_workers < 1 or max_workers > 16:
         raise ValueError("federation max_workers must be between 1 and 16")
     catalog = load_workspace_catalog(config_home, env=env)
+    disposition_store = load_work_history_dispositions(config_home, env=env)
     identities: dict[str, WorkspaceIdentity] = {}
     reused_components: list[dict[str, Any]] = []
 
@@ -117,6 +120,15 @@ def query_federation(
     excluded_entries = [
         entry for entry in catalog["entries"] if not entry.get("required", True)
     ]
+    history = history_query.bind_dispositions(
+        catalog,
+        disposition_store,
+        lambda entry: _identity_from_catalog_entry(entry, env=env),
+    )
+    terminal_entries, terminal_keys = (
+        history["terminal_entries"],
+        history["terminal_keys"],
+    )
     excluded_roots = {
         str(entry.get("identity_root") or "") for entry in excluded_entries
     }
@@ -127,7 +139,10 @@ def query_federation(
         project_entries = [
             entry
             for entry in catalog["entries"]
-            if entry.get("required", True) and entry.get("workspace_kind") != "home"
+            if entry.get("required", True)
+            and entry.get("workspace_kind") != "home"
+            and str(entry.get("identity_root") or entry.get("locator_key") or "")
+            not in terminal_keys
         ]
         if cached:
             entries_to_resolve = []
@@ -220,11 +235,20 @@ def query_federation(
         for entry in catalog["entries"]:
             if not entry.get("required", True):
                 if include_excluded:
-                    components.append(_excluded_component(entry))
+                    components.append(_history_component(entry, "excluded"))
+                continue
+            entry_key = str(
+                entry.get("identity_root") or entry.get("locator_key") or ""
+            )
+            if entry_key in terminal_keys:
                 continue
             if entry.get("identity_root") in projected_roots:
                 continue
-            components.append(_unavailable_component(entry))
+            components.append(_history_component(entry, "unavailable"))
+        components.extend(
+            _history_component(entry, "terminal-unavailable", disposition)
+            for entry, disposition in terminal_entries
+        )
 
     components.sort(
         key=lambda row: (
@@ -235,6 +259,7 @@ def query_federation(
     projection = _compose_global_work(
         components,
         include_settled=include_settled,
+        reference_dispositions=disposition_store["reference_dispositions"],
     )
     unresolved = projection["reference_resolution"]["unresolved"]
     component_problems = [
@@ -251,7 +276,7 @@ def query_federation(
     ]
     catalog_after = load_workspace_catalog(config_home, env=env)
     catalog_changed = catalog_after["catalog_cut"] != catalog["catalog_cut"]
-    catalog_issues = list(catalog["issues"])
+    catalog_issues = [*catalog["issues"], *history["issues"]]
     if catalog_changed:
         catalog_issues.append(
             {
@@ -297,6 +322,9 @@ def query_federation(
             }
             for entry in excluded_entries
         ],
+        **history_query.proof_fields(
+            disposition_store, terminal_entries, projection["reference_resolution"]
+        ),
         "global_work_projection_root": projection["projection_root"],
         "unresolved_references": unresolved,
         "atomic_global_cut": False,
@@ -340,12 +368,20 @@ def query_federation(
     unavailable = sum(
         component.get("availability") == "unavailable" for component in components
     )
+    terminal_unavailable = sum(
+        component.get("availability") == "terminal-unavailable"
+        for component in components
+    )
     stale = sum(
         bool(component.get("stale"))
-        and component.get("availability") not in {"excluded"}
+        and component.get("availability") not in {"excluded", "terminal-unavailable"}
         for component in components
     )
     excluded = len(excluded_entries)
+    retired = sum(
+        str((entry.get("lifecycle") or {}).get("state") or "") == "retired"
+        for entry in excluded_entries
+    )
     tombstoned = sum(
         str((entry.get("lifecycle") or {}).get("state") or "")
         in {"retired", "test-only", "quarantined"}
@@ -355,7 +391,7 @@ def query_federation(
         component.get("availability") in {"degraded", "unavailable"}
         or bool(component.get("stale"))
         for component in components
-        if component.get("availability") != "excluded"
+        if component.get("availability") not in {"excluded", "terminal-unavailable"}
     )
     residual = (
         len(catalog_issues)
@@ -410,12 +446,17 @@ def query_federation(
         "available_component_count": available,
         "degraded_component_count": degraded,
         "unavailable_component_count": unavailable,
+        "terminal_unavailable_component_count": terminal_unavailable,
         "stale_component_count": stale,
         "excluded_component_count": excluded,
+        "retired_component_count": retired,
         "tombstoned_component_count": tombstoned,
         "unknown_component_count": unknown,
         "known_assignment_count": known_assignments,
         "unresolved_reference_count": len(unresolved),
+        "terminal_reference_count": len(
+            projection["reference_resolution"].get("terminal_dispositions") or []
+        ),
         "component_problem_count": len(component_problems),
         "proof_ok": verification["ok"],
         "writes": 0,
@@ -686,7 +727,7 @@ def _identity_from_catalog_entry(
     """Resolve a locator only when it still names the Catalog identity."""
 
     locator = entry.get("locator")
-    if not isinstance(locator, str) or not locator:
+    if not isinstance(locator, str) or not locator or not os.path.isdir(locator):
         return None
     try:
         identity = inspect_workspace(locator, env=env)
@@ -702,7 +743,14 @@ def _identity_from_catalog_entry(
             and identity.identity_root == entry.get("identity_root")
             else None
         )
-    return identity if identity.identity_state == "locator-candidate" else None
+    return (
+        identity
+        if identity.identity_state == "locator-candidate"
+        and identity.workspace_id == entry.get("workspace_id")
+        and os.path.realpath(identity.data_home)
+        == os.path.realpath(str(entry.get("data_home") or ""))
+        else None
+    )
 
 
 def _safe_component(
@@ -712,7 +760,7 @@ def _safe_component(
     if identity.workspace_kind == "project" and (
         not identity.workspace_root or not os.path.isdir(identity.workspace_root)
     ):
-        return _unavailable_component(identity.as_dict())
+        return _history_component(identity.as_dict(), "unavailable")
     try:
         component = loader(identity)
         result = {
@@ -1155,6 +1203,7 @@ def _bind_component_envelope(component: dict[str, Any]) -> dict[str, Any]:
             "reason": "component was not readable",
         },
         "stale": bool(component.get("stale")),
+        "disposition": component.get("disposition") or None,
         "errors": errors,
         "known_initiative_count": len(component.get("initiatives") or []),
         "known_assignment_count": len(component.get("assignments") or []),
@@ -1191,6 +1240,7 @@ def _component_result_material(component: Mapping[str, Any]) -> dict[str, Any]:
         "assignments": list(component.get("assignments") or []),
         "relations": list(component.get("relations") or []),
         "problems": list(component.get("problems") or []),
+        "disposition": component.get("disposition") or None,
         "retained_assignment_states": list(
             component.get("retained_assignment_states") or []
         ),
@@ -1327,77 +1377,13 @@ def portfolio_state(
     return "open"
 
 
-def _unavailable_component(entry: Mapping[str, Any]) -> dict[str, Any]:
-    workspace = {
-        "schema": "kungfu.workspace.identity/v1",
-        "workspace_id": entry.get("workspace_id"),
-        "identity_root": entry.get("identity_root"),
-        "identity_state": entry.get("identity_state") or "qualified",
-        "workspace_kind": entry.get("workspace_kind"),
-        "workspace_root": entry.get("locator"),
-        "display_path": entry.get("locator") or "Home",
-        "data_home": entry.get("data_home"),
-        "initialized": False,
-        "state": "unavailable",
-        "resolution_reason": "catalog-locator-unavailable",
-    }
+def _history_component(
+    entry: Mapping[str, Any],
+    availability: str,
+    disposition: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     return _bind_component_envelope(
-        {
-            "workspace": workspace,
-            "availability": "unavailable",
-            "observed_at": _now(),
-            "catalog_observed_at": entry.get("observed_at"),
-            "stale": True,
-            "cut_root": "",
-            "query_proof_root": "",
-            "initiatives": [],
-            "assignments": [],
-            "relations": [],
-            "problems": [
-                {
-                    "code": "workspace-unavailable",
-                    "locator": entry.get("locator"),
-                }
-            ],
-        }
-    )
-
-
-def _excluded_component(entry: Mapping[str, Any]) -> dict[str, Any]:
-    workspace = {
-        "schema": "kungfu.workspace.identity/v1",
-        "workspace_id": entry.get("workspace_id"),
-        "identity_root": entry.get("identity_root"),
-        "identity_state": entry.get("identity_state") or "qualified",
-        "workspace_kind": entry.get("workspace_kind"),
-        "workspace_root": entry.get("locator"),
-        "display_path": entry.get("locator") or "Home",
-        "data_home": entry.get("data_home"),
-        "initialized": False,
-        "state": "excluded",
-        "resolution_reason": "catalog-lifecycle-policy",
-    }
-    return _bind_component_envelope(
-        {
-            "workspace": workspace,
-            "availability": "excluded",
-            "observed_at": _now(),
-            "catalog_observed_at": entry.get("observed_at"),
-            "stale": not bool(entry.get("available")),
-            "cut_root": "",
-            "query_proof_root": "",
-            "initiatives": [],
-            "assignments": [],
-            "relations": [],
-            "problems": [
-                {
-                    "code": "workspace-excluded",
-                    "lifecycle": entry.get("lifecycle"),
-                    "exclusion_policy": entry.get("exclusion_policy"),
-                    "locator": entry.get("locator"),
-                }
-            ],
-        }
+        history_query.component_material(entry, availability, _now(), disposition)
     )
 
 

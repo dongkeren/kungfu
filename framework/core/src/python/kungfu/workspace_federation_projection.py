@@ -14,6 +14,7 @@ from kungfu.assignment_graph import (
     qualify_assignment_graph,
 )
 from kungfu.workspace import semantic_root
+from kungfu.workspace_history import query as history_query
 
 
 GLOBAL_WORK_PROJECTION_SCHEMA = "kungfu.workspace-federation.global-work/v1"
@@ -57,6 +58,7 @@ def _compose_global_work(
     components: Iterable[Mapping[str, Any]],
     *,
     include_settled: bool = False,
+    reference_dispositions: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compose root-bound observations into conservative canonical Work rows."""
 
@@ -462,12 +464,14 @@ def _compose_global_work(
                 "next_action": "repair the source relation and publish a new component cut",
             }
         )
-    resolved.sort(key=lambda row: semantic_root(row))
-    unresolved.sort(key=lambda row: semantic_root(row))
+    resolved, unresolved, terminal_references = history_query.resolve_references(
+        resolved, unresolved, reference_dispositions or {}
+    )
     resolution_body = {
         "schema": REFERENCE_RESOLUTION_SCHEMA,
         "resolved": resolved,
         "unresolved": unresolved,
+        "terminal_dispositions": terminal_references,
         "relation_qualification_root": relation_qualification["qualification_root"],
     }
     reference_resolution = {
