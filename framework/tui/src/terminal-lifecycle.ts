@@ -242,7 +242,7 @@ export function resolveTuiAgentSessionPaths({
         ),
       ]
     : [];
-  const activeEntry = [configuredEntry, argvEntry, ...extensionDerivedEntries]
+  const activeEntry = [configuredEntry, ...extensionDerivedEntries, argvEntry]
     .filter((candidate): candidate is string => Boolean(candidate))
     .find(exists);
   const resolvedEntry = path.resolve(activeEntry || modulePath);
