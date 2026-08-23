@@ -61,6 +61,12 @@ _ANTHROPIC_ENV = ("ANTHROPIC_BASE_URL",)
 _STOP = object()
 
 
+def _status_from_exit_code(exit_code: int) -> RunStatus:
+    if exit_code < 0:
+        return RunStatus.Interrupted
+    return RunStatus.Succeeded if exit_code == 0 else RunStatus.Failed
+
+
 class Supervisor:
     def __init__(
         self, runtime_dir: str, command: Iterable[str], run_id: str | None = None
@@ -164,6 +170,32 @@ class Supervisor:
     def bundle_dir(self) -> str:
         return os.path.join(self.runtime_dir, "rewind", self.run_id, "bundle")
 
+    def _run_child(self) -> tuple[RunStatus, int]:
+        child: subprocess.Popen[Any] | None = None
+        try:
+            child = subprocess.Popen(self.command, env=self.child_env())
+            exit_code = child.wait()
+            return _status_from_exit_code(exit_code), exit_code
+        except KeyboardInterrupt:
+            assert child is not None
+            child.send_signal(signal.SIGINT)
+            return RunStatus.Interrupted, child.wait()
+
+    def _settle_adapter_leases(
+        self, status: RunStatus, exit_code: int
+    ) -> tuple[RunStatus, int]:
+        warrant_outcome = "completed" if status == RunStatus.Succeeded else "failed"
+        for lease in self.adapter_leases:
+            try:
+                lease.settle(warrant_outcome)
+            except (OSError, RuntimeError, ValueError) as error:
+                status, exit_code = RunStatus.Failed, 1
+                sys.stderr.write(
+                    f"[kungfu trace] adapter Runtime Warrant failed closed: {error}\n"
+                )
+        self.adapter_leases.clear()
+        return status, exit_code
+
     def run(self) -> tuple[int, Any, str]:
         writer_thread = threading.Thread(target=self._drain_events)
         writer_thread.start()
@@ -181,29 +213,10 @@ class Supervisor:
         )
 
         status, exit_code = RunStatus.Failed, 1
-        child: subprocess.Popen[Any] | None = None
         try:
-            child = subprocess.Popen(self.command, env=self.child_env())
-            exit_code = child.wait()
-            status = RunStatus.Succeeded if exit_code == 0 else RunStatus.Failed
-            if exit_code < 0:
-                status = RunStatus.Interrupted
-        except KeyboardInterrupt:
-            assert child is not None
-            child.send_signal(signal.SIGINT)
-            exit_code = child.wait()
-            status = RunStatus.Interrupted
+            status, exit_code = self._run_child()
         finally:
-            warrant_outcome = "completed" if status == RunStatus.Succeeded else "failed"
-            for lease in self.adapter_leases:
-                try:
-                    lease.settle(warrant_outcome)
-                except (OSError, RuntimeError, ValueError) as error:
-                    status, exit_code = RunStatus.Failed, 1
-                    sys.stderr.write(
-                        f"[kungfu trace] adapter Runtime Warrant failed closed: {error}\n"
-                    )
-            self.adapter_leases.clear()
+            status, exit_code = self._settle_adapter_leases(status, exit_code)
             # child gone -> no new wire or hook events; stop the capture
             # layers before the RunEnd bracket so every event lands inside
             # the run

@@ -35,28 +35,51 @@ ENV_PLUGIN_ADAPTERS = "KUNGFU_REWIND_ADAPTERS"
 ENV_NODE_ADAPTERS = "KUNGFU_REWIND_NODE_ADAPTERS"
 
 
+def _runtime_warrant_parts(
+    adoption: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    warrant = adoption.get("runtimeWarrant") or {}
+    state = adoption.get("leaseState") or {}
+    expected = {
+        "schema": "kungfu.kfx.runtime-warrant-adoption/v1",
+        "executionAllowed": True,
+        "state": "active",
+        "stateWarrantRoot": warrant.get("warrantRoot"),
+        "stateHolder": warrant.get("holder"),
+    }
+    actual = {
+        "schema": adoption.get("schema"),
+        "executionAllowed": adoption.get("executionAllowed"),
+        "state": state.get("state"),
+        "stateWarrantRoot": state.get("warrantRoot"),
+        "stateHolder": state.get("holder"),
+    }
+    if actual != expected:
+        raise ValueError("KF_KFX_RUNTIME_FENCE_STALE")
+    authority_roots = {
+        warrant.get("warrantRoot"),
+        warrant.get("capabilityGrantRoot"),
+        warrant.get("mutationWarrantRoot"),
+    }
+    if None in authority_roots or len(authority_roots) != 3:
+        raise ValueError("KF_KFX_RUNTIME_AUTHORITY_COLLAPSE")
+    return warrant, state
+
+
 class RuntimeWarrantLease:
     """Core-owned lease for one in-process adapter injection."""
 
-    def __init__(self, runtime_dir: str, adoption: dict[str, Any]) -> None:
-        warrant = adoption.get("runtimeWarrant") or {}
-        state = adoption.get("leaseState") or {}
-        if (
-            adoption.get("schema") != "kungfu.kfx.runtime-warrant-adoption/v1"
-            or adoption.get("executionAllowed") is not True
-            or state.get("state") != "active"
-            or state.get("warrantRoot") != warrant.get("warrantRoot")
-            or state.get("holder") != warrant.get("holder")
-            or warrant.get("warrantRoot") == warrant.get("capabilityGrantRoot")
-            or warrant.get("warrantRoot") == warrant.get("mutationWarrantRoot")
-        ):
-            raise ValueError("KF_KFX_RUNTIME_FENCE_STALE")
-        self.runtime_dir = runtime_dir
-        self.adoption = adoption
-        self._stop = threading.Event()
-        self._error: BaseException | None = None
-        self._thread = threading.Thread(target=self._heartbeat, daemon=True)
-        self._thread.start()
+    @classmethod
+    def start(cls, runtime_dir: str, adoption: dict[str, Any]) -> RuntimeWarrantLease:
+        _runtime_warrant_parts(adoption)
+        lease = cls()
+        lease.runtime_dir = runtime_dir
+        lease.adoption = adoption
+        lease._stop = threading.Event()
+        lease._error: BaseException | None = None
+        lease._thread = threading.Thread(target=lease._heartbeat, daemon=True)
+        lease._thread.start()
+        return lease
 
     def _fence(self) -> dict[str, Any]:
         warrant = self.adoption["runtimeWarrant"]
@@ -134,10 +157,59 @@ def _scan_packages(root: str) -> Iterator[str]:
                     yield nested
 
 
-def discover_adapters(
-    runtime_dir: str | None,
+def _adopt_adapter(
+    runtime_dir: str,
     runtime: str,
-    lease_sink: list[RuntimeWarrantLease],
+    key: str,
+    descriptor: dict[str, Any],
+    candidate: dict[str, Any],
+) -> tuple[dict[str, Any] | None, RuntimeWarrantLease | None]:
+    try:
+        now = time.time_ns()
+        adoption = storage_service.kfx_registry(
+            "runtime-warrant-adopt",
+            {
+                "packageKey": key,
+                "host": f"adapter-{runtime}",
+                "expectedCutRoot": descriptor.get("cutRoot"),
+                "expectedRevision": descriptor.get("revision"),
+                "expectedGenerationRoot": descriptor.get("generationRoot"),
+                "expectedPackageRoot": candidate.get("packageRoot"),
+                "expectedCapabilityGrantRoot": candidate.get("capabilityGrantRoot"),
+                "expectedAuthorizationRoot": candidate.get("authorizationRoot"),
+                "expectedGrantedCapabilities": candidate.get("grantedCapabilities", []),
+                "holder": f"kungfu-trace:{os.getpid()}:{key}",
+                "purpose": f"inject authorized adapter-{runtime} product host",
+                "leaseNonce": uuid.uuid4().hex,
+                "issuedAt": now,
+                "expiresAt": now + 3_600_000_000_000,
+                "heartbeatTtl": 5_000_000_000,
+                "residualResponsibility": "retained-by-kungfu-core",
+                "requestedCapabilities": candidate.get("grantedCapabilities", []),
+            },
+            runtime_dir,
+        )
+        launch = adoption.get("hostLaunch") or {}
+        authorization = launch.get("authorization")
+        if {
+            "executionAllowed": adoption.get("executionAllowed"),
+            "authorizationRoot": (
+                authorization.get("authorizationRoot")
+                if isinstance(authorization, dict)
+                else None
+            ),
+        } != {
+            "executionAllowed": True,
+            "authorizationRoot": candidate.get("authorizationRoot"),
+        }:
+            return None, None
+        return authorization, RuntimeWarrantLease.start(runtime_dir, adoption)
+    except (OSError, RuntimeError, ValueError):
+        return None, None
+
+
+def discover_adapters(
+    runtime_dir: str | None, runtime: str, lease_sink: list[RuntimeWarrantLease]
 ) -> tuple[list[str], list[str], list[dict[str, str | None]]]:
     """Return (entry_files, package_dirs, refused) for kfx packages declaring an
     adapter form for `runtime` ('python' or 'node'). First occurrence of a
@@ -202,55 +274,11 @@ def discover_adapters(
                         and observed.get("manifestRoot")
                         == candidate.get("manifestRoot")
                     ):
-                        try:
-                            now = time.time_ns()
-                            adoption = storage_service.kfx_registry(
-                                "runtime-warrant-adopt",
-                                {
-                                    "packageKey": key,
-                                    "host": f"adapter-{runtime}",
-                                    "expectedCutRoot": descriptor.get("cutRoot"),
-                                    "expectedRevision": descriptor.get("revision"),
-                                    "expectedGenerationRoot": descriptor.get(
-                                        "generationRoot"
-                                    ),
-                                    "expectedPackageRoot": candidate.get("packageRoot"),
-                                    "expectedCapabilityGrantRoot": candidate.get(
-                                        "capabilityGrantRoot"
-                                    ),
-                                    "expectedAuthorizationRoot": candidate.get(
-                                        "authorizationRoot"
-                                    ),
-                                    "expectedGrantedCapabilities": candidate.get(
-                                        "grantedCapabilities", []
-                                    ),
-                                    "holder": f"kungfu-trace:{os.getpid()}:{key}",
-                                    "purpose": f"inject authorized adapter-{runtime} product host",
-                                    "leaseNonce": uuid.uuid4().hex,
-                                    "issuedAt": now,
-                                    "expiresAt": now + 3_600_000_000_000,
-                                    "heartbeatTtl": 5_000_000_000,
-                                    "residualResponsibility": "retained-by-kungfu-core",
-                                    "requestedCapabilities": candidate.get(
-                                        "grantedCapabilities", []
-                                    ),
-                                },
-                                runtime_dir or "",
-                            )
-                            launch = adoption.get("hostLaunch") or {}
-                            authorization = launch.get("authorization")
-                            if (
-                                adoption.get("executionAllowed") is not True
-                                or not isinstance(authorization, dict)
-                                or authorization.get("authorizationRoot")
-                                != candidate.get("authorizationRoot")
-                            ):
-                                authorization = None
-                            else:
-                                lease = RuntimeWarrantLease(runtime_dir or "", adoption)
-                                lease_sink.append(lease)
-                        except (OSError, RuntimeError, ValueError):
-                            authorization = None
+                        authorization, lease = _adopt_adapter(
+                            runtime_dir or "", runtime, key, descriptor, candidate
+                        )
+                        if lease is not None:
+                            lease_sink.append(lease)
                         break
             if authorization is None:
                 refused.append({"key": kfx.get("key"), "package": os.path.abspath(pkg)})

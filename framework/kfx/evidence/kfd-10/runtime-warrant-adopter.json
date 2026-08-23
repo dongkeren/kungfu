@@ -58,7 +58,7 @@
     },
     {
       "path": "framework/core/src/python/kungfu/rewind/adapters.py",
-      "sha256": "sha256:6a8924bb14d3ac8961fb65c672051fdad02f3e1ee1f8a1d160d20f069bc31370"
+      "sha256": "sha256:aabbab12a635967e52cd1a250311a48a584bede45c1334afd94fffd91c460567"
     }
   ],
   "qualification": {

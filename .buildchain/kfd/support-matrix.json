@@ -542,7 +542,7 @@
         "evidenceRoots": [
           {
             "path": "framework/kfx/evidence/kfd-10/runtime-warrant-adopter.json",
-            "sha256": "sha256:633260fba51ddf10b83050cb77b7a9797ca21c2b3972d2f571443002a2382a4f"
+            "sha256": "sha256:5b73b540e87dd1d15033251b3f1dd942a762b19471cdaafccebd550d5b06f3c6"
           }
         ]
       },
@@ -563,7 +563,7 @@
       "claimClass": "draft-adopter-evidence",
       "knownLimitations": [
         "This is first-party specialized adopter evidence for design feedback, not KFD-10 conformance, activation, independent certification or shipped support.",
-        "The Core API is source-qualified; product host adapters do not yet consume leased Runtime Warrants by default."
+        "Product host adoption is limited to the first-party specialized witness and does not establish independent KFD-10 conformance."
       ],
       "owner": "kungfu-kfx-control",
       "nextGate": "Keep evidence non-conforming until KFD-10 activation and an adopter qualification contract exist."
