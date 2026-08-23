@@ -14,7 +14,7 @@ from kungfu.workspace import (
 )
 from kungfu.workspace_federation import query_federation
 from kungfu.workspace_federation_projection import _compose_global_work
-from kungfu.workspace_history.lifecycle import (
+from kungfu.workspace_history import (
     LIQUIDATION_EVIDENCE_SCHEMA,
     apply_work_history_liquidation,
     load_work_history_dispositions,

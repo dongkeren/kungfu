@@ -31,7 +31,7 @@ from kungfu.workspace_federation import (
     query_federation,
 )
 from kungfu.workspace_federation_observer import observe_federation
-from kungfu.workspace_history.lifecycle import (
+from kungfu.workspace_history import (
     apply_work_history_liquidation,
     plan_work_history_liquidation,
     save_work_history_liquidation_plan,

@@ -42,8 +42,8 @@ from kungfu.workspace import (
     load_workspace_catalog,
     semantic_root,
 )
-from kungfu.workspace_history import query as history_query
-from kungfu.workspace_history.lifecycle import load_work_history_dispositions
+from kungfu import workspace_history as history_query
+from kungfu.workspace_history import load_work_history_dispositions
 from kungfu.workspace_federation_projection import (
     CANONICAL_WORK_IDENTITY_SCHEMA as CANONICAL_WORK_IDENTITY_SCHEMA,
     CANONICAL_WORK_SCHEMA as CANONICAL_WORK_SCHEMA,

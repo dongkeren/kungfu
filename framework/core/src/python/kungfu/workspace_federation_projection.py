@@ -14,7 +14,7 @@ from kungfu.assignment_graph import (
     qualify_assignment_graph,
 )
 from kungfu.workspace import semantic_root
-from kungfu.workspace_history import query as history_query
+from kungfu import workspace_history as history_query
 
 
 GLOBAL_WORK_PROJECTION_SCHEMA = "kungfu.workspace-federation.global-work/v1"
