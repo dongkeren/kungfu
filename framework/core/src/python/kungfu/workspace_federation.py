@@ -1203,7 +1203,7 @@ def _bind_component_envelope(component: dict[str, Any]) -> dict[str, Any]:
             "reason": "component was not readable",
         },
         "stale": bool(component.get("stale")),
-        "disposition": component.get("disposition") or None,
+        "disposition": component.get("disposition"),
         "errors": errors,
         "known_initiative_count": len(component.get("initiatives") or []),
         "known_assignment_count": len(component.get("assignments") or []),
@@ -1240,7 +1240,7 @@ def _component_result_material(component: Mapping[str, Any]) -> dict[str, Any]:
         "assignments": list(component.get("assignments") or []),
         "relations": list(component.get("relations") or []),
         "problems": list(component.get("problems") or []),
-        "disposition": component.get("disposition") or None,
+        "disposition": component.get("disposition"),
         "retained_assignment_states": list(
             component.get("retained_assignment_states") or []
         ),
