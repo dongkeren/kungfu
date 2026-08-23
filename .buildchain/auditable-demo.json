@@ -1,6 +1,12 @@
 {
   "schema": "buildchain.declarative-binary-demo/v1",
   "compositionMode": "terminal-fill",
+  "playback": {
+    "schema": "buildchain.declarative-demo-playback/v1",
+    "mode": "deterministic-readable",
+    "activeDurationMs": 90000,
+    "finalHoldMs": 3000
+  },
   "product": {
     "id": "kungfu",
     "displayName": "Kungfu",
@@ -65,11 +71,11 @@
     {
       "id": "project-tour-episode-2",
       "title": "Who is allowed to complete Work?",
-      "claimBoundary": "This exact standalone Kungfu artifact proves only the bounded disposable Project Tour episode 2 observed at 8x in two independently captured native PTYs; Mock Agent output and terminal observations grant no Work, release, capability, or production authority.",
+      "claimBoundary": "This exact standalone Kungfu artifact proves only the bounded disposable Project Tour episode 2 observed at 4x in two independently captured native PTYs; Mock Agent output and terminal observations grant no Work, release, capability, or production authority.",
       "steps": [
         {
           "id": "project-tour-episode-2",
-          "argv": ["agent-work-lab", "project-tour", "--episode", "2", "--speed", "8"],
+          "argv": ["agent-work-lab", "project-tour", "--episode", "2", "--speed", "4"],
           "timeoutSeconds": 360,
           "expectedExitCodes": [0],
           "stdoutIncludes": ["KUNGFU_PROJECT_TOUR_COMPLETE"],

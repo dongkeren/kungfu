@@ -197,6 +197,13 @@ export function inspectAuditableDemoFastSentinel({
     scenarioValue?.schema !== 'buildchain.declarative-binary-demo/v1' ||
     scenarioValue?.execution?.durationClass !== 'long-form' ||
     scenarioValue?.execution?.totalTimeoutSeconds !== 360 ||
+    JSON.stringify(scenarioValue?.playback) !==
+      JSON.stringify({
+        schema: 'buildchain.declarative-demo-playback/v1',
+        mode: 'deterministic-readable',
+        activeDurationMs: 90000,
+        finalHoldMs: 3000,
+      }) ||
     scenarioValue?.authority?.grants?.length !== 0 ||
     demos.length !== 3 ||
     JSON.stringify(autoplay?.steps?.[0]?.argv) !==
@@ -219,7 +226,7 @@ export function inspectAuditableDemoFastSentinel({
         '--episode',
         '2',
         '--speed',
-        '8',
+        '4',
       ]) ||
     projectTourEpisode2?.steps?.[0]?.timeoutSeconds !== 360
   ) {

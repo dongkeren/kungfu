@@ -59,13 +59,19 @@ test('one exact Buildchain workflow owns every declared demo', () => {
           '--episode',
           '2',
           '--speed',
-          '8',
+          '4',
         ],
       },
     ],
   );
   assert.equal(scenario.execution.durationClass, 'long-form');
   assert.equal(scenario.execution.totalTimeoutSeconds, 360);
+  assert.deepEqual(scenario.playback, {
+    schema: 'buildchain.declarative-demo-playback/v1',
+    mode: 'deterministic-readable',
+    activeDurationMs: 90000,
+    finalHoldMs: 3000,
+  });
   assert.equal(scenario.demos[1].steps[0].timeoutSeconds, 360);
   assert.equal(scenario.demos[2].steps[0].timeoutSeconds, 360);
   assert.deepEqual(scenario.transportSmoke, {
