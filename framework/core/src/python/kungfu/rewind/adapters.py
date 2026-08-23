@@ -69,6 +69,12 @@ def _runtime_warrant_parts(
 class RuntimeWarrantLease:
     """Core-owned lease for one in-process adapter injection."""
 
+    runtime_dir: str
+    adoption: dict[str, Any]
+    _stop: threading.Event
+    _error: BaseException | None
+    _thread: threading.Thread
+
     @classmethod
     def start(cls, runtime_dir: str, adoption: dict[str, Any]) -> RuntimeWarrantLease:
         _runtime_warrant_parts(adoption)
@@ -76,7 +82,7 @@ class RuntimeWarrantLease:
         lease.runtime_dir = runtime_dir
         lease.adoption = adoption
         lease._stop = threading.Event()
-        lease._error: BaseException | None = None
+        lease._error = None
         lease._thread = threading.Thread(target=lease._heartbeat, daemon=True)
         lease._thread.start()
         return lease

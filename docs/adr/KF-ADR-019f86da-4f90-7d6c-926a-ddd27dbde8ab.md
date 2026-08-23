@@ -4,7 +4,7 @@ doc_type: architecture-decision
 adr_id: KF-ADR-019f86da-4f90-7d6c-926a-ddd27dbde8ab
 decision_status: accepted
 implementation_status: implemented
-implementation_prs: [https://github.com/kungfu-systems/kungfu/pull/571, https://github.com/kungfu-systems/kungfu/pull/568, https://github.com/kungfu-systems/kungfu/pull/731, https://github.com/kungfu-systems/kungfu/pull/734, https://github.com/kungfu-systems/kungfu/pull/906, https://github.com/kungfu-systems/kungfu/pull/922, https://github.com/kungfu-systems/kungfu/pull/942, https://github.com/kungfu-systems/kungfu/pull/975, https://github.com/kungfu-systems/kungfu/pull/1704, https://github.com/kungfu-systems/kungfu/pull/1718, https://github.com/kungfu-systems/kungfu/pull/1728, https://github.com/kungfu-systems/kungfu/pull/1744, https://github.com/kungfu-systems/kungfu/pull/1771, https://github.com/kungfu-systems/kungfu/pull/1784, https://github.com/kungfu-systems/kungfu/pull/3140]
+implementation_prs: [https://github.com/kungfu-systems/kungfu/pull/571, https://github.com/kungfu-systems/kungfu/pull/568, https://github.com/kungfu-systems/kungfu/pull/731, https://github.com/kungfu-systems/kungfu/pull/734, https://github.com/kungfu-systems/kungfu/pull/906, https://github.com/kungfu-systems/kungfu/pull/922, https://github.com/kungfu-systems/kungfu/pull/942, https://github.com/kungfu-systems/kungfu/pull/975, https://github.com/kungfu-systems/kungfu/pull/1704, https://github.com/kungfu-systems/kungfu/pull/1718, https://github.com/kungfu-systems/kungfu/pull/1728, https://github.com/kungfu-systems/kungfu/pull/1744, https://github.com/kungfu-systems/kungfu/pull/1771, https://github.com/kungfu-systems/kungfu/pull/1784, https://github.com/kungfu-systems/kungfu/pull/3140, https://github.com/kungfu-systems/kungfu/pull/3395]
 closure_pr: https://github.com/kungfu-systems/kungfu/pull/1784
 qualification_refs: [framework/core/src/libkungfu/tests/fixtures/native_kfx_contract/buildchain-2.13.0-alpha.0-envelope.json, framework/core/src/libkungfu/tests/native_kfx_contract_tests.cpp, framework/core/tests/python/test_native_kfx_contract.py, framework/core/tests/storage-node-binding.test.js, framework/api/tests/storage.test.ts, framework/kfx/tooling/run-identity-neutral-terminal-qualification.mjs, docs/qualification/kfx-identity-neutral-terminal.md, framework/core/src/libkungfu/tests/native_kfx_service_host_tests.cpp, framework/kfx/evidence/kfd-10/runtime-warrant-adopter.json]
 review_state: self-reviewed
@@ -14,7 +14,7 @@ period: 2026-07-15
 theme: kfd-aware-kfx-trust-buildchain-admission
 confidence: high
 evidence_grade: B
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-24
 ---
 
 # KF-ADR-019f86da-4f90-7d6c-926a-ddd27dbde8ab: KFX admission consumes KFD facts and exact Buildchain attestations
@@ -153,6 +153,12 @@ or settle a Runtime Warrant; Core verifies the lease generation, fencing,
 holder, purpose, attenuated capabilities, heartbeat, expiry, revocation, and
 roots. The manifest evidence remains draft and cannot activate an adopter or
 broaden its privileges.
+
+PR #3395 projects the draft witness onto real product-host adoption evidence.
+The evidence covers generation, fencing, heartbeat, expiry, revocation,
+crash/recovery, terminal settlement, replay, and root substitution, but it does
+not upgrade KFD-10 to conforming or shipped. KFD facts still neither mint the
+lease nor widen the separately admitted capability grant.
 
 ## Decision
 

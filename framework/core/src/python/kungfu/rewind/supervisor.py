@@ -63,8 +63,8 @@ _STOP = object()
 
 def _status_from_exit_code(exit_code: int) -> RunStatus:
     if exit_code < 0:
-        return RunStatus.Interrupted
-    return RunStatus.Succeeded if exit_code == 0 else RunStatus.Failed
+        return RunStatus.Interrupted  # type: ignore[return-value]
+    return RunStatus.Succeeded if exit_code == 0 else RunStatus.Failed  # type: ignore[return-value]
 
 
 class Supervisor:
@@ -179,7 +179,7 @@ class Supervisor:
         except KeyboardInterrupt:
             assert child is not None
             child.send_signal(signal.SIGINT)
-            return RunStatus.Interrupted, child.wait()
+            return RunStatus.Interrupted, child.wait()  # type: ignore[return-value]
 
     def _settle_adapter_leases(
         self, status: RunStatus, exit_code: int
@@ -189,7 +189,7 @@ class Supervisor:
             try:
                 lease.settle(warrant_outcome)
             except (OSError, RuntimeError, ValueError) as error:
-                status, exit_code = RunStatus.Failed, 1
+                status, exit_code = RunStatus.Failed, 1  # type: ignore[assignment]
                 sys.stderr.write(
                     f"[kungfu trace] adapter Runtime Warrant failed closed: {error}\n"
                 )
@@ -214,9 +214,12 @@ class Supervisor:
 
         status, exit_code = RunStatus.Failed, 1
         try:
-            status, exit_code = self._run_child()
+            status, exit_code = self._run_child()  # type: ignore[assignment]
         finally:
-            status, exit_code = self._settle_adapter_leases(status, exit_code)
+            status, exit_code = self._settle_adapter_leases(  # type: ignore[assignment, arg-type]
+                status,  # type: ignore[arg-type]
+                exit_code,
+            )
             # child gone -> no new wire or hook events; stop the capture
             # layers before the RunEnd bracket so every event lands inside
             # the run
