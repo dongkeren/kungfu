@@ -77,6 +77,7 @@ class Supervisor:
             source=f"rewind:{self.run_id}",
         )
         self.events: queue.SimpleQueue[Any] = queue.SimpleQueue()
+        self.adapter_leases: list[adapters.RuntimeWarrantLease] = []
         self.proxy = ModelWireProxy(
             self.run_id, self.enqueue, upstreams=self._upstreams()
         )
@@ -132,10 +133,10 @@ class Supervisor:
         # adapters also put their package dirs on PYTHONPATH so an adapter can
         # import its own siblings; node adapters are required by absolute path.
         py_entries, py_dirs, py_refused = adapters.discover_adapters(
-            self.runtime_dir, "python"
+            self.runtime_dir, "python", self.adapter_leases
         )
         node_entries, _, node_refused = adapters.discover_adapters(
-            self.runtime_dir, "node"
+            self.runtime_dir, "node", self.adapter_leases
         )
         for refused in py_refused + node_refused:
             # In-process adapter injection requires an exact Core host
@@ -180,17 +181,29 @@ class Supervisor:
         )
 
         status, exit_code = RunStatus.Failed, 1
-        child = subprocess.Popen(self.command, env=self.child_env())
+        child: subprocess.Popen[Any] | None = None
         try:
+            child = subprocess.Popen(self.command, env=self.child_env())
             exit_code = child.wait()
             status = RunStatus.Succeeded if exit_code == 0 else RunStatus.Failed
             if exit_code < 0:
                 status = RunStatus.Interrupted
         except KeyboardInterrupt:
+            assert child is not None
             child.send_signal(signal.SIGINT)
             exit_code = child.wait()
             status = RunStatus.Interrupted
         finally:
+            warrant_outcome = "completed" if status == RunStatus.Succeeded else "failed"
+            for lease in self.adapter_leases:
+                try:
+                    lease.settle(warrant_outcome)
+                except (OSError, RuntimeError, ValueError) as error:
+                    status, exit_code = RunStatus.Failed, 1
+                    sys.stderr.write(
+                        f"[kungfu trace] adapter Runtime Warrant failed closed: {error}\n"
+                    )
+            self.adapter_leases.clear()
             # child gone -> no new wire or hook events; stop the capture
             # layers before the RunEnd bracket so every event lands inside
             # the run

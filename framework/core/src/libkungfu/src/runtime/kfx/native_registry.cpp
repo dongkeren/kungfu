@@ -46,6 +46,7 @@ static json query_native_kfx_registry_unchecked(const std::string &action, const
                                                 "authorize-host",
                                                 "history",
                                                 "runtime-warrant-issue",
+                                                "runtime-warrant-adopt",
                                                 "runtime-warrant-heartbeat",
                                                 "runtime-warrant-revoke",
                                                 "runtime-warrant-settle",
@@ -66,7 +67,8 @@ static json query_native_kfx_registry_unchecked(const std::string &action, const
     return lifecycle_history(runtime_dir, request);
   const bool runtime_transition = action == "runtime-warrant-heartbeat" || action == "runtime-warrant-revoke" ||
                                   action == "runtime-warrant-settle" || action == "runtime-warrant-recover";
-  const bool runtime_mutation = action == "runtime-warrant-issue" || runtime_transition;
+  const bool runtime_mutation =
+      action == "runtime-warrant-issue" || action == "runtime-warrant-adopt" || runtime_transition;
   if ((action == "apply" || runtime_mutation || action == "kfd-10-witness") && runtime_dir.empty())
     refuse("KF_KFX_AUTHORITY_CLAIM_FORBIDDEN", "native KFX authority operation requires an explicit runtime directory");
   std::optional<lifecycle_writer_lock> writer_lock;
@@ -98,10 +100,12 @@ static json query_native_kfx_registry_unchecked(const std::string &action, const
     refuse("KF_KFX_CUT_MISSING", "no named KFX Fact Cut exists; provide a bounded discovery observation to plan");
   }
   const auto load_plan = lifecycle_plan(selected, lifecycle, request);
-  if (action == "runtime-warrant-issue") {
+  if (action == "runtime-warrant-issue" || action == "runtime-warrant-adopt") {
     const auto &descriptor = load_plan.at("hostContract");
-    return authority::issue_runtime_warrant(descriptor, authorize_host_launch(descriptor, lifecycle, request), request,
-                                            runtime_dir);
+    const auto launch = authorize_host_launch(descriptor, lifecycle, request);
+    return action == "runtime-warrant-adopt"
+               ? authority::adopt_runtime_warrant(descriptor, launch, request, runtime_dir)
+               : authority::issue_runtime_warrant(descriptor, launch, request, runtime_dir);
   }
   if (action == "authorize-host")
     return authorize_host_launch(load_plan.at("hostContract"), lifecycle, request);

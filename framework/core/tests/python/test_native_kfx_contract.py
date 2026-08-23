@@ -111,6 +111,7 @@ def test_native_kfx_python_binding_is_a_thin_core_edge(tmp_path):
     [
         "authorize-host",
         "runtime-warrant-issue",
+        "runtime-warrant-adopt",
         "runtime-warrant-heartbeat",
         "runtime-warrant-revoke",
         "runtime-warrant-settle",

@@ -25,6 +25,9 @@ using assessment_fn =
 [[nodiscard]] nlohmann::json issue_runtime_warrant(const nlohmann::json &descriptor, const nlohmann::json &host_launch,
                                                    const nlohmann::json &request, const std::string &runtime_dir);
 
+[[nodiscard]] nlohmann::json adopt_runtime_warrant(const nlohmann::json &descriptor, const nlohmann::json &host_launch,
+                                                   const nlohmann::json &request, const std::string &runtime_dir);
+
 [[nodiscard]] nlohmann::json transition_runtime_warrant(const std::string &action, const nlohmann::json &request,
                                                         const std::string &runtime_dir);
 

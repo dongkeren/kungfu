@@ -19,7 +19,11 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
+import uuid
 from collections.abc import Iterator
+from typing import Any
 
 from kungfu import kfx_contract
 from kungfu.storage import service as storage_service
@@ -29,6 +33,76 @@ ENV_EXTENSION_PATH = "KF_EXTENSION_PATH"
 # reads ENV_PLUGIN_ADAPTERS, the node hook reads ENV_NODE_ADAPTERS.
 ENV_PLUGIN_ADAPTERS = "KUNGFU_REWIND_ADAPTERS"
 ENV_NODE_ADAPTERS = "KUNGFU_REWIND_NODE_ADAPTERS"
+
+
+class RuntimeWarrantLease:
+    """Core-owned lease for one in-process adapter injection."""
+
+    def __init__(self, runtime_dir: str, adoption: dict[str, Any]) -> None:
+        warrant = adoption.get("runtimeWarrant") or {}
+        state = adoption.get("leaseState") or {}
+        if (
+            adoption.get("schema") != "kungfu.kfx.runtime-warrant-adoption/v1"
+            or adoption.get("executionAllowed") is not True
+            or state.get("state") != "active"
+            or state.get("warrantRoot") != warrant.get("warrantRoot")
+            or state.get("holder") != warrant.get("holder")
+            or warrant.get("warrantRoot") == warrant.get("capabilityGrantRoot")
+            or warrant.get("warrantRoot") == warrant.get("mutationWarrantRoot")
+        ):
+            raise ValueError("KF_KFX_RUNTIME_FENCE_STALE")
+        self.runtime_dir = runtime_dir
+        self.adoption = adoption
+        self._stop = threading.Event()
+        self._error: BaseException | None = None
+        self._thread = threading.Thread(target=self._heartbeat, daemon=True)
+        self._thread.start()
+
+    def _fence(self) -> dict[str, Any]:
+        warrant = self.adoption["runtimeWarrant"]
+        state = self.adoption["leaseState"]
+        return {
+            "packageKey": warrant["packageKey"],
+            "host": warrant["host"],
+            "holder": warrant["holder"],
+            "expectedWarrantRoot": warrant["warrantRoot"],
+            "expectedGeneration": state["generation"],
+            "expectedFencingToken": state["fencingToken"],
+        }
+
+    def _heartbeat(self) -> None:
+        while not self._stop.wait(2.0):
+            try:
+                transition = storage_service.kfx_registry(
+                    "runtime-warrant-heartbeat",
+                    {**self._fence(), "recordedAt": time.time_ns()},
+                    self.runtime_dir,
+                )
+                if (transition.get("leaseState") or {}).get("state") != "active":
+                    raise RuntimeError("Runtime Warrant heartbeat was not retained")
+            except BaseException as error:  # fail closed across the child lifetime
+                self._error = error
+                return
+
+    def settle(self, outcome: str) -> None:
+        self._stop.set()
+        self._thread.join()
+        if self._error is not None:
+            raise RuntimeError(
+                "Runtime Warrant heartbeat failed closed"
+            ) from self._error
+        transition = storage_service.kfx_registry(
+            "runtime-warrant-settle",
+            {
+                **self._fence(),
+                "recordedAt": time.time_ns(),
+                "outcome": outcome,
+                "residualResponsibilityDisposition": "retained-by-kungfu-core",
+            },
+            self.runtime_dir,
+        )
+        if (transition.get("leaseState") or {}).get("state") != "settled":
+            raise RuntimeError("Runtime Warrant terminal settlement was not retained")
 
 
 def _extension_roots(runtime_dir: str | None) -> list[str]:
@@ -61,7 +135,9 @@ def _scan_packages(root: str) -> Iterator[str]:
 
 
 def discover_adapters(
-    runtime_dir: str | None, runtime: str
+    runtime_dir: str | None,
+    runtime: str,
+    lease_sink: list[RuntimeWarrantLease],
 ) -> tuple[list[str], list[str], list[dict[str, str | None]]]:
     """Return (entry_files, package_dirs, refused) for kfx packages declaring an
     adapter form for `runtime` ('python' or 'node'). First occurrence of a
@@ -127,8 +203,9 @@ def discover_adapters(
                         == candidate.get("manifestRoot")
                     ):
                         try:
-                            launch = storage_service.kfx_registry(
-                                "authorize-host",
+                            now = time.time_ns()
+                            adoption = storage_service.kfx_registry(
+                                "runtime-warrant-adopt",
                                 {
                                     "packageKey": key,
                                     "host": f"adapter-{runtime}",
@@ -147,17 +224,31 @@ def discover_adapters(
                                     "expectedGrantedCapabilities": candidate.get(
                                         "grantedCapabilities", []
                                     ),
+                                    "holder": f"kungfu-trace:{os.getpid()}:{key}",
+                                    "purpose": f"inject authorized adapter-{runtime} product host",
+                                    "leaseNonce": uuid.uuid4().hex,
+                                    "issuedAt": now,
+                                    "expiresAt": now + 3_600_000_000_000,
+                                    "heartbeatTtl": 5_000_000_000,
+                                    "residualResponsibility": "retained-by-kungfu-core",
+                                    "requestedCapabilities": candidate.get(
+                                        "grantedCapabilities", []
+                                    ),
                                 },
                                 runtime_dir or "",
                             )
+                            launch = adoption.get("hostLaunch") or {}
                             authorization = launch.get("authorization")
                             if (
-                                launch.get("executionAllowed") is not True
+                                adoption.get("executionAllowed") is not True
                                 or not isinstance(authorization, dict)
                                 or authorization.get("authorizationRoot")
                                 != candidate.get("authorizationRoot")
                             ):
                                 authorization = None
+                            else:
+                                lease = RuntimeWarrantLease(runtime_dir or "", adoption)
+                                lease_sink.append(lease)
                         except (OSError, RuntimeError, ValueError):
                             authorization = None
                         break

@@ -44,6 +44,7 @@
     "activate",
     "qualify",
     "runtime-warrant-issue",
+    "runtime-warrant-adopt",
     "runtime-warrant-heartbeat",
     "runtime-warrant-revoke",
     "runtime-warrant-settle",

@@ -542,7 +542,7 @@
         "evidenceRoots": [
           {
             "path": "framework/kfx/evidence/kfd-10/runtime-warrant-adopter.json",
-            "sha256": "sha256:621faa1c11c0670d95db01c17ad00fca44d22c89f0b65299664c9a20da981d06"
+            "sha256": "sha256:633260fba51ddf10b83050cb77b7a9797ca21c2b3972d2f571443002a2382a4f"
           }
         ]
       },
