@@ -219,7 +219,7 @@ export function inspectAuditableDemoFastSentinel({
         '--episode',
         '2',
         '--speed',
-        '4',
+        '8',
       ]) ||
     projectTourEpisode2?.steps?.[0]?.timeoutSeconds !== 360
   ) {

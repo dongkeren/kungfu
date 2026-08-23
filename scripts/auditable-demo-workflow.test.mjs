@@ -59,7 +59,7 @@ test('one exact Buildchain workflow owns every declared demo', () => {
           '--episode',
           '2',
           '--speed',
-          '4',
+          '8',
         ],
       },
     ],

@@ -328,7 +328,7 @@ def test_project_tour_cli_projects_bounded_playback_speed(monkeypatch):
         lambda _ctx, commands=(): launches.append(tuple(commands)),
     )
 
-    for speed in ("0.75", "0.5", "4"):
+    for speed in ("0.75", "0.5", "4", "8"):
         result = CliRunner().invoke(
             kfc, ["agent-work-lab", "project-tour", "--speed", speed]
         )
@@ -340,11 +340,12 @@ def test_project_tour_cli_projects_bounded_playback_speed(monkeypatch):
             "1",
         )
 
-    invalid = CliRunner().invoke(
-        kfc, ["agent-work-lab", "project-tour", "--speed", "0.1"]
-    )
-    assert invalid.exit_code != 0
-    assert "0.25<=x<=4.0" in invalid.output
+    for invalid_speed in ("0.1", "8.1"):
+        invalid = CliRunner().invoke(
+            kfc, ["agent-work-lab", "project-tour", "--speed", invalid_speed]
+        )
+        assert invalid.exit_code != 0
+        assert "0.25<=x<=8.0" in invalid.output
 
 
 def test_project_tour_cli_selects_each_bounded_episode(monkeypatch):

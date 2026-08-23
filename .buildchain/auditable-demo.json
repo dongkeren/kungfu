@@ -65,11 +65,11 @@
     {
       "id": "project-tour-episode-2",
       "title": "Who is allowed to complete Work?",
-      "claimBoundary": "This exact standalone Kungfu artifact proves only the bounded disposable Project Tour episode 2 observed at 4x in two independently captured native PTYs; Mock Agent output and terminal observations grant no Work, release, capability, or production authority.",
+      "claimBoundary": "This exact standalone Kungfu artifact proves only the bounded disposable Project Tour episode 2 observed at 8x in two independently captured native PTYs; Mock Agent output and terminal observations grant no Work, release, capability, or production authority.",
       "steps": [
         {
           "id": "project-tour-episode-2",
-          "argv": ["agent-work-lab", "project-tour", "--episode", "2", "--speed", "4"],
+          "argv": ["agent-work-lab", "project-tour", "--episode", "2", "--speed", "8"],
           "timeoutSeconds": 360,
           "expectedExitCodes": [0],
           "stdoutIncludes": ["KUNGFU_PROJECT_TOUR_COMPLETE"],
