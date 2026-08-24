@@ -155,7 +155,7 @@
             "marker": "kungfu.fact-root.canonical/v2"
           },
           {
-            "path": "framework/core/src/libkungfu/src/runtime/storage/service.cpp",
+            "path": "framework/core/src/libkungfu/src/runtime/storage/service_projection.cpp",
             "marker": "kungfu.storage.episode-bundle/v1"
           }
         ],

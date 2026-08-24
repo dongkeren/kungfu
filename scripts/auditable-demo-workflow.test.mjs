@@ -66,6 +66,12 @@ test('one exact Buildchain workflow owns every declared demo', () => {
   );
   assert.equal(scenario.execution.durationClass, 'long-form');
   assert.equal(scenario.execution.totalTimeoutSeconds, 360);
+  assert.deepEqual(scenario.playback, {
+    schema: 'buildchain.declarative-demo-playback/v1',
+    mode: 'deterministic-readable',
+    activeDurationMs: 90000,
+    finalHoldMs: 3000,
+  });
   assert.equal(scenario.demos[1].steps[0].timeoutSeconds, 360);
   assert.equal(scenario.demos[2].steps[0].timeoutSeconds, 360);
   assert.deepEqual(scenario.transportSmoke, {
@@ -219,13 +225,11 @@ test('the build fails the real transported binary before either upload path', ()
   assert.equal(workflow.on.workflow_dispatch.inputs.mode.default, 'full');
   assert.equal(
     build.uses,
-    'kungfu-systems/buildchain/.github/workflows/build.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112',
+    'kungfu-systems/buildchain/.github/workflows/.build.yml@41d4dce2f38aa4821c794b49dcfb2bcf59d0984a',
   );
-  assert.equal(build.with['buildchain-channel'], 'alpha');
-  assert.equal(build.with['buildchain-ref'], 'v3-alpha');
   assert.equal(
-    build.with['buildchain-contract-lock-path'],
-    '.buildchain/alpha-contract-lock.json',
+    build.with['buildchain-ref'],
+    '41d4dce2f38aa4821c794b49dcfb2bcf59d0984a',
   );
   assert.deepEqual(build.permissions, {
     actions: 'read',
@@ -235,7 +239,7 @@ test('the build fails the real transported binary before either upload path', ()
   });
   assert.equal(
     demo.uses,
-    'kungfu-systems/buildchain/.github/workflows/.declarative-auditable-demo.yml@17dac3a861c4f06ce777641d7e6b7c3beee8d112',
+    'kungfu-systems/buildchain/.github/workflows/.declarative-auditable-demo.yml@41d4dce2f38aa4821c794b49dcfb2bcf59d0984a',
   );
   assert.equal(
     build.with['pre-upload-transport-smoke-scenario-path'],

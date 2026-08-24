@@ -10,6 +10,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { portableClassificationPaths } from './portable-atlas-bundle.mjs';
 import { sourceMergeBase } from './source-acceptance.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,6 +22,51 @@ function copyFile(sourceRoot, targetRoot, relative) {
   const target = path.join(targetRoot, relative);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(path.join(sourceRoot, relative), target);
+}
+
+function syncChangedWorktree(sourceRoot, targetRoot, git) {
+  const paths = new Set();
+  for (const args of [
+    ['diff', '--name-only', '--no-renames', '-z', 'HEAD', '--'],
+    ['ls-files', '--others', '--exclude-standard', '-z'],
+  ]) {
+    const result = spawnSync(git, ['-C', sourceRoot, ...args], {
+      encoding: 'utf8',
+    });
+    if (result.status !== 0)
+      throw new Error(result.stderr || `git ${args.join(' ')} failed`);
+    for (const relative of result.stdout.split('\0'))
+      if (relative) paths.add(relative);
+  }
+  for (const relative of [...paths].sort()) {
+    const source = path.join(sourceRoot, relative);
+    const target = path.join(targetRoot, relative);
+    if (!fs.existsSync(source)) {
+      fs.rmSync(target, { force: true, recursive: true });
+      continue;
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(source, target);
+  }
+}
+
+function worktreeInventory(root, git) {
+  const result = spawnSync(
+    git,
+    [
+      '-C',
+      root,
+      'ls-files',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+      '-z',
+    ],
+    { encoding: 'utf8' },
+  );
+  if (result.status !== 0)
+    throw new Error(result.stderr || 'git ls-files inventory failed');
+  return result.stdout.split('\0').filter(Boolean).sort();
 }
 
 function semanticAmplificationFixturePaths(manifest) {
@@ -317,7 +363,6 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     '.buildchain/kfd/kfd-1/documentation-consumers.witness.json',
     '.buildchain/kfd/kfd-1/documentation-pack.witness.json',
     '.buildchain/kfd/kfd-2/claims/agent-work-state-contract.json',
-    '.buildchain/kfd/kfd-2/claims/codex-report-receipts.json',
     '.buildchain/kfd/kfd-2/claims/cross-language-authority-membrane.json',
     '.buildchain/kfd/kfd-2/claims/remote-fact-boundary.json',
     '.buildchain/kfd/kfd-3/surfaces.json',
@@ -325,6 +370,7 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     '.buildchain/alpha-release-cut-lock.json',
     '.buildchain/alpha-contract-lock.json',
     'config/kungfu-agent-first-canonical-policy.json',
+    'config/primitive/kungfu-primitive-catalog.contract.json',
     'developer/sdk/kfd/kfd-1/contract-world.witness.json',
     'developer/sdk/kfd/kfd-1/release-gate.json',
     'developer/sdk/kfd/kfd-1/verify-result.json',
@@ -337,6 +383,7 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     '.github/workflows/affected-native-pr.yml',
     '.github/workflows/dev-post-merge-advisory.yml',
     '.github/workflows/aws-us-linux-burst-qualification.yml',
+    '.github/workflows/aws-us-macos-burst-qualification.yml',
     '.github/workflows/aws-us-windows-burst-qualification.yml',
     '.github/workflows/cancel-dequeued-merge-group.yml',
     '.github/workflows/core-build-profiles.yml',
@@ -362,6 +409,7 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'docs/development/buildchain.md',
     'docs/qualification/gates/dev-queue-admission.contract.json',
     'docs/qualification/gates/source-and-governance.md',
+    'docs/qualification/gates/release-admission.md',
     'docs/qualification/gates/release-and-promotion.md',
     'docs/qualification/gates/workflow-authority.json',
     'docs/qualification/gates/workflow-authority.md',
@@ -369,6 +417,7 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'docs/qualification/alpha-ruleset.contract.json',
     'docs/qualification/stable-ruleset.contract.json',
     'docs/qualification/stable-release-continuation.contract.json',
+    'docs/release-promotion-rehearsal.contract.json',
     'docs/adr/KF-ADR-019f96a2-c686-76e1-9261-f6106aa50429.md',
     'docs/adr/KF-ADR-019fbbe4-40c5-7c67-9ed2-910a65430ff7.md',
     'docs/adr/SHIFU-ADR-019fab1a-2853-737e-8c67-a9b1aa9035aa.md',
@@ -379,7 +428,12 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'framework/release/publication-surfaces.json',
     'framework/release/publication-control-plane.mjs',
     'framework/dev-delivery/native-execution-under-warrant.mjs',
+    'scripts/alpha-macos-overflow.test.mjs',
+    'scripts/alpha-promotion-preflight.test.mjs',
+    'scripts/release-promotion-rehearsal.mjs',
+    'scripts/release-promotion-rehearsal.test.mjs',
     'scripts/release-publication-control-plane.test.mjs',
+    'scripts/verify-alpha-release-cut-lock.test.mjs',
     'framework/release/kungfu-release-provenance.contract.json',
     'config/release/kungfu-release-provenance.contract.json',
     'framework/release/kungfu-temporal-release-admission.contract.json',
@@ -397,6 +451,9 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'framework/version-line/version-line-projections.json',
     'docs/shifu/README.md',
     'framework/contract/kungfu-agent-first-canonical-policy.json',
+    'framework/core/src/libkungfu/include/kungfu/sdk/generated/primitive_catalog_v2.hpp',
+    'framework/incubation/incubation-passport.baseline.json',
+    'framework/incubation/incubation-passport.registry.json',
     'docs/shifu/artifact-contract.json',
     'docs/shifu/cache-contract.json',
     'docs/shifu/core-production-subgraph-contract.json',
@@ -500,6 +557,7 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'config/kungfu-skill.contract.json',
     'config/kungfu-contracts.registry.json',
     'docs/adr/KF-ADR-019f86da-4f90-74c2-9cbb-24f1c34303bf.md',
+    'docs/document-metadata.contract.json',
     'docs/adr/KF-ADR-019fee22-e71d-7da9-8a44-9403c21a5d62.md',
     'docs/architecture/skills.md',
     'framework/skill/README.md',
@@ -571,6 +629,8 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'scripts/check-python-structure.py',
     'scripts/check-readonly-source-routes.mjs',
     'scripts/check-readonly-source-routes.test.mjs',
+    'scripts/upgrade-publication-admission.mjs',
+    'product/scripts/dist-windows-trunk.test.mjs',
     'scripts/check-alpha-attention-operations.mjs',
     'scripts/check-docs.mjs',
     'scripts/check-incubation-passport.mjs',
@@ -640,7 +700,6 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'developer/sdk/kfd/kfd-2/release-claims.json',
     'developer/sdk/kfd/kfd-2/claims/agent-onboarding-pack.json',
     'developer/sdk/kfd/kfd-2/claims/agent-work-state-contract.json',
-    'developer/sdk/kfd/kfd-2/claims/codex-report-receipts.json',
     'developer/sdk/kfd/kfd-2/claims/cross-language-authority-membrane.json',
     'developer/sdk/kfd/kfd-2/claims/remote-fact-boundary.json',
     'developer/sdk/src/sdk.js',
@@ -663,6 +722,7 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'framework/deprecation/deprecation-lifecycle.contract.json',
     'framework/deprecation/deprecation-lifecycle.mjs',
     'framework/deprecation/deprecation-registry.json',
+    'docs/qualification/deprecation-alpha3-extension-warrants.json',
     'framework/deprecation/deprecation-discovery.contract.json',
     'framework/deprecation/deprecation-surface-discovery.mjs',
     'framework/deprecation/deprecation-surface-discovery.test.mjs',
@@ -810,11 +870,31 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
       .readdirSync(impactProofDirectory, { withFileTypes: true })
       .filter((value) => value.isFile() && value.name.endsWith('.json'))
       .sort((left, right) => left.name.localeCompare(right.name))) {
-      copyFile(
-        ROOT,
-        fixture,
-        `framework/site/src/kfx-site-impact-proofs/${entry.name}`,
+      const proofRelative = `framework/site/src/kfx-site-impact-proofs/${entry.name}`;
+      const proofBytes = fs.readFileSync(path.join(ROOT, proofRelative));
+      const committedProof = spawnSync(
+        git,
+        ['-C', ROOT, 'show', `${exactSourceSha}:${proofRelative}`],
+        { encoding: null },
       );
+      if (
+        committedProof.status !== 0 ||
+        !proofBytes.equals(Buffer.from(committedProof.stdout || ''))
+      ) {
+        const proof = JSON.parse(proofBytes.toString('utf8'));
+        for (const change of proof.changes || []) {
+          const relative = String(change.path || '');
+          assert.equal(path.isAbsolute(relative), false);
+          assert.equal(relative.split(/[\\/]/u).includes('..'), false);
+          const target = path.join(fixture, relative);
+          if (change.status === 'deleted') {
+            fs.rmSync(target, { force: true });
+          } else {
+            copyFile(ROOT, fixture, relative);
+          }
+        }
+      }
+      copyFile(ROOT, fixture, proofRelative);
     }
   }
   fs.rmSync(
@@ -871,11 +951,21 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     'node_modules/@kungfu-tech/kfd/package.json',
     'node_modules/@kungfu-tech/kfd/standards.json',
     'node_modules/@kungfu-tech/kfd/kfd.release.json',
+    'node_modules/@kungfu-tech/kfd/profiles/adopter-conformance/category-profiles.json',
+    'node_modules/@kungfu-tech/kfd/scripts/adopter-category-profile-contract.mjs',
+    'node_modules/@kungfu-tech/kfd/scripts/adopter-category-instance-contract.mjs',
+    'node_modules/@kungfu-tech/kfd/scripts/adopter-toolchain.mjs',
+    'node_modules/@kungfu-tech/kfd/scripts/adopter-conformance-contract.mjs',
+    'node_modules/@kungfu-tech/kfd/scripts/self-conformance-contract.mjs',
     'node_modules/@kungfu-tech/buildchain/package.json',
+    'node_modules/@kungfu-tech/buildchain/packages/core/adopter-delivery-gate.js',
+    'node_modules/@kungfu-tech/buildchain/packages/core/adopter-delivery-json.js',
+    'node_modules/@kungfu-tech/buildchain/packages/core/kfd-adopter-category-driver.js',
     'node_modules/@kungfu-tech/buildchain/dist/site/buildchain-contract.json',
     'node_modules/@kungfu-tech/buildchain/dist/site/publication-authority-registry.json',
   ])
     copyFile(ROOT, fixture, relative);
+  syncChangedWorktree(ROOT, fixture, git);
   fs.chmodSync(path.join(fixture, 'shifu'), 0o755);
 
   fs.symlinkSync(git, path.join(tools, 'git'));
@@ -923,6 +1013,26 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     });
     assert.equal(result.status, 0, result.stderr);
   }
+  const sourceClassificationPaths = portableClassificationPaths(
+    worktreeInventory(ROOT, git),
+  );
+  const fixtureClassificationPaths = portableClassificationPaths(
+    worktreeInventory(fixture, git),
+  );
+  const sourceClassificationSet = new Set(sourceClassificationPaths);
+  const fixtureClassificationSet = new Set(fixtureClassificationPaths);
+  assert.deepEqual(
+    {
+      onlyFixture: fixtureClassificationPaths.filter(
+        (relative) => !sourceClassificationSet.has(relative),
+      ),
+      onlySource: sourceClassificationPaths.filter(
+        (relative) => !fixtureClassificationSet.has(relative),
+      ),
+    },
+    { onlyFixture: [], onlySource: [] },
+    'read-only fixture classification inventory must match the source worktree',
+  );
 
   const before = snapshotSource(fixture);
   const beforeAuditRoot = sourceAuditRoot(before);
@@ -947,6 +1057,8 @@ test('declared discovery routes are zero-write in a cold read-only fixture', (t)
     KUNGFU_COMPLEXITY_PROTECTED_REF: protectedRef,
     PATH: `${tools}:/usr/bin:/bin`,
   };
+  env.GITHUB_EVENT_NAME = undefined;
+  env.GITHUB_EVENT_PATH = undefined;
   env.NODE_TEST_CONTEXT = undefined;
   const cases = [
     [

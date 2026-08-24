@@ -16,11 +16,13 @@ const KFD_ROOT = path.dirname(
   fileURLToPath(import.meta.resolve('@kungfu-tech/kfd/package.json')),
 );
 const KFD_BIN = path.join(KFD_ROOT, 'bin', 'kfd.mjs');
-const BUILDCHAIN_PACKAGE = fileURLToPath(
-  import.meta.resolve('@kungfu-tech/buildchain/package.json'),
+const STABLE_BUILDCHAIN_PACKAGE = fileURLToPath(
+  import.meta.resolve('@kungfu-tech/buildchain-stable/package.json'),
 );
 const NATIVE_KFD_ROOT = path.dirname(
-  createRequire(BUILDCHAIN_PACKAGE).resolve('@kungfu-tech/kfd/package.json'),
+  createRequire(STABLE_BUILDCHAIN_PACKAGE).resolve(
+    '@kungfu-tech/kfd/package.json',
+  ),
 );
 const NATIVE_KFD_BIN = path.join(NATIVE_KFD_ROOT, 'bin', 'kfd.mjs');
 const KFD_ATLAS_FIXTURE = path.join(
@@ -121,9 +123,11 @@ try {
   assert.equal(currentManifest.manifest_root, atlasGolden.manifest_root);
   assert.equal(currentReceipt.receipt_root, atlasGolden.receipt_root);
 
-  // The released adopter toolchain and protected Kungfu source can represent
-  // different schema cuts. Their fixtures must retain the same
-  // release-independent source and semantic closure.
+  // Compiler release identity and schema evolution contribute to Pack and
+  // Atlas content roots. The KFD-bundled fixture may therefore represent a
+  // different Xinfa release and schema set, but it must retain the same
+  // release-independent source and semantic closure. The KFD verification
+  // below independently validates the bundled schema/root pair.
   assert.equal(bundledAtlas.compiler.product, 'xinfa');
   assert.equal(bundledAtlas.roots.cut, atlasGolden.cut_root);
   assert.equal(bundledAtlas.roots.semantic, atlasGolden.semantic_root);

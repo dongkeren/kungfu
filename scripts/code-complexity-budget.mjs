@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // @ts-check
 
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -19,34 +18,54 @@ import {
   validWaiverFor,
   waiverIssues,
 } from '../framework/maintainability/complexity-governance.mjs';
+import {
+  baselineBytes,
+  baselineChangedPaths,
+  classify,
+  git,
+  gitLines,
+  gitResult,
+  hasGeneratedProvenance,
+  isEligible,
+  language,
+  lineCount,
+  ownerFor,
+} from '../framework/maintainability/source-analysis-kernel.mjs';
 import { devMergeBaseCandidates } from './candidate-timeline-events.cjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const POLICY_PATH = 'framework/maintainability/code-complexity-policy.json';
-const GIT_TIMEOUT_MS = Number(
-  process.env.KUNGFU_GIT_COMMAND_TIMEOUT_MS || 10_000,
-);
+const RETIRED_COMPLEXITY_SIGNING_MARKERS = [
+  ['ed25519-6688', '12bf28659460'],
+  ['ed25519-9ff2', '1f6e6f64c985'],
+  ['kungfu-origin-complexity-', 'transition-review'],
+  ['kungfu-origin-complexity-', 'transition-review-v2'],
+  ['requiresIndependent', 'SignedReceipt'],
+  ['trusted', 'Authorities'],
+  ['approvalReceipt', 'Schema'],
+  ['kungfu.code-complexity-budget-', 'approval-receipt/v1'],
+  ['baselineTransition', 'Authorization'],
+  ['signedWaiver', 'Fixture'],
+  ['invalid-approval-', 'signature'],
+].map((parts) => parts.join(''));
+const RETIRED_COMPLEXITY_SIGNING_FIELDS = [
+  ['approval', '_receipt'],
+  ['authority', '_id'],
+  ['key', '_id'],
+  ['public', '_key_pem'],
+  ['authorization', '_root'],
+].map((parts) => parts.join(''));
+const COMPLEXITY_GOVERNANCE_PATHS = [
+  'framework/maintainability/baseline-transitions/',
+  'framework/maintainability/code-complexity-policy.json',
+  'framework/maintainability/complexity-governance.mjs',
+  'framework/maintainability/waivers/',
+  'scripts/code-complexity-budget.mjs',
+  'scripts/code-complexity-budget.test.mjs',
+];
 
 function readJson(relative) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, relative), 'utf8'));
-}
-
-export function git(args, options = {}, runner = spawnSync) {
-  const result = runner('git', args, {
-    cwd: ROOT,
-    encoding: options.binary ? null : 'utf8',
-    maxBuffer: 128 * 1024 * 1024,
-    timeout: GIT_TIMEOUT_MS,
-  });
-  if (result.error?.code === 'ETIMEDOUT')
-    throw new Error(
-      `git ${args.join(' ')} timed out after ${GIT_TIMEOUT_MS}ms`,
-    );
-  if (result.status !== 0)
-    throw new Error(
-      `git ${args.join(' ')} failed: ${String(result.stderr || '').trim()}`,
-    );
-  return result.stdout;
 }
 
 function readJsonAt(ref, relative) {
@@ -68,266 +87,53 @@ export function protectedBaselineCandidates(
   });
 }
 
-function gitLines(args) {
-  return String(git(args))
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function lineCount(bytes) {
-  if (!bytes.length) return 0;
-  let lines = 1;
-  for (const byte of bytes) if (byte === 10) lines += 1;
-  if (bytes[bytes.length - 1] === 10) lines -= 1;
-  return lines;
-}
-
-function language(pathname) {
-  const extension = path.posix.extname(pathname).toLowerCase();
-  if (
-    ['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx'].includes(
-      extension,
-    )
-  )
-    return 'c-cpp';
-  if (extension === '.py') return 'python';
-  if (['.js', '.mjs', '.cjs', '.ts', '.tsx'].includes(extension))
-    return 'javascript-typescript';
-  if (extension === '.rs') return 'rust';
-  if (['.sh', '.cmd', '.ps1'].includes(extension) || pathname === 'shifu')
-    return 'shell';
-  if (
-    ['.cmake', '.gyp', '.gypi'].includes(extension) ||
-    path.posix.basename(pathname) === 'CMakeLists.txt'
-  )
-    return 'build-declaration';
-  return 'declarative';
-}
-
-function isEligible(pathname, policy) {
-  if (
-    pathname === '.kungfu/qualification' ||
-    pathname.startsWith('.kungfu/qualification/')
-  )
-    return false;
-  const metadataPaths = [policy.baselinePath];
-  const metadataPrefixes = [
-    policy.waiverDirectory,
-    policy.baselineGovernance?.transitionDirectory,
-  ].filter(Boolean);
-  if (
-    metadataPaths.includes(pathname) ||
-    metadataPrefixes.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    )
-  )
-    return false;
-  return (
-    policy.specialEligibleNames.includes(path.posix.basename(pathname)) ||
-    policy.eligibleExtensions.includes(
-      path.posix.extname(pathname).toLowerCase(),
-    )
-  );
-}
-
-function matchesAny(pathname, patterns) {
-  return patterns.some((pattern) => pathname.includes(pattern));
-}
-
-function generatedMarker(bytes) {
-  return bytes
-    .subarray(0, 2048)
-    .toString('utf8')
-    .split('\n')
-    .slice(0, 24)
-    .find((line) =>
-      /^\s*(?:\/\/|#|\/\*|\*)\s*(?:@generated|generated file|auto-generated|automatically generated|do not edit)\b/iu.test(
-        line,
-      ),
+export function complexitySigningResidueAudit(entries) {
+  const findings = [];
+  for (const entry of entries) {
+    const scoped = COMPLEXITY_GOVERNANCE_PATHS.some(
+      (candidate) =>
+        entry.path === candidate || entry.path.startsWith(candidate),
     );
-}
-
-function classify(pathname, bytes) {
-  const basename = path.posix.basename(pathname);
-  const extension = path.posix.extname(pathname).toLowerCase();
-  if (
-    pathname.startsWith('.kungfu/') ||
-    matchesAny(pathname, [
-      'docs/qualification/evidence/',
-      '/evidence/',
-      '/qualification/reports/',
-      '/retained/',
-    ])
-  )
-    return 'retained-evidence';
-  if (
-    matchesAny(pathname, [
-      'framework/core/.deps/',
-      '/node_modules/',
-      '/third_party/',
-      '/third-party/',
-      '/vendor/',
-      '/vendored/',
-    ])
-  )
-    return 'vendored-source';
-  if (
-    /(?:^|[/_.-])generated(?:[/_.-]|$)/u.test(pathname) ||
-    generatedMarker(bytes)
-  )
-    return 'generated-projection';
-  if (
-    /(?:^|\/)(?:test|tests|fixtures?|__tests__)(?:\/|$)/u.test(pathname) ||
-    /(?:^|[._-])test(?:[._-]|$)/u.test(basename) ||
-    /(?:^|[._-])spec(?:[._-]|$)/u.test(basename) ||
-    /^test_/u.test(basename)
-  )
-    return 'test-or-fixture';
-  if (
-    [
-      '.fbs',
-      '.gyp',
-      '.gypi',
-      '.json',
-      '.jsonc',
-      '.lock',
-      '.proto',
-      '.toml',
-      '.yaml',
-      '.yml',
-    ].includes(extension) ||
-    extension === '.cmake' ||
-    basename === 'CMakeLists.txt'
-  )
-    return 'declarative-schema-or-table';
-  if (
-    (/\/include\//u.test(pathname) &&
-      ['.h', '.hh', '.hpp', '.hxx'].includes(extension)) ||
-    /(?:^|\/)(?:main|index|__init__)\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx|js|mjs|cjs|ts|tsx|py|rs)$/u.test(
-      pathname,
-    ) ||
-    pathname === 'shifu' ||
-    pathname === 'shifu.cmd'
-  )
-    return 'public-header-or-entrypoint';
-  if (
-    [
-      '.c',
-      '.cc',
-      '.cjs',
-      '.cmd',
-      '.cpp',
-      '.cxx',
-      '.h',
-      '.hh',
-      '.hpp',
-      '.hxx',
-      '.js',
-      '.mjs',
-      '.ps1',
-      '.py',
-      '.rs',
-      '.sh',
-      '.ts',
-      '.tsx',
-    ].includes(extension)
-  )
-    return 'first-party-handwritten-implementation';
-  return '';
-}
-
-function hasGeneratedProvenance(pathname, bytes) {
-  const marker = generatedMarker(bytes);
-  return Boolean(
-    marker &&
-      /(?:generated by|generator|source(?:_path)?)[\s:=]+[^\s]+/iu.test(marker),
-  );
-}
-
-function owns(rule, file) {
-  const included =
-    (rule.include_files || []).includes(file) ||
-    (rule.include_prefixes || []).some((prefix) => file.startsWith(prefix));
-  return (
-    included &&
-    !(rule.exclude_files || []).includes(file) &&
-    !(rule.exclude_prefixes || []).some((prefix) => file.startsWith(prefix))
-  );
-}
-
-function ownerFor(pathname, layers, ownership = []) {
-  const declared = ownership.filter((rule) =>
-    (rule.paths || []).includes(pathname),
-  );
-  if (declared.length === 1) return declared[0].owner;
-  if (declared.length > 1) return '';
-  if (pathname.startsWith('framework/core/')) {
-    const relative = pathname.slice('framework/core/'.length);
-    const owners = layers.components.filter((component) =>
-      owns(component, relative),
-    );
-    if (owners.length === 1) return owners[0].owner;
-    if (pathname.startsWith('framework/core/architecture/'))
-      return 'core/architecture';
-    if (pathname.startsWith('framework/core/tests/'))
-      return 'core/qualification';
-    if (
-      pathname.startsWith('framework/core/.gyp/') ||
-      pathname === 'framework/core/conanfile.py' ||
-      pathname === 'framework/core/CMakeLists.txt'
-    )
-      return 'core/build';
-    if (pathname.startsWith('framework/core/lib/')) return 'core/bindings';
-    return owners.length > 1 ? '' : 'core/package';
+    const markers = scoped
+      ? [
+          ...RETIRED_COMPLEXITY_SIGNING_MARKERS,
+          ...RETIRED_COMPLEXITY_SIGNING_FIELDS,
+        ]
+      : RETIRED_COMPLEXITY_SIGNING_MARKERS;
+    for (const marker of markers)
+      if (entry.bytes.includes(Buffer.from(marker)))
+        findings.push({ path: entry.path, marker });
   }
-  const segments = pathname.split('/');
-  const top = segments[0];
-  if (top === 'framework' && segments[1]) return `framework/${segments[1]}`;
-  if (top === 'extensions' && segments[1])
-    return `extension/${segments.slice(1, Math.min(3, segments.length - 1)).join('/') || segments[1]}`;
-  if (top === 'crates' && segments[1]) return `crate/${segments[1]}`;
-  if (top === 'developer' && segments[1]) return `developer/${segments[1]}`;
-  if (top === 'product') return 'product/assembly';
-  if (top === 'scripts' || pathname === 'shifu' || pathname === 'shifu.cmd')
-    return 'shifu/source-tooling';
-  if (top === 'docs') return 'kungfu/docs';
-  if (top === '.github') return 'kungfu/release-workflow';
-  if (top === 'config') return 'kungfu/config';
-  if (top === 'tests') return 'kungfu/qualification';
-  if (top === 'examples') return 'kungfu/examples';
-  if (top === 'types') return 'kungfu/public-types';
-  if (top === '.kungfu') return 'kungfu/retained-native-evidence';
-  if (
-    [
-      '.buildchain',
-      '.xinfa',
-      'package.json',
-      'pnpm-lock.yaml',
-      'Cargo.lock',
-      'Cargo.toml',
-    ].includes(top)
-  )
-    return 'kungfu/repository-contract';
-  if (!pathname.includes('/')) return 'kungfu/repository-contract';
-  return '';
+  return {
+    schema: 'kungfu.code-complexity-signing-residue-audit/v1',
+    verdict: findings.length ? 'fail' : 'pass',
+    markerCount:
+      RETIRED_COMPLEXITY_SIGNING_MARKERS.length +
+      RETIRED_COMPLEXITY_SIGNING_FIELDS.length,
+    globalMarkers: RETIRED_COMPLEXITY_SIGNING_MARKERS,
+    scopedFields: RETIRED_COMPLEXITY_SIGNING_FIELDS,
+    findings,
+  };
 }
 
-function baselineBytes(ref, pathname, changed) {
-  const absolute = path.join(ROOT, pathname);
-  if (!changed.has(pathname) && fs.existsSync(absolute))
-    return fs.readFileSync(absolute);
-  return Buffer.from(git(['show', `${ref}:${pathname}`], { binary: true }));
+function trackedComplexitySigningResidueAudit() {
+  const entries = String(git(['ls-files', '-z']))
+    .split('\0')
+    .filter(Boolean)
+    .map((pathname) => ({
+      path: pathname,
+      bytes: fs.readFileSync(path.join(ROOT, pathname)),
+    }));
+  return complexitySigningResidueAudit(entries);
 }
 
 function measureBaseline(policy, layers, ownership = []) {
   const ref = policy.baselineRef;
   const paths = gitLines(['ls-tree', '-r', '--name-only', ref]);
-  const changed = new Set(
-    gitLines(['diff', '--name-only', ref, '--']).concat(
-      gitLines(['ls-files', '--others', '--exclude-standard']),
-    ),
-  );
+  // The budget needs a path inventory, not similarity scores. Disabling rename
+  // detection keeps partial merge-group history from hydrating deleted,
+  // ineligible blobs while still exposing both sides of every rename.
+  const changed = baselineChangedPaths(ref);
   return paths
     .filter((pathname) => isEligible(pathname, policy))
     .map((pathname) => {
@@ -505,6 +311,7 @@ function regressionIssues(
   baseline,
   policy = {},
   renamedFrom = new Map(),
+  candidateAddedPaths = null,
 ) {
   const issues = [];
   const baselineByPath = new Map(
@@ -559,6 +366,7 @@ function regressionIssues(
       });
     if (
       !previous &&
+      (candidateAddedPaths === null || candidateAddedPaths.has(current.path)) &&
       current.class === 'first-party-handwritten-implementation' &&
       current.lines > budget.hard
     )
@@ -604,6 +412,8 @@ function regressionIssues(
   for (const current of files) {
     if (baselinePaths.has(current.path) || renamedFrom.has(current.path))
       continue;
+    if (candidateAddedPaths !== null && !candidateAddedPaths.has(current.path))
+      continue;
     if (current.class === 'first-party-handwritten-implementation') {
       if (!newHandwrittenByOwner.has(current.owner))
         newHandwrittenByOwner.set(current.owner, []);
@@ -636,7 +446,11 @@ function regressionIssues(
   }
   const currentByPath = new Map(files.map((file) => [file.path, file]));
   const renamedSources = new Set(renamedFrom.values());
-  const added = files.filter((file) => !baselinePaths.has(file.path));
+  const added = files.filter(
+    (file) =>
+      !baselinePaths.has(file.path) &&
+      (candidateAddedPaths === null || candidateAddedPaths.has(file.path)),
+  );
   const deleted = baseline.files.filter(
     (file) => !currentByPath.has(file.path) && !renamedSources.has(file.path),
   );
@@ -782,8 +596,7 @@ export function composeRenameEvidence(statusLines) {
 }
 
 function currentRenameMap(policy) {
-  const result = spawnSync(
-    'git',
+  const result = gitResult(
     [
       'log',
       '--reverse',
@@ -794,7 +607,7 @@ function currentRenameMap(policy) {
       `${renameEvidenceBase(policy)}..HEAD`,
       '--',
     ],
-    { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+    { maxBuffer: 16 * 1024 * 1024 },
   );
   if (result.status !== 0) return new Map();
   return composeRenameEvidence(result.stdout);
@@ -803,7 +616,38 @@ function currentRenameMap(policy) {
 function checkCurrent(policy, layers, baseline, ownership = []) {
   const files = measureCurrent(policy, layers, ownership);
   const renamedFrom = currentRenameMap(policy);
+  const protectedCandidates = policy.baselineGovernance
+    ? protectedBaselineCandidates(policy)
+    : [];
+  const protectedRef =
+    protectedCandidates.find((candidate) => {
+      const result = gitResult([
+        'rev-parse',
+        '--verify',
+        '--quiet',
+        `${candidate}^{commit}`,
+      ]);
+      return result.status === 0;
+    }) || protectedCandidates[0];
+  const protectedPaths = protectedRef
+    ? new Set(gitLines(['ls-tree', '-r', '--name-only', protectedRef]))
+    : null;
+  const candidateAddedPaths = protectedPaths
+    ? new Set(
+        files
+          .map((file) => file.path)
+          .filter((pathname) => !protectedPaths.has(pathname)),
+      )
+    : null;
   const issues = validateMeasured(files);
+  const residueAudit = trackedComplexitySigningResidueAudit();
+  issues.push(
+    ...residueAudit.findings.map((finding) => ({
+      code: 'retired-complexity-signing-residue',
+      path: finding.path,
+      message: `retired complexity signing marker remains: ${finding.marker}`,
+    })),
+  );
   const recomputedBaseline = buildBaseline(policy, layers, ownership);
   issues.push(
     ...baselineIntegrityIssues(
@@ -824,7 +668,15 @@ function checkCurrent(policy, layers, baseline, ownership = []) {
       path: policy.baselinePath,
       message: 'baseline ref does not match current policy',
     });
-  issues.push(...regressionIssues(files, baseline, policy, renamedFrom));
+  issues.push(
+    ...regressionIssues(
+      files,
+      baseline,
+      policy,
+      renamedFrom,
+      candidateAddedPaths,
+    ),
+  );
   const requester = String(git(['show', '-s', '--format=%ae', 'HEAD'])).trim();
   const evaluationTime = new Date();
   const waivers = loadWaivers(policy);
@@ -845,19 +697,6 @@ function checkCurrent(policy, layers, baseline, ownership = []) {
   const waived = [];
   const blocking = [];
   if (policy.baselineGovernance) {
-    const candidates = protectedBaselineCandidates(policy);
-    const protectedRef =
-      candidates.find((candidate) => {
-        const result = spawnSync(
-          'git',
-          ['rev-parse', '--verify', '--quiet', `${candidate}^{commit}`],
-          {
-            cwd: ROOT,
-            encoding: 'utf8',
-          },
-        );
-        return result.status === 0;
-      }) || candidates[0];
     try {
       const protectedPolicy = readJsonAt(protectedRef, POLICY_PATH);
       const protectedBaseline = readJsonAt(
@@ -883,6 +722,7 @@ function checkCurrent(policy, layers, baseline, ownership = []) {
           candidateBaseline: baseline,
           transitions,
           evaluationTime,
+          requester,
         }).map((issue) => enrichIssue(issue, baseline.files, files)),
       );
     } catch (error) {
@@ -935,6 +775,7 @@ function checkCurrent(policy, layers, baseline, ownership = []) {
     waived,
     softWarnings: advisory.active,
     resolvedAdvisories: advisory.resolved,
+    residueAudit,
     files,
   };
 }
@@ -1009,9 +850,11 @@ if (
 }
 
 export {
+  baselineChangedPaths,
   buildBaseline,
   checkCurrent,
   classify,
+  git,
   hasGeneratedProvenance,
   isEligible,
   language,

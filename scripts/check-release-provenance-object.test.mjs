@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
@@ -11,6 +14,38 @@ const contractPath =
   'framework/release/kungfu-release-provenance.contract.json';
 const artifactPath = 'config/release/kungfu-release-provenance.contract.json';
 const contract = readJson(contractPath);
+const ROOT = process.cwd();
+
+function git(repository, ...args) {
+  return execFileSync('git', args, {
+    cwd: repository,
+    encoding: 'utf8',
+  }).trim();
+}
+
+function sourceContent(repository, revision = 'HEAD') {
+  return JSON.parse(
+    execFileSync(
+      'python3',
+      [
+        'scripts/release-provenance-object.py',
+        'source-content',
+        '--repository',
+        repository,
+        '--revision',
+        revision,
+      ],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PYTHONPATH: path.join(ROOT, 'framework/core/src/python'),
+        },
+      },
+    ),
+  );
+}
 
 test('release provenance is a welded KFR2 semantic contract', () => {
   assert.equal(contract.status, 'implemented');
@@ -21,7 +56,9 @@ test('release provenance is a welded KFR2 semantic contract', () => {
     new Set([
       'derived-from',
       'acknowledges',
+      'has-content',
       'qualified-by',
+      'approved-by',
       'authorized-by',
       'implements-contract',
       'projected-as',
@@ -45,65 +82,51 @@ test('release provenance is a welded KFR2 semantic contract', () => {
   );
 });
 
-test('candidate and promotion flows dual-write and retain rooted evidence', () => {
+test('legacy provenance objects are retired from active release workflows', () => {
   const candidate = read('.github/workflows/dev-alpha-candidate-patrol.yml');
   const promotion = read('.github/workflows/release-new-version.yml');
 
-  assert.match(candidate, /release-provenance-object\.py candidate/);
-  assert.match(candidate, /release-provenance-object\.py verify/);
-  assert.match(candidate, /release-provenance-candidate-/);
-  assert.match(candidate, /priorStateRoot/);
-  assert.match(
-    candidate,
-    /--candidate-id "release-candidate:\$RELEASE_ID:\$QUALIFICATION_STATE_ROOT"/,
-  );
-  assert.match(
-    candidate,
-    /--dev-cut-id "release-cut:\$RELEASE_ID:development:\$QUALIFICATION_STATE_ROOT"/,
-  );
-  assert.match(
-    candidate,
-    /--previous-alpha-id "release-cut:\$RELEASE_ID:previous-alpha:\$QUALIFICATION_STATE_ROOT"/,
-  );
-
-  assert.match(promotion, /release-provenance-object\.py candidate/);
-  assert.match(promotion, /release-provenance-object\.py promotion/);
-  assert.match(promotion, /release-provenance-object\.py verify/);
-  assert.match(promotion, /candidate-provenance-root/);
-  assert.match(promotion, /promotion-provenance-root/);
-  assert.match(promotion, /release-provenance-promotion-/);
-  assert.match(promotion, /candidate_ancestry_observed=false/);
-  assert.match(
-    promotion,
-    /--candidate-id "release-candidate:\$RELEASE_ID:\$PREFLIGHT_RECEIPT_ROOT"/,
-  );
-  assert.match(
-    promotion,
-    /--dev-cut-id "release-cut:\$RELEASE_ID:development:\$PREFLIGHT_RECEIPT_ROOT"/,
-  );
-  assert.match(
-    promotion,
-    /--previous-alpha-id "release-cut:\$RELEASE_ID:previous-alpha:\$PREFLIGHT_RECEIPT_ROOT"/,
-  );
-  assert.match(
-    promotion,
-    /--promotion-id "release-promotion:\$\{\{ inputs\.target-ref \|\| github\.event\.pull_request\.base\.ref \}\}:\$PREFLIGHT_RECEIPT_ROOT"/,
-  );
-
   for (const workflow of [candidate, promotion]) {
-    assert.doesNotMatch(workflow, /release-provenance-object\.py publication/);
-    assert.doesNotMatch(
-      workflow,
-      /--candidate-id "\$(?:candidate_sha|CANDIDATE_SHA)"/,
+    assert.match(workflow, /check:durable-provenance-authority/u);
+    assert.doesNotMatch(workflow, /release-provenance-object\.py/u);
+    assert.doesNotMatch(workflow, /candidate-provenance/u);
+    assert.doesNotMatch(workflow, /promotion-provenance/u);
+    assert.doesNotMatch(workflow, /git show -s --format=%P/u);
+  }
+});
+
+test('canonical source content is stable across commit topology and changes on bytes', () => {
+  const repository = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kungfu-release-source-content-'),
+  );
+  try {
+    git(repository, 'init', '-q');
+    git(repository, 'config', 'user.name', 'Kungfu Test');
+    git(repository, 'config', 'user.email', 'test@libkungfu.dev');
+    fs.writeFileSync(path.join(repository, 'payload.txt'), 'same bytes\n');
+    git(repository, 'add', 'payload.txt');
+    git(repository, 'commit', '-q', '-m', 'initial');
+    const initial = sourceContent(repository);
+    git(
+      repository,
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'different topology',
     );
-    assert.doesNotMatch(
-      workflow,
-      /--dev-cut-id [^\n]*(?:SELECTED_SHA|dev_cut_sha)/,
-    );
-    assert.doesNotMatch(
-      workflow,
-      /--previous-alpha-id [^\n]*(?:previous_alpha_sha|PREVIOUS_ALPHA_SHA)/,
-    );
+    const transported = sourceContent(repository);
+    fs.writeFileSync(path.join(repository, 'payload.txt'), 'changed bytes\n');
+    git(repository, 'add', 'payload.txt');
+    git(repository, 'commit', '-q', '-m', 'change content');
+    const changed = sourceContent(repository);
+
+    assert.equal(initial.algorithm, 'sha256-canonical-file-set-v1');
+    assert.equal(initial.digest, transported.digest);
+    assert.equal(initial.contentRoot, transported.contentRoot);
+    assert.notEqual(initial.digest, changed.digest);
+  } finally {
+    fs.rmSync(repository, { force: true, recursive: true });
   }
 });
 

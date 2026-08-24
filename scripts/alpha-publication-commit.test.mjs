@@ -8,16 +8,151 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import {
+  bindPublicationReleaseAssets,
   existingReleaseAssetIsWinner,
+  publicationArtifactDrift,
   publicationCommitEvidence,
+  publicationManifestSet,
   publicationTimestamp,
   signingIdentity,
   validateExistingLauncherRelease,
   validateExistingPublicationIdentity,
 } from './alpha-publication-commit.mjs';
 
+test('publication consumes one exact manifest set from the sealed candidate', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kungfu-publication-set-'),
+  );
+  const sourceSha = '1'.repeat(40);
+  const version = '4.0.0-alpha.3';
+  try {
+    const passport = path.join(root, 'release-candidate-passport.json');
+    fs.writeFileSync(
+      passport,
+      JSON.stringify({ source: { headSha: sourceSha } }),
+    );
+    for (const [platform, architecture] of [
+      ['darwin', 'arm64'],
+      ['linux', 'x64'],
+      ['win32', 'x64'],
+    ]) {
+      const directory = path.join(root, `${platform}-${architecture}`);
+      fs.mkdirSync(directory);
+      fs.writeFileSync(
+        path.join(
+          directory,
+          `kungfu-upgrade-${version}-${platform}-${architecture}.json`,
+        ),
+        JSON.stringify({
+          schema: 'kungfu.product-upgrade.manifest/v1',
+          productVersion: version,
+          sourceCommit: sourceSha,
+          platform,
+          architecture,
+          artifacts: [
+            {
+              kind: 'cli',
+              url: `https://example.invalid/${platform}-${architecture}`,
+              size: 42,
+              digest: `sha256:${'a'.repeat(64)}`,
+            },
+          ],
+        }),
+      );
+    }
+    assert.deepEqual(
+      publicationManifestSet({
+        payloadRoot: root,
+        candidatePassportPath: passport,
+        version,
+        sourceSha,
+      }).manifests.map(
+        ({ platform, architecture }) => `${platform}-${architecture}`,
+      ),
+      ['darwin-arm64', 'linux-x64', 'win32-x64'],
+    );
+    assert.throws(
+      () =>
+        publicationManifestSet({
+          payloadRoot: root,
+          candidatePassportPath: passport,
+          version: '4.0.0-alpha.4',
+          sourceSha,
+        }),
+      /manifest version drifted/u,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('publication binds channel URLs to exact uploaded release bytes', () => {
+  const releaseTag = 'v4.0.0-alpha.2';
+  const digest = `sha256:${'a'.repeat(64)}`;
+  const admission = {
+    manifests: [
+      {
+        platform: 'darwin',
+        architecture: 'arm64',
+        manifest: {
+          artifacts: [
+            {
+              kind: 'runtime',
+              url: 'app-resource://kungfu',
+              size: 1,
+              digest: `sha256:${'b'.repeat(64)}`,
+            },
+            {
+              kind: 'cli',
+              url: `${releaseBase(releaseTag)}/Kungfu%20CLI.tar.gz`,
+              size: 42,
+              digest,
+            },
+          ],
+        },
+      },
+    ],
+  };
+  const releaseAssets = [
+    {
+      name: 'Kungfu.CLI.tar.gz',
+      state: 'uploaded',
+      size: 42,
+      digest,
+    },
+  ];
+  const bound = bindPublicationReleaseAssets({
+    admission,
+    releaseAssets,
+    releaseTag,
+  });
+  const cli = bound.manifests[0].manifest.artifacts[1];
+  assert.equal(cli.url, `${releaseBase(releaseTag)}/Kungfu.CLI.tar.gz`);
+  assert.deepEqual(
+    publicationArtifactDrift({
+      channelIndex: {
+        entries: [
+          {
+            platform: 'darwin',
+            architecture: 'arm64',
+            manifest: bound.manifests[0].manifest,
+          },
+        ],
+      },
+      releaseAssets,
+      releaseTag,
+    }),
+    [],
+  );
+});
+
+function releaseBase(releaseTag) {
+  return `https://github.com/kungfu-systems/kungfu/releases/download/${releaseTag}`;
+}
+
 test('existing publication authority is reusable only for the exact Alpha identity', () => {
   const candidateSourceSha = '1'.repeat(40);
+  const builtSourceSha = '4'.repeat(40);
   const releaseSha = '2'.repeat(40);
   const releaseTag = 'v4.0.0-alpha.1';
   const bundle = {
@@ -45,6 +180,17 @@ test('existing publication authority is reusable only for the exact Alpha identi
     releaseTag,
   };
   assert.equal(validateExistingPublicationIdentity(expected), bundle);
+  assert.equal(
+    validateExistingPublicationIdentity({
+      ...expected,
+      acceptedSourceShas: [candidateSourceSha, builtSourceSha],
+      bundle: {
+        ...bundle,
+        identity: { ...bundle.identity, sourceCommit: builtSourceSha },
+      },
+    }).identity.sourceCommit,
+    builtSourceSha,
+  );
   assert.throws(
     () =>
       validateExistingPublicationIdentity({
@@ -199,7 +345,10 @@ test('sealed-candidate recovery passes the immutable candidate source only to th
     /publication-commit-command: BUILDCHAIN_PUBLICATION_COMMIT_PRODUCT_ROOT=\$GITHUB_WORKSPACE BUILDCHAIN_PUBLICATION_COMMIT_CANDIDATE_SOURCE_SHA=\$\{\{ inputs\.resume-candidate-source-sha \}\} node \.buildchain\/publication-controller\/scripts\/alpha-publication-commit\.mjs/u,
   );
   assert.match(source, /root: PRODUCT_ROOT,[\s\S]*expectedSourceCommit:/u);
-  assert.match(source, /expectedSourceSha: sourceSha/u);
+  assert.match(
+    source,
+    /publicationManifestSet\(\{[\s\S]*sourceSha,[\s\S]*\}\)/u,
+  );
   assert.match(
     source,
     /bindProductReleaseCut\(entry\.manifest,[\s\S]*sourceBuild: false/u,

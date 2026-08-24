@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(kungfu LANGUAGES C CXX)
 
-set(KUNGFU_SDK_VERSION "4.0.0-alpha.2" CACHE STRING "Installed Kungfu SDK version")
+set(KUNGFU_SDK_VERSION "4.0.0-alpha.3" CACHE STRING "Installed Kungfu SDK version")
 
 ##########################################################################
 
@@ -157,6 +157,10 @@ if ("runtime-contracts" IN_LIST KUNGFU_BUILD_COMPONENTS AND
     message(STATUS "Enabled KFD Agent Runtime adapter")
     add_subdirectory(src/kfd-agent-runtime)
   endif()
+endif()
+
+if(KUNGFU_WITH_CORE_TESTS AND TARGET kungfu_compile_contract)
+  add_subdirectory(tests)
 endif()
 
 # Public-header self-compilation and frozen old-consumer ABI tests are generated

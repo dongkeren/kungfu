@@ -101,23 +101,49 @@ export function validatePromotionWorkflowAuthority(
 }
 export function validateBuildWorkflowAuthority(
   buildWorkflow,
-  workflowShellRef,
+  buildchainContract,
 ) {
-  if (workflowShellRef !== 'v3-alpha')
-    throw new Error('Build workflow shell channel is invalid');
+  const workflowShellRef = buildchainContract.build_channel_ref;
+  const workflowShellMajor = buildchainContract.build_major;
+  const workflowShellSha = buildchainContract.build_workflow_shell_resolved_sha;
+  const runtimeSha = buildchainContract.build_runtime_resolved_sha;
   if (
-    !buildWorkflow.includes(
-      `uses: kungfu-systems/buildchain/.github/workflows/.build.yml@${workflowShellRef}`,
-    ) ||
-    !/^\s+buildchain-ref: \$\{\{ inputs\.buildchain-ref \|\| 'v3-alpha' \}\}\s*$/mu.test(
-      buildWorkflow,
-    ) ||
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@v3(?:\s|$)/mu.test(
-      buildWorkflow,
-    ) ||
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@[0-9a-f]{40}/u.test(
-      buildWorkflow,
-    ) ||
+    workflowShellRef !== 'v3-alpha' ||
+    workflowShellMajor !== 'v3' ||
+    workflowShellRef !== `${workflowShellMajor}-alpha` ||
+    buildchainContract.workflow_shell_ref !== workflowShellRef
+  )
+    throw new Error('Build workflow shell channel or major is invalid');
+  if (
+    !/^[0-9a-f]{40}$/u.test(workflowShellSha) ||
+    !/^[0-9a-f]{40}$/u.test(runtimeSha) ||
+    workflowShellSha !== runtimeSha
+  )
+    throw new Error('Build workflow shell or runtime revision is invalid');
+  const buildShellCalls = [
+    ...buildWorkflow.matchAll(
+      /^\s+uses:\s+kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@(\S+)\s*$/gmu,
+    ),
+  ];
+  const buildchainRefLines =
+    buildWorkflow.match(/^\s+buildchain-ref:\s*.+$/gmu) || [];
+  const expectedChannelLines =
+    buildWorkflow.match(/^\s+buildchain-contract-expected-channel:\s*.+$/gmu) ||
+    [];
+  const expectedMajorLines =
+    buildWorkflow.match(/^\s+buildchain-contract-expected-major:\s*.+$/gmu) ||
+    [];
+  if (
+    buildShellCalls.length !== 1 ||
+    buildShellCalls[0][1] !== workflowShellSha ||
+    buildchainRefLines.length !== 1 ||
+    buildchainRefLines[0].trim() !== `buildchain-ref: ${runtimeSha}` ||
+    expectedChannelLines.length !== 1 ||
+    expectedChannelLines[0].trim() !==
+      'buildchain-contract-expected-channel: alpha' ||
+    expectedMajorLines.length !== 1 ||
+    expectedMajorLines[0].trim() !== 'buildchain-contract-expected-major: v3' ||
+    buildWorkflow.includes('inputs.buildchain-ref') ||
     buildWorkflow.includes('kungfu-trader/workflows@v1')
   )
     throw new Error('.github/workflows/build.yml authority drift');
@@ -304,10 +330,7 @@ export function validateRegistry(r, { root = ROOT } = {}) {
   const promotionRehearsal = read(
     path.join(root, 'docs/release-promotion-rehearsal.contract.json'),
   );
-  validateBuildWorkflowAuthority(
-    buildWorkflow,
-    promotionRehearsal.buildchain.workflow_shell_ref,
-  );
+  validateBuildWorkflowAuthority(buildWorkflow, promotionRehearsal.buildchain);
   const promotionWorkflow = fs.readFileSync(
     path.join(root, '.github/workflows/release-new-version.yml'),
     'utf8',

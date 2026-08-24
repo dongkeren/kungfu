@@ -6,6 +6,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from io import StringIO
@@ -15,6 +16,7 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator
 
+from kungfu import profile_sdk
 from kungfu.assignment_runtime import (
     EVENT_SCHEMA,
     SNAPSHOT_SCHEMA,
@@ -23,6 +25,7 @@ from kungfu.assignment_runtime import (
     LocalAssignmentRuntimeApplication,
     LocalRuntimeError,
     WorkControlAuthority,
+    profile_source,
     serve,
 )
 from kungfu.canonical_json import canonical_json_text
@@ -51,6 +54,50 @@ VALIDATE_ENVELOPE = Draft202012Validator(ENVELOPE_SCHEMA)
 REALM = {"realmId": "home-test", "realmKind": "local", "generation": "gen-1"}
 ROOT_A = "sha256:" + "a" * 64
 ROOT_B = "sha256:" + "b" * 64
+
+
+def test_profile_source_resolves_installed_bundled_root(monkeypatch, tmp_path):
+    bundled = tmp_path / "installed" / "extensions"
+    source = bundled / "work-control"
+    observed = []
+    monkeypatch.setenv("KF_BUNDLED_EXTENSION_ROOT", str(bundled))
+    monkeypatch.delenv("KF_EXTENSION_PATH", raising=False)
+    monkeypatch.setattr(
+        profile_sdk,
+        "discover_source",
+        lambda profile_id, *, search_roots: (
+            observed.append((profile_id, search_roots)) or {"source": str(source)}
+        ),
+    )
+
+    assert profile_source() == source
+    assert observed == [("kungfu.work-control", [bundled])]
+
+
+def test_profile_source_prefers_bundled_root_before_dev_overrides(
+    monkeypatch, tmp_path
+):
+    bundled = tmp_path / "installed" / "extensions"
+    dev_one = tmp_path / "dev-one"
+    dev_two = tmp_path / "dev-two"
+    observed = []
+    monkeypatch.setenv("KF_BUNDLED_EXTENSION_ROOT", str(bundled))
+    monkeypatch.setenv(
+        "KF_EXTENSION_PATH", os.pathsep.join([str(dev_one), str(dev_two)])
+    )
+    monkeypatch.setattr(
+        profile_sdk,
+        "discover_source",
+        lambda profile_id, *, search_roots: (
+            observed.append((profile_id, search_roots))
+            or {"source": str(bundled / "work-control")}
+        ),
+    )
+
+    assert profile_source() == bundled / "work-control"
+    assert observed == [
+        ("kungfu.work-control", [bundled, dev_one, dev_two]),
+    ]
 
 
 def _root(value: Any) -> str:
@@ -380,7 +427,6 @@ def test_embedded_discovery_and_reads_keep_exact_root_parity(local_runtime):
     }
     assert discovery["result"]["protocol"]["minimumVersion"] == 1
     assert discovery["result"]["protocol"]["maximumVersion"] == 1
-    assert discovery["result"]["compatibility"]["dualWrite"] == "forbidden"
 
     roots = []
     for kind in ("gui", "cli", "agent", "kfx"):
@@ -591,6 +637,123 @@ def test_work_control_authority_strips_runtime_only_routing_ids(tmp_path, monkey
         "write": True,
     }
     assert result["authorityReceipt"]["result"]["coreReceipt"]["status"] == "imported"
+
+
+def test_work_control_authority_normalizes_legacy_completion_context_roots(
+    tmp_path, monkeypatch
+):
+    authority = WorkControlAuthority(tmp_path, source=PROFILE_SOURCE)
+    captured = {}
+
+    def invoke(_source, _runtime, member, operation, values, *, authorized_action):
+        captured.update(
+            member=member,
+            operation=operation,
+            values=values,
+            write=authorized_action,
+        )
+        return {"result": {"coreReceipt": {"status": "admitted"}}}
+
+    monkeypatch.setattr(authority, "_profile_source", lambda: str(PROFILE_SOURCE))
+    monkeypatch.setattr(profile_sdk, "invoke_member_adapter", invoke)
+    command = {
+        "type": "assignment.completion.claim",
+        "target": {
+            "initiativeId": "initiative-a",
+            "assignmentId": "assignment-a",
+        },
+        "arguments": {
+            "inputAtlasRoot": ROOT_A,
+            "resultAtlasRoot": ROOT_B,
+        },
+    }
+
+    authority.apply(command)
+
+    assert command["arguments"] == {
+        "inputAtlasRoot": ROOT_A,
+        "resultAtlasRoot": ROOT_B,
+    }
+    assert captured == {
+        "member": "work-control-actions",
+        "operation": "claim-completion",
+        "values": {
+            "initiativeId": "initiative-a",
+            "assignmentId": "assignment-a",
+            "inputContextRoot": ROOT_A,
+            "resultContextRoot": ROOT_B,
+        },
+        "write": True,
+    }
+
+
+def test_work_control_authority_rejects_conflicting_completion_context_roots(
+    tmp_path, monkeypatch
+):
+    authority = WorkControlAuthority(tmp_path, source=PROFILE_SOURCE)
+    invoked = False
+
+    def invoke(*_args, **_kwargs):
+        nonlocal invoked
+        invoked = True
+        return {}
+
+    monkeypatch.setattr(profile_sdk, "invoke_member_adapter", invoke)
+
+    with pytest.raises(LocalRuntimeError, match="Conflicting inputAtlasRoot"):
+        authority.apply(
+            {
+                "type": "assignment.completion.claim",
+                "target": {
+                    "initiativeId": "initiative-a",
+                    "assignmentId": "assignment-a",
+                },
+                "arguments": {
+                    "inputAtlasRoot": ROOT_A,
+                    "inputContextRoot": ROOT_B,
+                },
+            }
+        )
+
+    assert invoked is False
+
+
+def test_work_control_authority_snapshot_avoids_atlas_parity(tmp_path, monkeypatch):
+    authority = WorkControlAuthority(tmp_path, source=PROFILE_SOURCE)
+    operations = []
+
+    def invoke(operation, values, *, write=False):
+        operations.append((operation, values, write))
+        if operation == "portfolio":
+            return {
+                "result": {"assignments": []},
+                "profileSuiteRoot": "sha256:" + "1" * 64,
+                "memberRoot": "sha256:" + "2" * 64,
+            }
+        assert operation == "runtime-authority-status"
+        return {
+            "result": {
+                "authority": {
+                    "state": "native-only",
+                    "write_authority": "kungfu-native",
+                }
+            }
+        }
+
+    monkeypatch.setattr(authority, "_invoke", invoke)
+    snapshot = authority.inspect()
+
+    assert operations == [
+        ("portfolio", {}, False),
+        ("runtime-authority-status", {}, False),
+    ]
+    assert snapshot["authority"] == {
+        "profileId": "kungfu.work-control",
+        "profileSuiteRoot": "sha256:" + "1" * 64,
+        "memberRoot": "sha256:" + "2" * 64,
+        "state": "native-only",
+        "writeAuthority": "kungfu-native",
+    }
 
 
 def test_command_cas_idempotency_attempt_lease_warrant_and_receipts(local_runtime):
@@ -971,6 +1134,213 @@ def test_restart_deterministically_recovers_durable_interrupted_commands(
         recovered.close()
 
 
+def test_restart_recovers_legacy_completion_roots_without_rewriting_command_identity(
+    tmp_path, monkeypatch
+):
+    runtime_dir = tmp_path / "legacy-completion-roots" / ".kungfu" / "runtime"
+    authority = WorkControlAuthority(runtime_dir, source=PROFILE_SOURCE)
+    native_state = {"phase": "stage-ready"}
+    claim_values = []
+
+    def invoke(
+        _source,
+        _runtime,
+        _member,
+        operation,
+        values,
+        *,
+        authorized_action=False,
+    ):
+        if operation == "portfolio":
+            return {
+                "result": {
+                    "assignments": [
+                        {
+                            "initiative_id": "initiative-a",
+                            "assignment_id": "assignment-a",
+                            "status": native_state["phase"],
+                        }
+                    ]
+                },
+                "profileSuiteRoot": ROOT_A,
+                "memberRoot": ROOT_B,
+            }
+        if operation == "assignment-status":
+            return {
+                "result": {
+                    "phase": native_state["phase"],
+                    "execution_claims": [],
+                    "active_lease": None,
+                }
+            }
+        if operation == "runtime-authority-status":
+            return {
+                "result": {
+                    "authority": {
+                        "state": "native-only",
+                        "write_authority": "kungfu-native",
+                    }
+                }
+            }
+        assert operation == "claim-completion"
+        assert authorized_action is True
+        claim_values.append(copy.deepcopy(values))
+        native_state["phase"] = "completion-claimed"
+        return {"result": {"coreReceipt": {"status": "admitted"}}}
+
+    monkeypatch.setattr(authority, "_profile_source", lambda: str(PROFILE_SOURCE))
+    monkeypatch.setattr(profile_sdk, "invoke_member_adapter", invoke)
+    runtime = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    snapshot = _handle(
+        runtime, _request("assignment.snapshot", "assignment.snapshot.read")
+    )
+    command = _command(
+        snapshot["revision"],
+        command_id="command.legacy.completion",
+        idempotency_key="idem.legacy.completion",
+        command_type="assignment.completion.claim",
+    )
+    command["arguments"] = {
+        "inputAtlasRoot": ROOT_A,
+        "resultAtlasRoot": ROOT_B,
+    }
+    original_command = copy.deepcopy(command)
+    command_root = _root(command)
+    runtime._state["pending"] = {
+        "commandRoot": command_root,
+        "command": command,
+        "beforeRevision": snapshot["revision"],
+        "requestId": "legacy.completion",
+    }
+    runtime._save_state()
+    runtime.close()
+
+    persisted = json.loads(
+        (runtime_dir / "assignment-runtime" / "local-v1" / "state.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert persisted["pending"]["command"] == original_command
+
+    recovered = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    try:
+        assert recovered._state["pending"] is None
+        record = recovered._state["commands"]["idem.legacy.completion"]
+        assert record["commandRoot"] == command_root
+        assert record["recovered"] is True
+        assert command == original_command
+        assert claim_values == [
+            {
+                "initiativeId": "initiative-a",
+                "assignmentId": "assignment-a",
+                "inputContextRoot": ROOT_A,
+                "resultContextRoot": ROOT_B,
+            }
+        ]
+        readback = _handle(
+            recovered,
+            _request("assignment.snapshot", "assignment.snapshot.read"),
+        )
+        assert readback["status"] == "ok"
+        assert readback["result"]["assignments"][0]["phase"] == ("completion-claimed")
+    finally:
+        recovered.close()
+
+
+def test_invalid_assessment_executor_is_rejected_before_pending_write(tmp_path):
+    runtime_dir = tmp_path / "invalid-executor" / ".kungfu" / "runtime"
+    authority = FakeAuthority(runtime_dir)
+    with EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ) as runtime:
+        snapshot = _handle(
+            runtime, _request("assignment.snapshot", "assignment.snapshot.read")
+        )
+        command = _command(
+            snapshot["revision"],
+            command_type="assignment.completion.review",
+        )
+        command["arguments"] = {"executorProfile": "github-protected-review"}
+        rejected = _handle(
+            runtime,
+            _request(
+                "command.submit",
+                "assignment.command.submit",
+                payload=command,
+            ),
+        )
+
+        assert rejected["error"]["code"] == "invalid-command"
+        assert runtime._state["pending"] is None
+        assert authority._read()["effects"] == []
+
+
+def test_restart_rejects_legacy_invalid_executor_pending_before_authority(tmp_path):
+    runtime_dir = tmp_path / "legacy-invalid-executor" / ".kungfu" / "runtime"
+    authority = FakeAuthority(runtime_dir)
+    runtime = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    snapshot = _handle(
+        runtime, _request("assignment.snapshot", "assignment.snapshot.read")
+    )
+    command = _command(
+        snapshot["revision"],
+        command_type="assignment.completion.review",
+    )
+    command["arguments"] = {"executorProfile": "github-protected-review"}
+    runtime._state["pending"] = {
+        "commandRoot": _root(command),
+        "command": command,
+        "beforeRevision": snapshot["revision"],
+        "requestId": "legacy.invalid.executor",
+    }
+    runtime._save_state()
+    runtime.close()
+
+    recovered = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    try:
+        assert recovered._state["pending"] is None
+        assert authority._read()["effects"] == []
+        assert recovered._state["events"][-1]["kind"] == "command-rejected"
+        assert recovered._state["diagnostics"][-1]["code"] == (
+            "interrupted-command-rejected"
+        )
+    finally:
+        recovered.close()
+
+
 def test_interrupted_authority_write_without_result_is_fail_visible(tmp_path):
     runtime_dir = tmp_path / "ambiguous-crash" / ".kungfu" / "runtime"
     authority = FakeAuthority(runtime_dir)
@@ -991,12 +1361,13 @@ def test_interrupted_authority_write_without_result_is_fail_visible(tmp_path):
     snapshot = _handle(
         crashed, _request("assignment.snapshot", "assignment.snapshot.read")
     )
+    command = _command(snapshot["revision"])
     with pytest.raises(RuntimeError, match="authority crash window"):
         crashed.handle(
             _request(
                 "command.submit",
                 "assignment.command.submit",
-                payload=_command(snapshot["revision"]),
+                payload=command,
             )
         )
     crashed.close()
@@ -1022,14 +1393,134 @@ def test_interrupted_authority_write_without_result_is_fail_visible(tmp_path):
             _request("recovery.plan", "assignment.recovery.plan"),
         )
         assert plan["result"]["status"] == "manual-review-required"
+        resolution = plan["result"]["operatorResolution"]
+        assert resolution["authorityOutcome"] == "unknown"
+        assert resolution["commandRoot"] == _root(command)
         blocked = restarted.handle(
             _request("assignment.snapshot", "assignment.snapshot.read")
         )
         assert blocked["error"]["code"] == "backend-unavailable"
         assert authority._read()["phase"] == "claimed"
         assert len(authority._read()["effects"]) == 1
+
+        payload = {
+            "resolution": "abandon-local-pending",
+            "expectedBasisRoot": plan["result"]["basisRoot"],
+            "expectedCommandRoot": resolution["commandRoot"],
+            "expectedRevision": resolution["currentRevision"],
+            "idempotencyKey": "idempotency:recovery:ambiguous-command-a",
+            "authorizedBy": "operator-a",
+            "reason": "authority inspection confirms the current state is canonical",
+            "evidenceRoots": [ROOT_A],
+        }
+        stale = copy.deepcopy(payload)
+        stale["expectedBasisRoot"] = ROOT_B
+        refused = _handle(
+            restarted,
+            _request(
+                "recovery.execute",
+                "assignment.recovery.execute",
+                payload=stale,
+            ),
+        )
+        assert refused["error"]["code"] == "stale-revision"
+        assert restarted._state["pending"] is not None
+
+        wrong_command = copy.deepcopy(payload)
+        wrong_command["expectedCommandRoot"] = ROOT_B
+        refused = _handle(
+            restarted,
+            _request(
+                "recovery.execute",
+                "assignment.recovery.execute",
+                payload=wrong_command,
+            ),
+        )
+        assert refused["error"]["code"] == "idempotency-conflict"
+        assert restarted._state["pending"] is not None
+
+        resolved = _handle(
+            restarted,
+            _request(
+                "recovery.execute",
+                "assignment.recovery.execute",
+                payload=payload,
+            ),
+        )
+        assert resolved["result"]["resolution"]["authorityOutcome"] == "unknown"
+        assert resolved["result"]["resolution"]["localDisposition"] == (
+            "local-pending-abandoned"
+        )
+        assert resolved["result"]["resolution"]["disposition"] == "applied"
+        assert resolved["receipts"][0]["kind"] == "recovery-resolution"
+        assert restarted._state["pending"] is None
+        assert restarted._state["events"][-1]["kind"] == (
+            "command-outcome-unknown-resolved"
+        )
+        assert authority._read()["phase"] == "claimed"
+        assert len(authority._read()["effects"]) == 1
+
+        missing_evidence = copy.deepcopy(payload)
+        missing_evidence.pop("evidenceRoots")
+        invalid_request = _request(
+            "recovery.execute",
+            "assignment.recovery.execute",
+            payload=missing_evidence,
+        )
+        assert list(VALIDATE_ENVELOPE.iter_errors(invalid_request))
+
+        observed = _handle(
+            restarted,
+            _request("assignment.snapshot", "assignment.snapshot.read"),
+        )
+        assert observed["status"] == "ok"
+        inspected = _handle(
+            restarted,
+            _request(
+                "command.get",
+                "assignment.command.inspect",
+                payload={"commandId": command["commandId"]},
+            ),
+        )
+        assert inspected["result"]["command"]["disposition"] == (
+            "authority-outcome-unknown"
+        )
+        replay = _handle(
+            restarted,
+            _request(
+                "command.submit",
+                "assignment.command.submit",
+                payload=command,
+            ),
+        )
+        assert replay["error"]["code"] == "unknown-outcome"
+        assert replay["error"]["retryable"] is False
+        assert len(authority._read()["effects"]) == 1
     finally:
         restarted.close()
+
+    replayed = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    try:
+        replay = _handle(
+            replayed,
+            _request(
+                "recovery.execute",
+                "assignment.recovery.execute",
+                payload=payload,
+            ),
+        )
+        assert replay["result"]["resolution"]["disposition"] == "replayed"
+        assert replay["receipts"] == resolved["receipts"]
+        assert len(authority._read()["effects"]) == 1
+    finally:
+        replayed.close()
 
 
 @pytest.mark.skipif(

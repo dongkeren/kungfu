@@ -11,7 +11,7 @@ from kungfu import assignment_close, assignment_evidence, assignment_review_life
 from kungfu.cli.commands import __registry__  # noqa: F401
 from kungfu.cli.commands import assignment_review
 from kungfu.cli.commands import kfc
-from kungfu.agent import run_agent, session_evidence
+from kungfu.agent import run_agent, session_contract
 
 
 def test_click_tree_exposes_one_work_family_and_no_assignment_alias():
@@ -242,7 +242,7 @@ def test_session_finalization_retains_a_new_exact_root_without_rewriting_source(
 
 def test_session_finalization_accepts_retained_structured_agent_output():
     assert (
-        session_evidence._final_observation_text(
+        assignment_evidence._final_observation_text(
             {
                 "schema": "kungfu.agent-session.structured-snapshot/v1",
                 "agentText": "  structured Codex result  ",
@@ -256,7 +256,7 @@ def test_session_finalization_accepts_retained_structured_agent_output():
 
 def test_session_finalization_rejects_unretained_structured_agent_output():
     assert (
-        session_evidence._final_observation_text(
+        assignment_evidence._final_observation_text(
             {
                 "schema": "kungfu.agent-session.structured-snapshot/v1",
                 "agentText": "not retained",
@@ -268,7 +268,7 @@ def test_session_finalization_rejects_unretained_structured_agent_output():
     )
 
 
-def test_atlas_bridge_has_no_work_mutation_aliases():
+def test_atlas_primitive_has_no_work_mutation_commands():
     atlas_commands = set(kfc.commands["atlas"].commands)
     assert atlas_commands.isdisjoint(
         {
@@ -313,6 +313,7 @@ def test_reviewer_prompt_requires_exact_structured_criterion_coverage():
     plan = {
         "workspace": {"id": "project:starter"},
         "work": {
+            "initiativeId": "starter",
             "assignmentId": "write-brief",
             "assignmentRoot": assignment_root,
             "queryProofRoot": query_proof_root,
@@ -335,6 +336,7 @@ def test_reviewer_prompt_requires_exact_structured_criterion_coverage():
     assert '"schema": "kungfu.review-context/v1"' in prompt
     assert '"schema": "kungfu.work-ref/v1"' in prompt
     assert '"entityId": "write-brief"' in prompt
+    assert '"initiativeId": "starter"' in prompt
     assert f'"profileRoot": "{profile_root}"' in prompt
     assert f'"systemTimeCut": "{query_proof_root}"' in prompt
     assert '"mode": "fresh-independent-review"' in prompt
@@ -344,6 +346,9 @@ def test_reviewer_prompt_requires_exact_structured_criterion_coverage():
     assert "assess that admitted content directly" in prompt
     assert "only for evidence rows that do not contain content" in prompt
     assert run_agent.validate_continuation(continuation) == continuation
+    assert session_contract.validate_work_ref(
+        assignment_review.review_work_ref(plan)
+    ) == assignment_review.review_work_ref(plan)
 
 
 def test_fresh_reviewer_receives_the_exact_work_continuation_envelope(
@@ -356,6 +361,7 @@ def test_fresh_reviewer_receives_the_exact_work_continuation_envelope(
         "planRoot": root("9"),
         "workspace": {"id": "project:starter"},
         "work": {
+            "initiativeId": "starter",
             "assignmentId": "write-brief",
             "assignmentRoot": root("1"),
             "queryProofRoot": root("2"),
@@ -512,6 +518,7 @@ def test_exact_retained_passing_reviewer_evidence_is_reusable(tmp_path):
                 "entityRoot": plan["work"]["assignmentRoot"],
                 "purpose": "independent-completion-review",
                 "systemTimeCut": f"sha256:{'6' * 64}",
+                "initiativeId": plan["work"]["initiativeId"],
             }
         },
         "privacy": {

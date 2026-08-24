@@ -10,6 +10,7 @@ import {
   BUILDCHAIN_CONTROLLER_EVIDENCE_CONTRACT,
   controllerEvidenceDigest,
 } from '@kungfu-tech/buildchain/controller-evidence';
+import { resolvePublishedKfdAdopterCategoryProfiles } from '@kungfu-tech/buildchain/kfd-adopter-category-driver';
 import {
   createConsumerPublicationDecision,
   createPublicationAdmission,
@@ -21,6 +22,12 @@ import {
   verifyPublicationQualificationReceipt,
 } from '@kungfu-tech/buildchain/publication-authority';
 import { sha256Json } from '@kungfu-tech/buildchain/release-candidate';
+import { initAdopterManifest } from '@kungfu-tech/kfd/adopter-conformance/toolchain';
+import { semanticRoot } from '@kungfu-tech/kfd/scripts/self-conformance-contract.mjs';
+import {
+  createKungfuKfdProductRuntimeCategoryRequest,
+  evaluateKungfuKfdProductRuntimeCategory,
+} from '../framework/release/buildchain-kfd-runtime.mjs';
 import {
   KUNGFU_PUBLICATION_PREDICATE_ID,
   createKungfuConsumerPublicationDecision,
@@ -59,7 +66,7 @@ const CONTRACT_DIGEST =
     '',
   );
 const RECOVERED_CONTRACT_DIGEST =
-  RELEASE_POLICY.buildchain.runtimes.alpha.publicationContractDigests[1].replace(
+  RELEASE_POLICY.buildchain.runtimes.alpha.contractProjection.entries[0].contractDigest.replace(
     /^sha256:/u,
     '',
   );
@@ -78,7 +85,7 @@ function readJson(relative) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, relative), 'utf8'));
 }
 
-test('temporal release admission has exact legacy/proof parity and protected proof evidence', () => {
+test('temporal release admission is Fact-only with non-authoritative digest projections', () => {
   const contract = readJson(
     'framework/release/kungfu-temporal-release-admission.contract.json',
   );
@@ -86,17 +93,19 @@ test('temporal release admission has exact legacy/proof parity and protected pro
   for (const channel of RELEASE_POLICY.publication.channels) {
     assert.deepEqual(
       factProjection.channels[channel],
-      [
-        ...RELEASE_POLICY.buildchain.runtimes[channel]
-          .publicationContractDigests,
-      ].sort(),
+      RELEASE_POLICY.buildchain.runtimes[
+        channel
+      ].contractProjection.entries.map((entry) => entry.contractDigest),
     );
   }
   const projection = readJson(
-    'docs/qualification/evidence/buildchain-compatibility-proof-projection.json',
+    'docs/qualification/evidence/buildchain-compatibility-fact-projection.json',
   );
   assert.equal(contract.maximumPathDepth, 2);
-  assert.equal(contract.rollbackMode, 'legacy-exact');
+  assert.equal(contract.defaultMode, 'fact-only');
+  assert.deepEqual(contract.normalModes, ['fact-only']);
+  assert.equal('rollbackMode' in contract, false);
+  assert.equal('dualRead' in contract, false);
   assert.equal(
     contract.factAuthority.admittedDigests,
     'derived-from-active-proof-records',
@@ -104,14 +113,14 @@ test('temporal release admission has exact legacy/proof parity and protected pro
   assert.equal(contract.safety.realPublicationRequired, false);
   assert.equal(
     projection.source.sourceCommit,
-    '913b5d3fc486e225cf19f6e677129434db4850a6',
+    'd5fca430e1f15e0285ccf52dedfde476aeae759b',
   );
   assert.equal(
     projection.source.mergeCommit,
-    '10745d50aa93192c06b13f76942c4c291b482518',
+    '6b96bdad8d9f8ccf9275f27d9370a226a9c78465',
   );
-  assert.equal(projection.proofs.length, 3);
-  assert.equal(new Set(projection.registry.proofRoots).size, 5);
+  assert.equal(projection.facts.length, 9);
+  assert.equal(new Set(projection.selectedFactRoots).size, 3);
 });
 
 test('release admission denies promoted primitive without complete receipts', () => {
@@ -142,6 +151,171 @@ test('release admission denies promoted primitive without complete receipts', ()
         ],
       }),
     /missing-language-proof:rust.*missing-promotion-evidence:dogfoodReceipts/,
+  );
+});
+
+const PRODUCT_RUNTIME_OBSERVED_AT = '2026-08-13T12:00:00Z';
+const PRODUCT_RUNTIME_PACKAGE_ROOT = `sha256:${'c'.repeat(64)}`;
+
+function productRuntimeRooted(label) {
+  return semanticRoot({ label });
+}
+
+function productRuntimeFixture({ adopterId = 'kungfu-systems/kungfu' } = {}) {
+  const artifact = {
+    kind: 'git-commit',
+    coordinate: `${adopterId}@${SOURCE_SHA}`,
+    root: productRuntimeRooted(`${adopterId}:source-tree`),
+  };
+  const release = {
+    kind: 'release',
+    coordinate: `https://example.invalid/${adopterId}/releases/alpha`,
+    root: productRuntimeRooted(`${adopterId}:release-passport`),
+  };
+  const adopterManifest = initAdopterManifest({
+    manifestId: `${adopterId}:full-cut`,
+    adopterId,
+    artifactKind: artifact.kind,
+    artifactCoordinate: artifact.coordinate,
+    artifactRoot: artifact.root,
+    scope: 'Product runtime, KFX, release, and recovery evidence',
+    packageArtifactRoot: PRODUCT_RUNTIME_PACKAGE_ROOT,
+    verifiedAt: PRODUCT_RUNTIME_OBSERVED_AT,
+    maxAgeSeconds: 3600,
+  });
+  adopterManifest.releaseBindings.push({
+    id: `${adopterId}:alpha`,
+    artifact: structuredClone(artifact),
+    releasePassport: structuredClone(release),
+    kfdPackageRoot: PRODUCT_RUNTIME_PACKAGE_ROOT,
+  });
+
+  const selection = {
+    schemaVersion: 1,
+    contract: 'kfd.adopter-category-profile-selection/v1',
+    profiles: [
+      {
+        id: 'kfd.adopter-category/product-runtime',
+        version: '1.0.0',
+      },
+    ],
+  };
+  const resolution = resolvePublishedKfdAdopterCategoryProfiles(selection);
+  assert.equal(resolution.valid, true);
+  const project = {
+    adopterId,
+    source: structuredClone(artifact),
+    artifact: structuredClone(artifact),
+    release: structuredClone(release),
+  };
+  const projectRoot = semanticRoot(project);
+  const adopterManifestRoot = semanticRoot(adopterManifest);
+  const evidenceBinding = {
+    observedAt: PRODUCT_RUNTIME_OBSERVED_AT,
+    projectInstanceId: `${adopterId}@${SOURCE_SHA}`,
+    projectRoot,
+    adopterManifestRoot,
+    kfdPackageRoot: PRODUCT_RUNTIME_PACKAGE_ROOT,
+    categorySelectionRoot: resolution.selectionRoot,
+  };
+  const instanceManifest = {
+    $schema:
+      'https://kfd.libkungfu.dev/schemas/kfd-adopter-conformance/category-instance-manifest.schema.json',
+    schemaVersion: 1,
+    contract: 'kfd.adopter-category-instance-manifest/v1',
+    instanceId: evidenceBinding.projectInstanceId,
+    rootAlgorithm: 'sha256-kfd-canonical-json-v1',
+    project,
+    adopterManifest: {
+      contract: 'kfd.adopter-conformance-manifest/v1',
+      manifestId: adopterManifest.manifestId,
+      root: adopterManifestRoot,
+    },
+    kfdCut: {
+      packageVersion: adopterManifest.kfdCut.package.version,
+      packageRoot: PRODUCT_RUNTIME_PACKAGE_ROOT,
+      categoryCatalogRoot: resolution.catalogRoot,
+    },
+    selection,
+    selectionRoot: resolution.selectionRoot,
+    requirements: resolution.requirements.map((requirement) => ({
+      id: requirement.id,
+      evidence: requirement.evidenceKinds.map((kind) => ({
+        kind,
+        coordinate: `${artifact.coordinate}#${requirement.id}/${kind}`,
+        root: productRuntimeRooted(`${adopterId}:${requirement.id}:${kind}`),
+        ...evidenceBinding,
+      })),
+    })),
+    claimBoundary: {
+      categoryConformanceIsDeclarationOnly: true,
+      evidenceTransfer: false,
+      runtimePermission: false,
+      releaseAuthorization: false,
+      independentCertification: false,
+      semanticAuthorityTransfer: false,
+    },
+  };
+  return { adopterManifest, instanceManifest };
+}
+
+test('common gate accepts Kungfu as an ordinary product-runtime instance', () => {
+  const value = productRuntimeFixture();
+  const result = evaluateKungfuKfdProductRuntimeCategory({
+    ...value,
+    verifiedAt: PRODUCT_RUNTIME_OBSERVED_AT,
+    maxAgeSeconds: 3600,
+  });
+  assert.equal(result.status, 'passed', JSON.stringify(result.issues));
+  assert.equal(result.qualifying, false);
+  assert.equal(result.selfCertified, false);
+  assert.equal(result.semanticReport.valid, true);
+  assert.deepEqual(result.issues, []);
+});
+
+test('the same category evaluator accepts another project identity', () => {
+  const value = productRuntimeFixture({
+    adopterId: 'example.org/other-product',
+  });
+  const request = createKungfuKfdProductRuntimeCategoryRequest(
+    value.instanceManifest,
+  );
+  assert.equal(request.project.adopterId, 'example.org/other-product');
+  const result = evaluateKungfuKfdProductRuntimeCategory({
+    ...value,
+    verifiedAt: PRODUCT_RUNTIME_OBSERVED_AT,
+    maxAgeSeconds: 3600,
+  });
+  assert.equal(result.status, 'passed', JSON.stringify(result.issues));
+});
+
+test('product-runtime substitution and stale evidence fail closed', () => {
+  const substituted = productRuntimeFixture();
+  substituted.instanceManifest.project.artifact.root =
+    productRuntimeRooted('substitution');
+  const substitutionResult = evaluateKungfuKfdProductRuntimeCategory({
+    ...substituted,
+    verifiedAt: PRODUCT_RUNTIME_OBSERVED_AT,
+    maxAgeSeconds: 3600,
+  });
+  assert.equal(substitutionResult.status, 'failed');
+  assert.equal(
+    substitutionResult.issues.some(
+      ({ code }) => code === 'acp-instance-binding-mismatch',
+    ),
+    true,
+  );
+
+  const stale = productRuntimeFixture();
+  const staleResult = evaluateKungfuKfdProductRuntimeCategory({
+    ...stale,
+    verifiedAt: '2026-08-13T14:00:00Z',
+    maxAgeSeconds: 60,
+  });
+  assert.equal(staleResult.status, 'failed');
+  assert.equal(
+    staleResult.issues.some(({ code }) => code === 'acp-evidence-stale'),
+    true,
   );
 });
 
@@ -586,7 +760,7 @@ test('Kungfu consumer qualification seals only an exact current handoff', async 
         createDecision: createConsumerPublicationDecision,
         now: input.now,
       }),
-    /Buildchain contract digest policy mismatch/,
+    /Buildchain contract Fact selection rejected:.*temporal-contract-not-admitted/,
   );
 
   const receipt = createPublicationQualificationReceipt({

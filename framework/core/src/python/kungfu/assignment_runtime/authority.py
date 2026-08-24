@@ -29,6 +29,7 @@ RESPONSE_SCHEMA = "kungfu.assignment-runtime.response/v1"
 SNAPSHOT_SCHEMA = "kungfu.assignment-runtime.snapshot/v1"
 EVENT_SCHEMA = "kungfu.assignment-runtime.event/v1"
 RECEIPT_SCHEMA = "kungfu.assignment-runtime.receipt/v1"
+RECOVERY_RESOLUTION_SCHEMA = "kungfu.assignment-runtime.recovery-resolution/v1"
 DISCOVERY_SCHEMA = "kungfu.assignment-runtime.discovery/v1"
 STREAM_ID = "assignment-events"
 
@@ -57,6 +58,7 @@ _ERROR_RETRYABLE = {
     "warrant-invalid": False,
     "unauthorized": False,
     "invalid-command": False,
+    "unknown-outcome": False,
     "internal": True,
 }
 _COMMAND_OPERATIONS = {
@@ -76,6 +78,7 @@ _COMMAND_OPERATIONS = {
     "initiative.bundle.import": "import-initiative",
 }
 _LEASE_COMMANDS = {"assignment.claim", "assignment.stage"}
+_ASSESSMENT_EXECUTOR_PROFILES = {"inline", "thread", "process"}
 _PROCESS_WRITERS: set[str] = set()
 _PROCESS_WRITERS_GUARD = threading.Lock()
 
@@ -143,6 +146,64 @@ class LocalRuntimeError(RuntimeError):
         self.diagnostics = list(diagnostics or [])
 
 
+def _validate_command_arguments(command: Mapping[str, Any]) -> None:
+    arguments = command.get("arguments")
+    if not isinstance(arguments, Mapping):
+        return
+    executor_profile = str(arguments.get("executorProfile") or "")
+    if executor_profile and executor_profile not in _ASSESSMENT_EXECUTOR_PROFILES:
+        raise LocalRuntimeError(
+            "invalid-command",
+            "Assessment executor profile must be inline, thread, or process",
+            details={"field": "executorProfile"},
+        )
+
+
+def _normalize_completion_context_roots(
+    operation: str, arguments: Mapping[str, Any]
+) -> dict[str, Any]:
+    normalized = dict(arguments)
+    if operation != "claim-completion":
+        return normalized
+    for legacy, canonical in (
+        ("inputAtlasRoot", "inputContextRoot"),
+        ("resultAtlasRoot", "resultContextRoot"),
+    ):
+        if legacy not in normalized:
+            continue
+        if canonical in normalized and normalized[canonical] != normalized[legacy]:
+            raise LocalRuntimeError(
+                "invalid-command",
+                f"Conflicting {legacy} and {canonical} values",
+                details={"fields": [legacy, canonical]},
+            )
+        normalized.setdefault(canonical, normalized[legacy])
+        normalized.pop(legacy)
+    return normalized
+
+
+def _interrupted_command_rejection(
+    pending: Mapping[str, Any], error: LocalRuntimeError
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    command = dict(pending["command"])
+    details = {
+        "commandId": str(command.get("commandId") or ""),
+        "commandRoot": str(pending.get("commandRoot") or ""),
+        "errorCode": error.code,
+    }
+    diagnostic = {
+        "code": "interrupted-command-rejected",
+        "message": (
+            "An interrupted command failed deterministic validation before "
+            "authority execution"
+        ),
+        "severity": "warning",
+        "recovery": [],
+        "details": {**details, **dict(error.details)},
+    }
+    return diagnostic, details
+
+
 class AssignmentAuthority(Protocol):
     """Private adapter boundary to the one native transition authority."""
 
@@ -177,13 +238,14 @@ class WorkControlAuthority:
     ) -> dict[str, Any]:
         from kungfu import profile_sdk
 
+        adapter_values = _normalize_completion_context_roots(operation, values)
         try:
             return profile_sdk.invoke_member_adapter(
                 self._profile_source(),
                 self.runtime_dir,
                 "work-control-actions",
                 operation,
-                dict(values),
+                adapter_values,
                 authorized_action=write,
             )
         except profile_sdk.ProfileSdkError as error:
@@ -215,7 +277,7 @@ class WorkControlAuthority:
         allowed = {
             "acceptance_root": "acceptanceRoot",
             "assignment_id": "assignmentId",
-            "atlas_root": "atlasRoot",
+            "context_root": "contextRoot",
             "initiative_id": "initiativeId",
             "objective": "objective",
             "parent_assignment_id": "parentAssignmentId",
@@ -271,7 +333,7 @@ class WorkControlAuthority:
                     {
                         "initiativeId": initiative_id,
                         "assignmentId": assignment_id,
-                        "source": "atlas",
+                        "source": "kungfu",
                     },
                 )
                 status = dict(status_receipt.get("result") or {})
@@ -315,7 +377,7 @@ class WorkControlAuthority:
         authority_receipt = self._invoke("runtime-authority-status", {})
         authority = dict(authority_receipt.get("result") or {}).get("authority") or {}
         write_authority = str(authority.get("write_authority") or "")
-        if write_authority not in {"atlas-adapter", "kungfu-native"}:
+        if write_authority != "kungfu-native":
             raise LocalRuntimeError(
                 "ambiguous-identity",
                 "Work Control reports an ambiguous write authority",
@@ -328,7 +390,6 @@ class WorkControlAuthority:
                 "memberRoot": str(portfolio_receipt["memberRoot"]),
                 "state": str(authority.get("state") or "unknown"),
                 "writeAuthority": write_authority,
-                "migrationId": str(authority.get("migration_id") or ""),
             },
             "assignments": assignments,
             "factRefs": fact_refs,

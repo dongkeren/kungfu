@@ -14,8 +14,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
-import shutil
 import subprocess
 import sys
 import threading
@@ -33,8 +31,13 @@ from kungfu.agent.native_launch import (
     NativeLaunchCoordinator,
     apply_platform_tls_trust,
     encode_wrapper_prompt as _encode_windows_wrapper_prompt,
+    native_environment as _native_environment,
+    native_provider_adapter,
+    provider_interactive_argv as interactive_launch_argv,
+    provider_runtime_health as _provider_runtime_health,
     resolve_command_wrapper as _resolve_windows_command_wrapper,
 )
+from kungfu.agent.provider_bootstrap import refresh_native_skill_runtime_audit
 from kungfu.agent.managed_run import ManagedRunCoordinator
 from kungfu.agent.provider_output import (
     parse_provider_output,
@@ -42,7 +45,9 @@ from kungfu.agent.provider_output import (
     public_command_preview as public_command_preview,
 )
 from kungfu.content_hash import compute_content_hash_value
+from kungfu.initiative_family import canonical as assignment_canonical
 from kungfu.skill import build_skill_context
+from kungfu.workspace import resolve_workspace_target
 from kungfu.rewind import (
     ACTION_RUN_BEGIN,
     ACTION_RUN_END,
@@ -65,19 +70,30 @@ def bind_current_native_work(
     assignment_id: str,
     *,
     work_workspace_root: str | None = None,
+    envelope_override: Mapping[str, Any] | None = None,
+    console_workspace_root: str | None = None,
 ) -> dict[str, Any] | None:
     """Atomically bind the current native attempt before it acts on Work."""
 
     raw = os.environ.get("KUNGFU_AGENT_CONSOLE_ENVELOPE", "").strip()
-    if not raw:
+    if not raw and envelope_override is None:
         return None
-    envelope = json.loads(raw)
-    from kungfu import assignment_orchestration as orchestration
+    injected = envelope_override is None
+    envelope = (
+        json.loads(raw)
+        if injected
+        else session_contract.validate_agent_console_envelope(
+            dict(envelope_override or {})
+        )
+    )
     from kungfu import profile_sdk
     from kungfu.cli.commands import assignment as work_commands
-    from kungfu.workspace import resolve_workspace_target
 
-    workspace_root = os.environ.get("KUNGFU_WORKSPACE_ROOT", "").strip()
+    workspace_root = (
+        os.environ.get("KUNGFU_WORKSPACE_ROOT", "").strip()
+        if injected
+        else str(console_workspace_root or "").strip()
+    )
     if not workspace_root:
         raise ValueError(
             "native Agent Console is missing its Kungfu Project workspace root"
@@ -91,16 +107,19 @@ def bind_current_native_work(
             "native Agent Console workspace does not match its Kungfu Project"
         )
     project_runtime_dir = str(Path(target.runtime_dir).expanduser().resolve())
-    injected_runtime_dir = os.environ.get("KUNGFU_AGENT_RUNTIME_DIR", "").strip()
-    if not injected_runtime_dir:
-        raise ValueError(
-            "native Agent Console is missing its stable Kungfu Project runtime"
-        )
-    if Path(injected_runtime_dir).expanduser().resolve() != Path(project_runtime_dir):
-        raise ValueError(
-            "native Agent Console runtime does not match its Kungfu Project"
-        )
-    agent_resources.validated_current_bootstrap_receipt(envelope)
+    if injected:
+        injected_runtime_dir = os.environ.get("KUNGFU_AGENT_RUNTIME_DIR", "").strip()
+        if not injected_runtime_dir:
+            raise ValueError(
+                "native Agent Console is missing its stable Kungfu Project runtime"
+            )
+        if Path(injected_runtime_dir).expanduser().resolve() != Path(
+            project_runtime_dir
+        ):
+            raise ValueError(
+                "native Agent Console runtime does not match its Kungfu Project"
+            )
+        agent_resources.validated_current_bootstrap_receipt(envelope)
 
     # ``runtime_dir`` belongs to the CLI invocation context. A packaged CLI may
     # deliberately use ``--home`` while the native attempt is attached to a
@@ -122,10 +141,6 @@ def bind_current_native_work(
         exact_work_runtime_dir = str(
             Path(work_target.runtime_dir).expanduser().resolve()
         )
-        if Path(runtime_dir).expanduser().resolve() != Path(exact_work_runtime_dir):
-            raise ValueError(
-                "native Work binding runtime does not match the explicit Project"
-            )
         work_runtime_dir = exact_work_runtime_dir
         work_workspace_id = work_target.identity.workspace_id
         if work_workspace_id != str(envelope["workspaceId"]):
@@ -142,7 +157,7 @@ def bind_current_native_work(
         "profileRoot": work_control["profile_suite_root"],
         "entityType": "assignment",
         "entityId": assignment_id,
-        "entityRoot": orchestration.semantic_root(status["assignment"]),
+        "entityRoot": assignment_canonical.semantic_root(status["assignment"]),
         "purpose": "continue-project-assignment",
         "systemTimeCut": status["query_proof_root"],
         "initiativeId": initiative_id,
@@ -153,7 +168,17 @@ def bind_current_native_work(
         "sessionAttemptId": str(envelope["attemptId"]),
     }
     actor_id = os.environ.get("KUNGFU_AGENT_SESSION_ACTOR", f"cli:{os.getpid()}")
-    plan = session_surface.invoke(
+
+    def invoke_session(request):
+        if injected:
+            return session_surface.invoke(request)
+        return session_surface.invoke_for_project(
+            request,
+            fallback_runtime_dir=project_runtime_dir,
+            cwd=workspace_root,
+        )
+
+    plan = invoke_session(
         {
             "operation": "plan-native-bind-work",
             "client": "kfd3-agent",
@@ -166,7 +191,7 @@ def bind_current_native_work(
             },
         }
     )
-    receipt = session_surface.invoke(
+    receipt = invoke_session(
         {
             "operation": "bind-native-work",
             "client": "kfd3-agent",
@@ -475,278 +500,12 @@ def _direct_process_transport(
     return [*values[:-1], "-"], values[-1]
 
 
-def interactive_launch_argv(profile: Mapping[str, Any]) -> list[str]:
-    """Build the provider-native argv without managed-run prompt flags."""
+def native_environment(*args, **kwargs) -> dict[str, str]:
+    """Compatibility facade retaining the injectable Skill context seam."""
 
-    launch = dict(profile.get("launch") or {})
-    executable = str(launch.get("executable") or "")
-    if not executable:
-        raise ValueError("Agent Runtime Profile executable is required")
-    if launch.get("shellMode") is True:
-        raise ValueError(
-            "kungfu native Agent launch requires an exact executable profile; "
-            "shellMode is unsupported"
-        )
-    return [
-        executable,
-        *(str(value) for value in launch.get("interactiveArgv") or []),
-    ]
-
-
-def native_provider_adapter(
-    provider: str,
-    *,
-    runtime_dir: str,
-    session_id: str | None = None,
-    resolved_config: Mapping[str, Any] | None = None,
-    config_home: str | None = None,
-    runtime_home: str | None = None,
-) -> dict[str, Any]:
-    """Materialize one session-only Skill adapter for a provider-native UI."""
-
-    return runtime_profiles.materialize_adapter(
-        provider,
-        runtime_dir=runtime_dir,
-        session_id=session_id,
-        resolved_config=resolved_config,
-        config_home=config_home,
-        runtime_home=runtime_home,
+    return _native_environment(
+        *args, skill_context_builder=build_skill_context, **kwargs
     )
-
-
-def native_environment(
-    provider: str,
-    *,
-    runtime_dir: str,
-    config_home: str,
-    runtime_home: str,
-    workspace_root: str,
-    work_ref: Mapping[str, Any] | None,
-    work_selection: Mapping[str, Any],
-    profile: Mapping[str, Any] | None = None,
-    session_ref: Mapping[str, str] | None = None,
-    session_endpoint: str | None = None,
-    provider_version: str = "unknown",
-    adapter: Mapping[str, Any] | None = None,
-    source: Mapping[str, str] | None = None,
-    stdio_is_tty: bool | None = None,
-) -> dict[str, str]:
-    """Return a credential-safe native UI environment with compact Kungfu hints."""
-
-    ambient = os.environ if source is None else source
-    selected_adapter = dict(adapter or {})
-    allowed = (
-        *_COMMON_ENV_ALLOWLIST,
-        *(str(value) for value in selected_adapter.get("credentialEnvironment") or []),
-    )
-    env = {key: str(ambient[key]) for key in allowed if ambient.get(key)}
-    apply_platform_tls_trust(env)
-    env.update(
-        {
-            str(key): str(value)
-            for key, value in dict(selected_adapter.get("environment") or {}).items()
-        }
-    )
-    terminal_attached = (
-        all(stream.isatty() for stream in (sys.stdin, sys.stdout, sys.stderr))
-        if stdio_is_tty is None
-        else stdio_is_tty
-    )
-    ambient_term = str(ambient.get("TERM") or "").strip()
-    terminal_recovery = terminal_attached and ambient_term.lower() in {"", "dumb"}
-    if terminal_recovery:
-        # A real provider-native terminal must not inherit the non-interactive
-        # TERM=dumb marker used by launchers and automation wrappers.  ``xterm``
-        # is the conservative baseline understood by the supported native UIs;
-        # valid terminal types remain untouched.
-        env["TERM"] = "xterm"
-        env["KUNGFU_AGENT_TERMINAL_RECOVERY"] = f"{ambient_term or 'unset'}->xterm"
-    configured_cli = str(ambient.get("KUNGFU_CLI_BIN") or "").strip()
-    cli_candidate = configured_cli or shutil.which(
-        "kungfu", path=str(ambient.get("PATH") or "")
-    )
-    if configured_cli and not os.path.isabs(os.path.expanduser(configured_cli)):
-        cli_candidate = shutil.which(
-            configured_cli, path=str(ambient.get("PATH") or "")
-        )
-    if cli_candidate:
-        cli_path = Path(cli_candidate).expanduser().absolute()
-        if not cli_path.is_file() or not os.access(cli_path, os.X_OK):
-            raise ValueError(
-                "KUNGFU_CLI_BIN must identify an executable Kungfu front door"
-            )
-        cli_bin = str(cli_path)
-        env["KUNGFU_CLI_BIN"] = cli_bin
-    else:
-        cli_bin = "kungfu"
-    bind_work_entrypoint = [
-        cli_bin,
-        "agent",
-        "console",
-        "bind-work",
-        "--initiative-id",
-        "<id>",
-        "--assignment-id",
-        "<id>",
-        "--json",
-    ]
-    selected = dict(profile or {})
-    profile_id = str(selected.get("id") or f"kungfu.agent-runtime.{provider}")
-    bootstrap_receipt = (
-        agent_resources.native_bootstrap_receipt(
-            provider,
-            profile=selected,
-            adapter=selected_adapter,
-            session_ref=session_ref,
-        )
-        if session_ref is not None
-        else None
-    )
-    bootstrap_context = agent_resources.bootstrap_context(bootstrap_receipt)
-    context = {
-        "schema": "kungfu.native-agent-context/v1",
-        "environment": "native-interactive",
-        "entrypoints": {
-            "context": [cli_bin, "agent", "context", "--json"],
-            "skills": [cli_bin, "skill", "catalog", "--json"],
-            "work": [cli_bin, "work", "status"],
-            "bindWork": bind_work_entrypoint,
-        },
-        "workBinding": {
-            "launchState": "bound" if work_ref is not None else "unbound",
-            "requiredBeforeProjectWrite": True,
-            "bootstrapRequiredBeforeProjectWrite": True,
-            "mutationsAllowed": bootstrap_context["mutationsAllowed"],
-            "conflictCode": "native_work_already_active",
-            "canonicalEntrypoint": "bindWork",
-            "internalSessionOperations": [
-                "plan-native-bind-work",
-                "bind-native-work",
-            ],
-            "internalSessionOperationsAreCliEntrypoints": False,
-        },
-        "bootstrap": bootstrap_context,
-        "workSelection": dict(work_selection),
-        "terminal": {
-            "stdioAttached": terminal_attached,
-            "ambientTerm": ambient_term or None,
-            "effectiveTerm": env.get("TERM") or None,
-            "program": env.get("TERM_PROGRAM") or None,
-            "programVersion": env.get("TERM_PROGRAM_VERSION") or None,
-            "recovered": terminal_recovery,
-        },
-    }
-    env.update(
-        {
-            "KF_CONFIG_HOME": config_home,
-            "KF_HOME": runtime_home,
-            "KF_RUNTIME_DIR": runtime_dir,
-            "KUNGFU_AGENT_RUNTIME_DIR": runtime_dir,
-            "KUNGFU_AGENT_ENVIRONMENT": "native-interactive",
-            "KUNGFU_AGENT_CONTEXT": json.dumps(
-                context, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            ),
-            "KUNGFU_AGENT_CONTEXT_ENTRYPOINT": (
-                f"{shlex.quote(cli_bin)} agent context --json"
-            ),
-            "KUNGFU_SKILL_CATALOG_ENTRYPOINT": (
-                f"{shlex.quote(cli_bin)} skill catalog --json"
-            ),
-            "KUNGFU_WORK_STATUS_ENTRYPOINT": f"{shlex.quote(cli_bin)} work status",
-            "KUNGFU_WORKSPACE_ROOT": workspace_root,
-            "KUNGFU_PRIOR_TRANSCRIPT_BYTES": "0",
-        }
-    )
-    if session_ref is not None:
-        skill_context = build_skill_context(
-            runtime_home,
-            source="cli",
-            manager="python",
-            profile=profile_id,
-            agent=provider,
-            runtime_dir=runtime_dir,
-            env=ambient,
-            cwd=workspace_root,
-        )
-        console_envelope_body = {
-            "schema": "kungfu.agent-console-envelope/v1",
-            "workspaceId": str(
-                work_ref.get("workspaceId")
-                if work_ref is not None
-                else work_selection.get("workspaceId") or workspace_root
-            ),
-            "consoleId": str(session_ref["workConsoleId"]),
-            "attemptId": str(session_ref["sessionAttemptId"]),
-            "runtimeProfileId": profile_id,
-            "provider": provider,
-            "activeProfiles": (
-                [
-                    {
-                        "id": str(work_ref["profileId"]),
-                        "root": str(work_ref["profileRoot"]),
-                    }
-                ]
-                if work_ref is not None
-                else []
-            ),
-            "workRef": dict(work_ref) if work_ref is not None else None,
-            "entrypoints": {
-                "context": [cli_bin, "agent", "context", "--json"],
-                "capabilities": [cli_bin, "agent", "capabilities", "--json"],
-                "profiles": [cli_bin, "profile", "manager", "--json"],
-                "bindWork": bind_work_entrypoint,
-            },
-            "knownLimits": [
-                "native provider terminal bytes are not captured by Kungfu",
-                "TUI observes Core Work state but cannot control provider input",
-                "provider exit does not claim Work completion",
-                *(str(value) for value in selected_adapter.get("knownLimits") or []),
-            ],
-            "bootstrap": bootstrap_context,
-        }
-        console_envelope = {
-            **console_envelope_body,
-            "envelopeRoot": canonical_root(console_envelope_body),
-        }
-        session_contract.validate_agent_console_envelope(console_envelope)
-        env.update(
-            {
-                "KUNGFU_AGENT_ATTEMPT_ID": str(session_ref["sessionAttemptId"]),
-                "KUNGFU_AGENT_CONSOLE_ID": str(session_ref["workConsoleId"]),
-                "KUNGFU_AGENT_CONSOLE_ENVELOPE": json.dumps(
-                    console_envelope,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
-                "KUNGFU_AGENT_BOOTSTRAP_RECEIPT": json.dumps(
-                    bootstrap_receipt,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
-                "KUNGFU_SKILL_CONTEXT": json.dumps(
-                    skill_context,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
-                "KUNGFU_AGENT_SESSION_ACTOR": (
-                    f"native:{provider}:{session_ref['sessionAttemptId']}"
-                ),
-                "KUNGFU_AGENT_PROVIDER_VERSION": provider_version,
-            }
-        )
-        if session_endpoint:
-            env["KUNGFU_AGENT_SESSION_ENDPOINT"] = session_endpoint
-    if work_ref is not None:
-        env["KUNGFU_WORK_REF"] = json.dumps(
-            dict(work_ref),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    return env
 
 
 def run_native_interactive(
@@ -776,6 +535,8 @@ def run_native_interactive(
         interactive_argv=interactive_launch_argv,
         semantic_root=canonical_root,
         heartbeat_observation=session_surface.native_heartbeat_observation,
+        finalize_environment=refresh_native_skill_runtime_audit,
+        provider_health=_provider_runtime_health,
     )
     return coordinator.run(
         profile,
@@ -909,33 +670,33 @@ def _wait_for_session(
 ) -> Mapping[str, Any]:
     if event_driven:
         while True:
-            latest = invoke({"operation": "status", "session": dict(ref)})
-            if predicate(latest):
-                return latest
-            change_sequence = latest.get("changeSequence")
+            event_status = invoke({"operation": "status", "session": dict(ref)})
+            if predicate(event_status):
+                return event_status
+            change_sequence = event_status.get("changeSequence")
             if not isinstance(change_sequence, int) or change_sequence < 0:
                 raise ValueError(
                     "Deterministic Mock Agent requires event-driven Session status"
                 )
-            latest = invoke(
+            event_status = invoke(
                 {
                     "operation": "wait-status-change",
                     "session": dict(ref),
                     "afterChangeSequence": change_sequence,
                 }
             )
-            if predicate(latest):
-                return latest
+            if predicate(event_status):
+                return event_status
     if timeout_seconds is None:
         raise ValueError("Non-Mock Agent Session wait requires a timeout")
     deadline = time.monotonic() + timeout_seconds
-    latest_status: Mapping[str, Any] | None = None
+    latest: Mapping[str, Any] | None = None
     while time.monotonic() < deadline:
-        latest_status = invoke({"operation": "status", "session": dict(ref)})
-        if predicate(latest_status):
-            return latest_status
+        latest = invoke({"operation": "status", "session": dict(ref)})
+        if predicate(latest):
+            return latest
         time.sleep(0.05)
-    state = (latest_status or {}).get("interactionState") or "unavailable"
+    state = (latest or {}).get("interactionState") or "unavailable"
     raise ValueError(f"Agent Session did not reach a safe boundary: {state}")
 
 
@@ -1138,7 +899,7 @@ def execute(
         workspace_root=cwd,
         permission_mode=permission_mode,
     )
-    env, env_keys = _environment(
+    base_env, _base_env_keys = _environment(
         provider,
         runtime_dir=runtime_dir,
         run_id=run_id,
@@ -1146,6 +907,55 @@ def execute(
         work_ref=work,
         continuation=continuation_value,
     )
+    runtime_home = str(Path(home or os.path.expanduser("~")).expanduser().resolve())
+    effective_config_home = str(
+        Path(config_home or os.path.join(runtime_home, ".kungfu-config"))
+        .expanduser()
+        .resolve()
+    )
+    workspace_id = str(
+        work.get("workspaceId") if work is not None else cwd or runtime_home
+    )
+    managed_session_ref = (
+        _session_ref(work, run_id)
+        if work is not None
+        else {
+            "workConsoleId": f"assistant:{workspace_id}:{run_id}",
+            "sessionAttemptId": run_id,
+        }
+    )
+    if provider == "synthetic":
+        # The deterministic Mock Agent is a qualification fixture, not a
+        # registered native Provider. Keep its bounded managed-run environment
+        # instead of inventing a public adapter or provider Skill for it.
+        env = base_env
+    else:
+        adapter = native_provider_adapter(
+            provider,
+            runtime_dir=runtime_dir,
+            session_id=run_id.removeprefix("agent-"),
+            config_home=effective_config_home,
+            runtime_home=runtime_home,
+        )
+        env = native_environment(
+            provider,
+            runtime_dir=runtime_dir,
+            config_home=effective_config_home,
+            runtime_home=runtime_home,
+            workspace_root=str(cwd or runtime_home),
+            work_ref=work,
+            work_selection={"workspaceId": workspace_id},
+            profile=selected,
+            session_ref=managed_session_ref,
+            provider_version=str(verification.get("version") or "unknown"),
+            adapter=adapter,
+            source=base_env,
+            stdio_is_tty=False,
+        )
+    for key in ("KUNGFU_CONTROL_RUNTIME_DIR", "KUNGFU_AGENT_CONTINUATION"):
+        if key in base_env:
+            env[key] = base_env[key]
+    env_keys = sorted(env)
     run_dir = Path(runtime_dir) / "agent-runs" / run_id
     bundle_dir = run_dir / "bundle"
     bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -1243,6 +1053,7 @@ def execute(
                 result = process_runner(
                     argv, cwd=cwd, env=env, timeout_seconds=timeout_seconds
                 )
+        refresh_native_skill_runtime_audit(env)
         status = RunStatus.Succeeded if result.exit_code == 0 else RunStatus.Failed
         episode.record_event(
             ACTION_RUN_END,

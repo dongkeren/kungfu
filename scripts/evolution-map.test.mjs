@@ -18,6 +18,7 @@ import {
   renderCandidates,
   renderReaderRoutes,
   renderTimeline,
+  resolveMergeGroupHistoricalBase,
   writeCandidate,
 } from './evolution-map/index.mjs';
 
@@ -98,6 +99,31 @@ function candidateOpenInput() {
     reason: 'Capture the hypothesis before broadening authority.',
   };
 }
+
+test('materializes the exact merge-group base in a shallow checkout', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-evolution-base-'));
+  temporaryRoots.push(root);
+  const eventPath = path.join(root, 'event.json');
+  const expected = 'a'.repeat(40);
+  fs.writeFileSync(
+    eventPath,
+    `${JSON.stringify({ merge_group: { base_sha: expected } })}\n`,
+  );
+  let present = false;
+  const fetched = [];
+
+  const actual = resolveMergeGroupHistoricalBase({
+    env: { GITHUB_EVENT_PATH: eventPath },
+    hasObject: (revision) => revision === expected && present,
+    fetchBase: (revision) => {
+      fetched.push(revision);
+      present = true;
+    },
+  });
+
+  assert.equal(actual, expected);
+  assert.deepEqual(fetched, [expected]);
+});
 
 function era(overrides = {}) {
   return {
@@ -246,6 +272,50 @@ test('builds deterministic timeline, authority, and route projections', () => {
     'fold-back',
     'reject',
   ]);
+});
+
+test('a settled Stage may retire reader targets only through a later amendment', () => {
+  const historical = stage({
+    readerRoute: {
+      intent: 'Understand the historical integration',
+      start: 'missing-project-document.md',
+      deepen: ['missing-project-route.md'],
+    },
+  });
+  assert.throws(
+    () => buildEvolutionMap([era()], [historical], contract),
+    /without an explicit amendment/,
+  );
+  const amendment = stage({
+    id: 'native-work-amendment',
+    sequence: 2,
+    buildsOn: [historical.id],
+    amends: [historical.id],
+    status: 'open',
+    evolutionImpact: 'extends',
+    readerRoute: {
+      intent: 'Understand native work authority',
+      start: 'package.json',
+      deepen: ['docs/README.md'],
+    },
+    authorityTransitions: [
+      {
+        subject: 'execution-history',
+        before: 'yijinjing append-only journal',
+        after: 'native work authority',
+        authorityRefs: ['package.json'],
+      },
+    ],
+    file: 'docs/evolution/stages/native-work-amendment.md',
+  });
+  const projection = buildEvolutionMap(
+    [era()],
+    [historical, amendment],
+    contract,
+  );
+  const routes = renderReaderRoutes(projection);
+  assert.doesNotMatch(routes, /missing-project/);
+  assert.match(routes, /docs\/README\.md/);
 });
 
 test('keeps candidate revisions outside canonical Era sequence and authority', () => {

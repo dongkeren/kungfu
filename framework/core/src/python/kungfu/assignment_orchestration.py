@@ -8,16 +8,14 @@ import json
 import ntpath
 import os
 import re
-import subprocess
 import tempfile
 import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
-from kungfu import initiative_family
+from kungfu import assignment_outcome, assignment_provenance
 from kungfu.initiative_family import canonical as assignment_canonical
-from kungfu.initiative_family import typed_v2 as initiative_family_v2
 
 REQUEST_SCHEMA = "kungfu.assignment-request/v1"
 CAPTURE_RECEIPT_SCHEMA = "kungfu.assignment-capture.receipt/v1"
@@ -26,16 +24,12 @@ INITIATIVE_ADMISSION_SCHEMA = "kungfu.work-control.initiative-admission/v1"
 INITIATIVE_SOURCE_SCHEMA = "kungfu.work-control.exact-source/v1"
 RETENTION_POLICY = "explicit-expiry-retain-bytes-v1"
 STATE_SCHEMA = "kungfu.assignment-orchestration.sealed-state/v1"
-OUTCOME_SCHEMA = "kungfu.work-design.outcome/v1"
-OUTCOME_BINDING_SCHEMA = (
-    "kungfu.assignment-orchestration.work-design-outcome-binding/v1"
-)
-OUTCOME_INDEX_SCHEMA = "kungfu.assignment-orchestration.work-design-outcome-index/v1"
+OUTCOME_SCHEMA = assignment_outcome.OutcomeBindings.OUTCOME_SCHEMA
+OUTCOME_BINDING_SCHEMA = assignment_outcome.OutcomeBindings.BINDING_SCHEMA
+OUTCOME_INDEX_SCHEMA = assignment_outcome.OutcomeBindings.INDEX_SCHEMA
 CROSS_WORKSPACE_BINDING_SCHEMA = (
     "kungfu.assignment-orchestration.cross-workspace-binding/v1"
 )
-PRODUCT_MANIFEST_SCHEMA = "kungfu.product-upgrade.manifest/v1"
-_GIT_REVISION = re.compile(r"^[0-9a-f]{40}$")
 PHASES = (
     "admitted",
     "claimed",
@@ -45,43 +39,6 @@ PHASES = (
     "independently-reviewed",
     "continuation-decided",
 )
-# Backward-compatible imports; family behavior is owned by dedicated modules.
-ROOT = assignment_canonical.ROOT
-_ISO_8601 = assignment_canonical._ISO_8601
-_normalized = assignment_canonical._normalized
-canonical_json = assignment_canonical.canonical_json
-semantic_root = assignment_canonical.semantic_root
-_strict_object = assignment_canonical._strict_object
-_sorted_unique_strings = assignment_canonical._sorted_unique_strings
-_timestamp = assignment_canonical._timestamp
-_root = assignment_canonical._root
-
-FAMILY_BLUEPRINT_SCHEMA = initiative_family.FAMILY_BLUEPRINT_SCHEMA
-FAMILY_STATE_SCHEMA = initiative_family.FAMILY_STATE_SCHEMA
-FAMILY_TRANSITION_SCHEMA = initiative_family.FAMILY_TRANSITION_SCHEMA
-FAMILY_DELIVERY_CLASSES = initiative_family.FAMILY_DELIVERY_CLASSES
-FAMILY_TERMINAL_STATES = initiative_family.FAMILY_TERMINAL_STATES
-FAMILY_ACCEPTANCE_STATES = initiative_family.FAMILY_ACCEPTANCE_STATES
-family_contract = initiative_family.family_contract
-validate_family_state = initiative_family.validate_family_state
-create_family_state = initiative_family.create_family_state
-transition_family_state = initiative_family.transition_family_state
-verify_family_state = initiative_family.verify_family_state
-
-FAMILY_CONTRACT_V2_SCHEMA = initiative_family_v2.FAMILY_CONTRACT_V2_SCHEMA
-FAMILY_STATE_V2_SCHEMA = initiative_family_v2.FAMILY_STATE_V2_SCHEMA
-FAMILY_TRANSITION_V2_SCHEMA = initiative_family_v2.FAMILY_TRANSITION_V2_SCHEMA
-FAMILY_BINDING_V2_SCHEMA = initiative_family_v2.FAMILY_BINDING_V2_SCHEMA
-FAMILY_UPGRADE_V2_SCHEMA = initiative_family_v2.FAMILY_UPGRADE_V2_SCHEMA
-FAMILY_V2_REFERENCE_KINDS = initiative_family_v2.FAMILY_V2_REFERENCE_KINDS
-InitiativeFamilyV1Port = initiative_family_v2.InitiativeFamilyV1Port
-family_contract_v2 = initiative_family_v2.family_contract_v2
-validate_family_binding_v2 = initiative_family_v2.validate_family_binding_v2
-validate_family_state_v2 = initiative_family_v2.validate_family_state_v2
-upgrade_family_state_v2 = initiative_family_v2.upgrade_family_state_v2
-transition_family_state_v2 = initiative_family_v2.transition_family_state_v2
-project_family_state_v1 = initiative_family_v2.project_family_state_v1
-verify_family_state_v2 = initiative_family_v2.verify_family_state_v2
 
 
 def source_root(*starts: str | Path) -> Path:
@@ -113,12 +70,6 @@ def _same_or_descendant(path: Path, root: Path) -> bool:
     return False
 
 
-def _installed_runtime_entrypoint(binding_file: Path) -> str:
-    """Bind the manifest entrypoint to the packaged native runtime platform."""
-
-    return "kungfu.exe" if binding_file.suffix.lower() == ".pyd" else "kungfu"
-
-
 def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     """Fail closed unless pykungfu belongs to this source or installed product.
 
@@ -129,94 +80,12 @@ def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     never silently upgraded to either authority.
     """
 
-    import kungfu
-
-    binding_file = Path(str(getattr(kungfu.__binding__, "__file__", ""))).resolve()
-    checkout = source_root(binding_file)
-    allowed_roots = [
-        (checkout / "framework" / "core" / "build").resolve(),
-        (checkout / "framework" / "core" / "dist").resolve(),
-    ]
-    compiled = binding_file.suffix.lower() in {".so", ".dylib", ".pyd"}
-    build_info_path = binding_file.parent / "kungfubuildinfo.json"
-    try:
-        build_info = json.loads(build_info_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        build_info = {}
-    build_revision = str(build_info.get("git", {}).get("revision") or "")
-    source_layout = compiled and any(
-        binding_file == root or root in binding_file.parents for root in allowed_roots
+    return assignment_provenance.inspect_binding(
+        allow_foreign=allow_foreign,
+        source_resolver=source_root,
+        descendant_check=_same_or_descendant,
+        entrypoint_resolver=assignment_provenance.installed_runtime_entrypoint,
     )
-    try:
-        checkout_revision = subprocess.run(
-            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        checkout_revision = ""
-    current = bool(
-        source_layout
-        and _GIT_REVISION.fullmatch(build_revision)
-        and build_revision == checkout_revision
-        and build_info.get("git", {}).get("pristine") is True
-    )
-
-    install_source = os.environ.get("KUNGFU_INSTALL_SOURCE", "")
-    runtime_value = os.environ.get("KUNGFU_DIR", "")
-    manifest_value = os.environ.get("KUNGFU_UPGRADE_MANIFEST", "")
-    runtime_root = Path(runtime_value).expanduser().resolve() if runtime_value else None
-    manifest_path = (
-        Path(manifest_value).expanduser().resolve() if manifest_value else None
-    )
-    manifest: dict[str, Any] = {}
-    if manifest_path is not None:
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            pass
-    manifest_revision = str(manifest.get("sourceCommit") or "")
-    installed = bool(
-        compiled
-        and install_source in {"archive", "desktop-companion"}
-        and runtime_root is not None
-        and _same_or_descendant(binding_file, runtime_root)
-        and manifest.get("schema") == PRODUCT_MANIFEST_SCHEMA
-        and _GIT_REVISION.fullmatch(manifest_revision)
-        and manifest_revision == build_revision
-        and str(manifest.get("runtimeEntrypoint") or "")
-        == _installed_runtime_entrypoint(binding_file)
-        and str(manifest.get("runtimeArtifactDigest") or "").startswith(ROOT)
-    )
-    override = (
-        allow_foreign
-        or os.environ.get("KUNGFU_ASSIGNMENT_ADMIT_ALLOW_FOREIGN_BINDING") == "1"
-    )
-    result = {
-        "schema": "kungfu.assignment-orchestration.binding-provenance/v1",
-        "ok": bool(current or installed or override),
-        "state": (
-            "current-checkout"
-            if current
-            else "installed-product"
-            if installed
-            else "degraded"
-        ),
-        "binding_file": str(binding_file),
-        "checkout": str(checkout) if current else None,
-        "compiled": compiled,
-        "install_source": install_source or None,
-        "runtime_root": str(runtime_root) if installed else None,
-        "manifest_path": str(manifest_path) if installed else None,
-        "source_revision": build_revision or None,
-        "manifest_root": semantic_root(manifest) if installed else None,
-        "build_info_root": semantic_root(build_info) if build_info else None,
-        "override": bool(override and not current and not installed),
-        "fail_closed": not current and not installed and not override,
-    }
-    result["provenance_root"] = semantic_root(result)
-    return result
 
 
 def _validate_capture_value(value: Any) -> None:
@@ -271,7 +140,9 @@ def validate_assignment_request(value: Any) -> dict[str, Any]:
         raise ValueError(f"retention must declare {RETENTION_POLICY} and expiresAt")
     expires_at = retention.get("expiresAt")
     if expires_at is not None:
-        if not isinstance(expires_at, str) or not _ISO_8601.fullmatch(expires_at):
+        if not isinstance(
+            expires_at, str
+        ) or not assignment_canonical._ISO_8601.fullmatch(expires_at):
             raise ValueError(
                 "retention.expiresAt must be null or an ISO-8601 timestamp"
             )
@@ -336,8 +207,8 @@ def _read_text_exact(path: Path) -> str:
 
 def capture_assignment_request(request: Any, target: Any) -> dict[str, Any]:
     request = validate_assignment_request(request)
-    request_root = semantic_root(request)
-    digest = request_root.removeprefix(ROOT)
+    request_root = assignment_canonical.semantic_root(request)
+    digest = request_root.removeprefix(assignment_canonical.ROOT)
     directory = (
         Path(target.identity.data_home)
         / "inbox"
@@ -373,16 +244,19 @@ def capture_assignment_request(request: Any, target: Any) -> dict[str, Any]:
     }
     if target.association == "unassigned":
         receipt_core["skippedEffects"].insert(0, "project-association")
-    receipt_root = semantic_root(receipt_core)
+    receipt_root = assignment_canonical.semantic_root(receipt_core)
     receipt = {**receipt_core, "receiptRoot": receipt_root}
     receipt_path = (
-        directory / "receipts" / "sha256" / f"{receipt_root.removeprefix(ROOT)}.json"
+        directory
+        / "receipts"
+        / "sha256"
+        / f"{receipt_root.removeprefix(assignment_canonical.ROOT)}.json"
     )
     request_written = _write_exact(
-        request_path, (canonical_json(request) + "\n").encode()
+        request_path, (assignment_canonical.canonical_json(request) + "\n").encode()
     )
     receipt_written = _write_exact(
-        receipt_path, (canonical_json(receipt) + "\n").encode()
+        receipt_path, (assignment_canonical.canonical_json(receipt) + "\n").encode()
     )
     return {
         "schema": CAPTURE_RESPONSE_SCHEMA,
@@ -419,8 +293,8 @@ def load_captured_request(request_file: str | Path) -> dict[str, Any]:
         raise ValueError("captured request has an invalid top-level field set")
     if not isinstance(request.get("workDefinition"), dict):
         raise ValueError("captured request workDefinition must be an object")
-    request_root = semantic_root(request)
-    digest = request_root.removeprefix(ROOT)
+    request_root = assignment_canonical.semantic_root(request)
+    digest = request_root.removeprefix(assignment_canonical.ROOT)
     if path.name != "request.json" or path.parent.name != digest:
         raise ValueError("captured request path does not match its semantic root")
     receipt_dir = path.parent / "receipts" / "sha256"
@@ -440,8 +314,9 @@ def load_captured_request(request_file: str | Path) -> dict[str, Any]:
         if (
             receipt.get("schema") != CAPTURE_RECEIPT_SCHEMA
             or receipt.get("requestRoot") != request_root
-            or declared != semantic_root(receipt)
-            or receipt_path.name != f"{declared.removeprefix(ROOT)}.json"
+            or declared != assignment_canonical.semantic_root(receipt)
+            or receipt_path.name
+            != f"{declared.removeprefix(assignment_canonical.ROOT)}.json"
         ):
             raise ValueError(f"capture receipt does not verify: {receipt_path}")
         receipt_roots.append(declared)
@@ -468,7 +343,9 @@ def load_initiative_admission(
         )
     if not isinstance(value, dict):
         raise ValueError("Initiative admission must be a JSON object")
-    declared_root = _root(value.pop("admissionRoot", ""), "admissionRoot")
+    declared_root = assignment_canonical._root(
+        value.pop("admissionRoot", ""), "admissionRoot"
+    )
     source = value.get("source")
     if value.get("schema") != INITIATIVE_ADMISSION_SCHEMA:
         raise ValueError("Initiative admission schema is unsupported")
@@ -488,13 +365,13 @@ def load_initiative_admission(
         for field in ("authority", "kind", "sourceId")
     ):
         raise ValueError("Initiative source authority, kind, and id are required")
-    _root(source.get("versionRoot"), "source.versionRoot")
+    assignment_canonical._root(source.get("versionRoot"), "source.versionRoot")
     if not all(
         str(value.get(field) or "").strip()
         for field in ("initiativeId", "title", "intent")
     ):
         raise ValueError("Initiative id, title, and intent are required")
-    if semantic_root(value) != declared_root:
+    if assignment_canonical.semantic_root(value) != declared_root:
         raise ValueError("Initiative admission root does not verify")
     return {
         **value,
@@ -503,7 +380,7 @@ def load_initiative_admission(
     }
 
 
-def atlas_assignment_projection(
+def assignment_projection(
     captured: Mapping[str, Any],
     *,
     initiative_id: str = "",
@@ -527,11 +404,7 @@ def atlas_assignment_projection(
     if not isinstance(dependencies, list):
         dependencies = []
     initiative = initiative_id or str(work.get("initiative_id") or "")
-    assignment = (
-        assignment_id
-        or str(work.get("assignment_id") or "")
-        or str(work.get("goal_id") or "")
-    )
+    assignment = assignment_id or str(work.get("assignment_id") or "")
     context_binding = work.get("context_binding") or {}
     if not isinstance(context_binding, dict):
         raise ValueError("workDefinition context_binding must be an object")
@@ -551,7 +424,7 @@ def atlas_assignment_projection(
         isinstance(row, dict) for row in dependency_refs
     ):
         raise ValueError("workDefinition.dependency_refs must be an array of objects")
-    if parent_assignment_ref and work.get("parent_goal"):
+    if parent_assignment_ref and work.get("parent_assignment_id"):
         raise ValueError(
             "workDefinition cannot mix parent Assignment ref and local shorthand"
         )
@@ -575,14 +448,6 @@ def atlas_assignment_projection(
             raise ValueError(
                 "Initiative source identity does not match requested identity"
             )
-    atlas_request = (
-        isinstance(request_source, dict)
-        and request_source.get("kind") == "atlas-go-card"
-    )
-    if atlas_request and not initiative_ref and not explicit_initiative:
-        raise ValueError(
-            "Atlas admission requires an exact parent Initiative admission or WorkRef"
-        )
     return {
         "initiative_id": initiative,
         "initiative_title": str(
@@ -611,25 +476,30 @@ def atlas_assignment_projection(
         # lossless work definition. It is not a workspace-local Assignment
         # shorthand; only an exact parent_assignment_ref may add that edge.
         "parent_assignment_id": (
-            "" if family_initiative_child else str(work.get("parent_goal") or "")
+            ""
+            if family_initiative_child
+            else str(work.get("parent_assignment_id") or "")
         ),
         "depends_on": [str(row) for row in dependencies],
         "initiative_ref": initiative_ref,
         "parent_assignment_ref": parent_assignment_ref,
         "dependency_refs": [dict(row) for row in dependency_refs],
         "responsibility": str(
-            work.get("mission_why_matters")
+            work.get("responsibility")
             or work.get("objective")
             or work.get("owner_agent")
             or ""
         ),
         "work_definition": work,
         "context_binding": context_binding,
-        "project_cut_root": _root(
+        "project_cut_root": assignment_canonical._root(
             work.get("project_cut_root"), "projectCutRoot", optional=True
         ),
         "evidence_episode_roots": sorted(
-            {_root(value, "evidenceEpisodeRoots") for value in evidence_episode_roots}
+            {
+                assignment_canonical._root(value, "evidenceEpisodeRoots")
+                for value in evidence_episode_roots
+            }
         ),
         "request_root": str(captured["request_root"]),
         "capture_receipt_roots": list(captured["capture_receipt_roots"]),
@@ -688,15 +558,6 @@ def gate(status: Mapping[str, Any], target: str) -> dict[str, Any]:
         "assignment_subject": status.get("assignment_subject"),
         "query_proof_root": status.get("query_proof_root"),
         "next_actions": [] if ok else next_actions(status),
-    }
-    response["atlas_compatibility"] = {
-        "schema": "atlas.project-cut-go-gate/v1",
-        "ok": ok,
-        "phase": phase,
-        "policy": "required",
-        "reason": reason,
-        "state_path": "kungfu-native-fact-library",
-        "target": target,
     }
     return response
 
@@ -763,8 +624,8 @@ def sealed_state_plan(
             ),
         },
     }
-    state_root = semantic_root(snapshot)
-    digest = state_root.removeprefix(ROOT)
+    state_root = assignment_canonical.semantic_root(snapshot)
+    digest = state_root.removeprefix(assignment_canonical.ROOT)
     if identity.get("workspace_kind") == "home":
         storage_root, storage_kind = root, "home-workspace"
     else:
@@ -790,7 +651,9 @@ def apply_sealed_state(
     storage_root = Path(str(plan["storage_root"]))
     state_path = storage_root / str(plan["state_path"])
     receipt_path = storage_root / str(plan["receipt_path"])
-    state_bytes = (canonical_json(plan["snapshot"]) + "\n").encode("utf-8")
+    state_bytes = (assignment_canonical.canonical_json(plan["snapshot"]) + "\n").encode(
+        "utf-8"
+    )
     receipt = {
         "schema": "kungfu.assignment-orchestration.seal-receipt/v1",
         "stateRoot": expected_state_root,
@@ -804,7 +667,9 @@ def apply_sealed_state(
             "home-workspace",
         },
     }
-    receipt_bytes = (canonical_json(receipt) + "\n").encode("utf-8")
+    receipt_bytes = (assignment_canonical.canonical_json(receipt) + "\n").encode(
+        "utf-8"
+    )
     for path, content in ((state_path, state_bytes), (receipt_path, receipt_bytes)):
         if path.exists() and path.read_bytes() != content:
             raise ValueError(f"immutable sealed-state collision: {path}")
@@ -817,7 +682,7 @@ def apply_sealed_state(
 def verify_sealed_state(state_file: str | Path) -> dict[str, Any]:
     path = Path(state_file).expanduser().resolve()
     snapshot = json.loads(path.read_text(encoding="utf-8"))
-    root = semantic_root(snapshot)
+    root = assignment_canonical.semantic_root(snapshot)
     receipt_path = path.with_name("receipt.json")
     receipt = (
         json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -886,7 +751,9 @@ def list_sealed_assignment_states(
                     "schema": "kungfu.assignment-orchestration.sealed-work-coordinate/v1",
                     "assignment_subject": subject,
                     "workspace_identity_root": owning_root,
-                    "assignment_state_root": semantic_root(assignment_state),
+                    "assignment_state_root": assignment_canonical.semantic_root(
+                        assignment_state
+                    ),
                     "event_counts": event_counts,
                     "state_root": verification["state_root"],
                     "query_proof_root": query_root,
@@ -924,422 +791,27 @@ def list_sealed_assignment_states(
         "storage_kind": storage_kind,
         "writes": [],
     }
-    return {**body, "index_root": semantic_root(body)}
+    return {**body, "index_root": assignment_canonical.semantic_root(body)}
 
 
-def _validate_outcome_artifact(value: Any) -> dict[str, Any]:
-    outcome = _strict_object(
-        value,
-        {
-            "schema",
-            "assignmentId",
-            "asOf",
-            "bindings",
-            "cohort",
-            "window",
-            "metrics",
-            "coverage",
-            "evidence",
-            "authority",
-            "outcomeRoot",
-        },
-        "Work Design outcome",
-    )
-    if outcome.get("schema") != OUTCOME_SCHEMA:
-        raise ValueError("unsupported Work Design outcome schema")
-    if semantic_root(
-        {key: value for key, value in outcome.items() if key != "outcomeRoot"}
-    ) != outcome.get("outcomeRoot"):
-        raise ValueError("Work Design outcome root mismatch")
-    bindings = _strict_object(
-        outcome.get("bindings"),
-        {"workDefinitionRoot", "adviceRoot", "policyRoot"},
-        "Work Design outcome bindings",
-    )
-    for field, root in bindings.items():
-        if not isinstance(root, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", root):
-            raise ValueError(f"Work Design outcome bindings.{field} is invalid")
-    cohort = _strict_object(
-        outcome.get("cohort"),
-        {"deliveryClass", "workClass", "repositoryClass", "cohortRoot"},
-        "Work Design outcome cohort",
-    )
-    if semantic_root(
-        {key: value for key, value in cohort.items() if key != "cohortRoot"}
-    ) != cohort.get("cohortRoot"):
-        raise ValueError("Work Design outcome cohort root mismatch")
-    coverage = _strict_object(
-        outcome.get("coverage"),
-        {"qualifiedMetrics", "unknownMetrics", "complete", "coverageRoot"},
-        "Work Design outcome coverage",
-    )
-    if semantic_root(
-        {key: value for key, value in coverage.items() if key != "coverageRoot"}
-    ) != coverage.get("coverageRoot"):
-        raise ValueError("Work Design outcome coverage root mismatch")
-    if not isinstance(coverage.get("complete"), bool):
-        raise ValueError("Work Design outcome coverage.complete must be boolean")
-    qualified = _sorted_unique_strings(
-        coverage.get("qualifiedMetrics"),
-        "Work Design outcome coverage.qualifiedMetrics",
-        allow_empty=True,
-    )
-    unknown = _sorted_unique_strings(
-        coverage.get("unknownMetrics"),
-        "Work Design outcome coverage.unknownMetrics",
-        allow_empty=True,
-    )
-    metric_names = {"acceptanceFailure", "dependencyCorrection", "rework", "timeout"}
-    if set(qualified) | set(unknown) != metric_names or set(qualified) & set(unknown):
-        raise ValueError("Work Design outcome coverage must classify every metric once")
-    if coverage["complete"] is not (not unknown):
-        raise ValueError(
-            "Work Design outcome coverage.complete contradicts unknown metrics"
-        )
-    window = _strict_object(
-        outcome.get("window"),
-        {"admittedAt", "settledAt", "attributableActiveSeconds", "excludedWaitSeconds"},
-        "Work Design outcome window",
-    )
-    admitted = _timestamp(window.get("admittedAt"), "Work Design outcome admittedAt")
-    settled = _timestamp(window.get("settledAt"), "Work Design outcome settledAt")
-    if settled < admitted:
-        raise ValueError("Work Design outcome settledAt precedes admittedAt")
-    if (
-        not isinstance(window.get("attributableActiveSeconds"), int)
-        or isinstance(window.get("attributableActiveSeconds"), bool)
-        or window["attributableActiveSeconds"] < 0
-    ):
-        raise ValueError("Work Design outcome attributableActiveSeconds is invalid")
-    waits = _strict_object(
-        window.get("excludedWaitSeconds"),
-        {"ci-queue", "external-review", "human-decision", "platform-approval"},
-        "Work Design outcome excluded waits",
-    )
-    if any(
-        not isinstance(seconds, int) or isinstance(seconds, bool) or seconds < 0
-        for seconds in waits.values()
-    ):
-        raise ValueError("Work Design outcome excluded wait seconds are invalid")
-    metrics = _strict_object(
-        outcome.get("metrics"), metric_names, "Work Design outcome metrics"
-    )
-    metric_fields = {
-        "acceptanceFailure": {"status", "count", "assessmentRoots"},
-        "dependencyCorrection": {"status", "count", "revisionRoots"},
-        "rework": {"status", "count", "eventRoots"},
-        "timeout": {
-            "status",
-            "plannedBudgetSeconds",
-            "attributableActiveSeconds",
-            "overrunSeconds",
-            "exceeded",
-        },
-    }
-    for name, fields in metric_fields.items():
-        metric = _strict_object(
-            metrics.get(name), fields, f"Work Design outcome {name}"
-        )
-        expected_status = "qualified" if name in qualified else "unknown"
-        if metric.get("status") != expected_status:
-            raise ValueError(f"Work Design outcome {name} status contradicts coverage")
-        if name != "timeout":
-            count = metric.get("count")
-            if expected_status == "qualified" and (
-                not isinstance(count, int) or isinstance(count, bool) or count < 0
-            ):
-                raise ValueError(f"Work Design outcome {name} count is invalid")
-            if expected_status == "unknown" and count is not None:
-                raise ValueError(
-                    f"Work Design outcome {name} unknown count must be null"
-                )
-            root_field = next(field for field in fields if field.endswith("Roots"))
-            roots = _sorted_unique_strings(
-                metric.get(root_field),
-                f"Work Design outcome {name}.{root_field}",
-                allow_empty=True,
-            )
-            if not all(re.fullmatch(r"sha256:[0-9a-f]{64}", root) for root in roots):
-                raise ValueError(f"Work Design outcome {name}.{root_field} is invalid")
-        else:
-            for field in (
-                "plannedBudgetSeconds",
-                "attributableActiveSeconds",
-                "overrunSeconds",
-            ):
-                number = metric.get(field)
-                if expected_status == "qualified" and (
-                    not isinstance(number, int)
-                    or isinstance(number, bool)
-                    or number < 0
-                ):
-                    raise ValueError(f"Work Design outcome timeout.{field} is invalid")
-                if expected_status == "unknown" and number is not None:
-                    raise ValueError(
-                        f"Work Design outcome timeout.{field} must be null"
-                    )
-            if expected_status == "qualified" and not isinstance(
-                metric.get("exceeded"), bool
-            ):
-                raise ValueError("Work Design outcome timeout.exceeded is invalid")
-            if expected_status == "unknown" and metric.get("exceeded") is not None:
-                raise ValueError("Work Design outcome timeout.exceeded must be null")
-    evidence = _strict_object(
-        outcome.get("evidence"),
-        {"settledStateRoot", "queryProofRoot", "sourceEvidenceRoots"},
-        "Work Design outcome evidence",
-    )
-    for field in ("settledStateRoot", "queryProofRoot"):
-        if not isinstance(evidence.get(field), str) or not re.fullmatch(
-            r"sha256:[0-9a-f]{64}", evidence[field]
-        ):
-            raise ValueError(f"Work Design outcome evidence.{field} is invalid")
-    _sorted_unique_strings(
-        evidence.get("sourceEvidenceRoots"), "Work Design outcome sourceEvidenceRoots"
-    )
-    if not all(
-        re.fullmatch(r"sha256:[0-9a-f]{64}", root)
-        for root in evidence["sourceEvidenceRoots"]
-    ):
-        raise ValueError("Work Design outcome sourceEvidenceRoots are invalid")
-    expected_authority = {
-        "mode": "settled-work-observation",
-        "factAuthority": False,
-        "episodeAuthority": False,
-        "assignmentAuthority": False,
-        "workControlAuthority": False,
-        "policyAuthority": False,
-        "mayMutate": False,
-    }
-    if outcome.get("authority") != expected_authority:
-        raise ValueError("Work Design outcome authority boundary is invalid")
-    if not isinstance(outcome.get("assignmentId"), str) or not outcome["assignmentId"]:
-        raise ValueError("Work Design outcome assignmentId is invalid")
-    _timestamp(outcome.get("asOf"), "Work Design outcome asOf")
-    return outcome
+assignment_outcome._canonical = assignment_canonical
+assignment_outcome._storage_resolver = lambda root: _sealed_state_storage(root)
+_validate_outcome_artifact = assignment_outcome.OutcomeBindings.validate_artifact
+outcome_binding_plan = assignment_outcome.OutcomeBindings.plan
+verify_outcome_binding = assignment_outcome.OutcomeBindings.verify
+apply_outcome_binding = assignment_outcome.OutcomeBindings.apply
+list_outcome_bindings = assignment_outcome.OutcomeBindings.list
 
-
-def outcome_binding_plan(
-    workspace_root: str | Path,
-    sealed_state: Mapping[str, Any],
-    outcome: Any,
-    *,
-    opening_estimate_root: str | None = None,
-    published_at: str,
-) -> dict[str, Any]:
-    """Plan an additive immutable outcome binding beside portable Work seals."""
-
-    root = Path(workspace_root).expanduser().resolve()
-    coordinate = _strict_object(
-        sealed_state,
-        {
-            "schema",
-            "assignment_subject",
-            "workspace_identity_root",
-            "state_root",
-            "query_proof_root",
-            "phase",
-            "settled",
-            "storage_kind",
-        },
-        "sealed Work coordinate",
-    )
-    if (
-        coordinate.get("schema")
-        != "kungfu.assignment-orchestration.sealed-work-coordinate/v1"
-    ):
-        raise ValueError("unsupported sealed Work coordinate schema")
-    if (
-        coordinate.get("settled") is not True
-        or coordinate.get("phase") != "continuation-decided"
-    ):
-        raise ValueError("outcome binding requires a settled Assignment state")
-    artifact = _validate_outcome_artifact(outcome)
-    evidence = artifact["evidence"]
-    if evidence["settledStateRoot"] != coordinate.get("state_root"):
-        raise ValueError("outcome settled state root mismatch")
-    if evidence["queryProofRoot"] != coordinate.get("query_proof_root"):
-        raise ValueError("outcome query proof root mismatch")
-    expected_subject = f"kungfu:{artifact['assignmentId']}"
-    if expected_subject != coordinate.get("assignment_subject"):
-        raise ValueError("outcome Assignment subject mismatch")
-    if opening_estimate_root is not None and not re.fullmatch(
-        r"sha256:[0-9a-f]{64}", opening_estimate_root
-    ):
-        raise ValueError("opening estimate root is invalid")
-    published = _timestamp(published_at, "published_at")
-    if _timestamp(artifact["asOf"], "outcome asOf") > published:
-        raise ValueError("outcome publication cannot precede outcome asOf")
-    binding = {
-        "schema": OUTCOME_BINDING_SCHEMA,
-        "assignment_subject": coordinate["assignment_subject"],
-        "workspace_identity_root": coordinate["workspace_identity_root"],
-        "settled_state_root": coordinate["state_root"],
-        "state_query_proof_root": coordinate["query_proof_root"],
-        "opening_estimate_root": opening_estimate_root,
-        "published_at": published_at,
-        "outcome": artifact,
-    }
-    binding_root = semantic_root(binding)
-    storage_root, storage_kind = _sealed_state_storage(root)
-    digest = binding_root.removeprefix(ROOT)
-    return {
-        "schema": "kungfu.assignment-orchestration.work-design-outcome-binding-plan/v1",
-        "binding": {**binding, "binding_root": binding_root},
-        "binding_root": binding_root,
-        "binding_path": str(
-            Path("work-design-outcomes")
-            / "sha256"
-            / digest[:2]
-            / digest
-            / "binding.json"
-        ),
-        "storage_kind": storage_kind,
-        "storage_root": str(storage_root),
-        "workspace_root": str(root),
-        "writes": ["immutable-content-addressed-outcome-binding"],
-    }
-
-
-def verify_outcome_binding(value: Any) -> dict[str, Any]:
-    try:
-        binding = _strict_object(
-            value,
-            {
-                "schema",
-                "assignment_subject",
-                "workspace_identity_root",
-                "settled_state_root",
-                "state_query_proof_root",
-                "opening_estimate_root",
-                "published_at",
-                "outcome",
-                "binding_root",
-            },
-            "Work Design outcome binding",
-        )
-        if binding.get("schema") != OUTCOME_BINDING_SCHEMA:
-            raise ValueError("unsupported Work Design outcome binding schema")
-        for field in (
-            "workspace_identity_root",
-            "settled_state_root",
-            "state_query_proof_root",
-            "binding_root",
-        ):
-            if not isinstance(binding.get(field), str) or not re.fullmatch(
-                r"sha256:[0-9a-f]{64}", binding[field]
-            ):
-                raise ValueError(f"outcome binding {field} is invalid")
-        if binding.get("opening_estimate_root") is not None and not re.fullmatch(
-            r"sha256:[0-9a-f]{64}", str(binding["opening_estimate_root"])
-        ):
-            raise ValueError("outcome binding opening_estimate_root is invalid")
-        published = _timestamp(
-            binding.get("published_at"), "outcome binding published_at"
-        )
-        outcome = _validate_outcome_artifact(binding.get("outcome"))
-        if _timestamp(outcome["asOf"], "outcome asOf") > published:
-            raise ValueError("outcome publication precedes outcome asOf")
-        if binding["settled_state_root"] != outcome["evidence"]["settledStateRoot"]:
-            raise ValueError("outcome binding settled state root mismatch")
-        if binding["state_query_proof_root"] != outcome["evidence"]["queryProofRoot"]:
-            raise ValueError("outcome binding query proof root mismatch")
-        if binding["assignment_subject"] != f"kungfu:{outcome['assignmentId']}":
-            raise ValueError("outcome binding Assignment subject mismatch")
-        preimage = {key: item for key, item in binding.items() if key != "binding_root"}
-        if semantic_root(preimage) != binding["binding_root"]:
-            raise ValueError("outcome binding root mismatch")
-        return {
-            "schema": "kungfu.assignment-orchestration.work-design-outcome-binding-verification/v1",
-            "ok": True,
-            "binding_root": binding["binding_root"],
-            "issues": [],
-            "writes": [],
-        }
-    except (TypeError, ValueError) as error:
-        return {
-            "schema": "kungfu.assignment-orchestration.work-design-outcome-binding-verification/v1",
-            "ok": False,
-            "binding_root": value.get("binding_root")
-            if isinstance(value, Mapping)
-            else None,
-            "issues": [{"code": "outcome-binding-invalid", "message": str(error)}],
-            "writes": [],
-        }
-
-
-def apply_outcome_binding(
-    plan: Mapping[str, Any], expected_binding_root: str
-) -> dict[str, Any]:
-    if plan.get("binding_root") != expected_binding_root:
-        raise ValueError("outcome binding changed before execution")
-    binding = plan.get("binding")
-    verification = verify_outcome_binding(binding)
-    if not verification["ok"]:
-        raise ValueError(verification["issues"][0]["message"])
-    path = Path(str(plan["storage_root"])) / str(plan["binding_path"])
-    content = (canonical_json(binding) + "\n").encode("utf-8")
-    if path.exists() and path.read_bytes() != content:
-        raise ValueError(f"immutable outcome-binding collision: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_bytes(content)
-    return {
-        "schema": "kungfu.assignment-orchestration.work-design-outcome-binding-receipt/v1",
-        "bindingRoot": expected_binding_root,
-        "bindingPath": str(path),
-        "storageKind": str(plan["storage_kind"]),
-        "portable": True,
-        "writes": [str(path)],
-        "next_actions": [],
-    }
-
-
-def list_outcome_bindings(workspace_root: str | Path) -> dict[str, Any]:
-    """Read and fail closed over additive rooted outcome bindings."""
-
-    root = Path(workspace_root).expanduser().resolve()
-    storage_root, storage_kind = _sealed_state_storage(root)
-    index_root = storage_root / "work-design-outcomes" / "sha256"
-    by_state: dict[str, list[dict[str, Any]]] = {}
-    issues: list[dict[str, Any]] = []
-    for binding_path in sorted(index_root.glob("*/*/binding.json")):
-        try:
-            binding = json.loads(binding_path.read_text(encoding="utf-8"))
-            verification = verify_outcome_binding(binding)
-            if not verification["ok"]:
-                raise ValueError(verification["issues"][0]["message"])
-            by_state.setdefault(str(binding["settled_state_root"]), []).append(binding)
-        except (OSError, ValueError, json.JSONDecodeError) as error:
-            issues.append(
-                {
-                    "code": "outcome-binding-invalid",
-                    "path": str(binding_path.relative_to(storage_root)),
-                    "message": str(error),
-                }
-            )
-    bindings: list[dict[str, Any]] = []
-    for state_root, rows in sorted(by_state.items()):
-        unique = {str(row["binding_root"]): row for row in rows}
-        if len(unique) != 1:
-            issues.append(
-                {
-                    "code": "conflicting-outcome-bindings",
-                    "settled_state_root": state_root,
-                    "binding_roots": sorted(unique),
-                    "message": "one settled state has multiple distinct outcome bindings",
-                }
-            )
-            continue
-        bindings.append(next(iter(unique.values())))
-    body = {
-        "schema": OUTCOME_INDEX_SCHEMA,
-        "bindings": bindings,
-        "issues": sorted(issues, key=semantic_root),
-        "storage_kind": storage_kind,
-        "writes": [],
-    }
-    return {**body, "index_root": semantic_root(body)}
+for _public_name, _public_function in (
+    ("_validate_outcome_artifact", _validate_outcome_artifact),
+    ("outcome_binding_plan", outcome_binding_plan),
+    ("verify_outcome_binding", verify_outcome_binding),
+    ("apply_outcome_binding", apply_outcome_binding),
+    ("list_outcome_bindings", list_outcome_bindings),
+):
+    _public_function.__name__ = _public_name
+    _public_function.__qualname__ = _public_name
+    _public_function.__module__ = __name__
 
 
 def _binding_endpoint(
@@ -1361,13 +833,13 @@ def _binding_endpoint(
         raise ValueError("status omitted Initiative or Assignment identity")
     evidence = sorted(
         {
-            _root(row, "evidenceEpisodeRoots")
+            assignment_canonical._root(row, "evidenceEpisodeRoots")
             for row in assignment.get("evidence_episode_roots") or []
         }
     )
     captures = sorted(
         {
-            _root(row, "captureReceiptRoots")
+            assignment_canonical._root(row, "captureReceiptRoots")
             for row in assignment.get("capture_receipt_roots") or []
         }
     )
@@ -1378,14 +850,18 @@ def _binding_endpoint(
         },
         "initiativeId": initiative_id,
         "assignmentId": assignment_id,
-        "stateRoot": _root(status.get("query_proof_root"), "stateRoot"),
-        "projectCutRoot": _root(
+        "stateRoot": assignment_canonical._root(
+            status.get("query_proof_root"), "stateRoot"
+        ),
+        "projectCutRoot": assignment_canonical._root(
             assignment.get("project_cut_root"), "projectCutRoot", optional=True
         ),
         "evidenceRoots": evidence,
-        "requestRoot": _root(assignment.get("request_root"), "requestRoot"),
+        "requestRoot": assignment_canonical._root(
+            assignment.get("request_root"), "requestRoot"
+        ),
         "captureReceiptRoots": captures,
-        "admissionReceiptRoot": _root(
+        "admissionReceiptRoot": assignment_canonical._root(
             receipt.get("payload_hash"), "admissionReceiptRoot"
         ),
     }
@@ -1417,12 +893,12 @@ def cross_workspace_binding(
         binding["child"]["assignmentId"],
     ):
         raise ValueError("cross-workspace binding endpoints must name different work")
-    return {**binding, "bindingRoot": semantic_root(binding)}
+    return {**binding, "bindingRoot": assignment_canonical.semantic_root(binding)}
 
 
 def verify_cross_workspace_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
     value = dict(binding)
-    declared = _root(value.pop("bindingRoot", ""), "bindingRoot")
+    declared = assignment_canonical._root(value.pop("bindingRoot", ""), "bindingRoot")
     if set(value) != {"schema", "relationshipType", "parent", "child"}:
         raise ValueError("cross-workspace binding has an invalid field set")
     if (
@@ -1456,19 +932,21 @@ def verify_cross_workspace_binding(binding: Mapping[str, Any]) -> dict[str, Any]
         if not endpoint.get("initiativeId") or not endpoint.get("assignmentId"):
             raise ValueError(f"{role} binding endpoint work identity is absent")
         for field in ("stateRoot", "requestRoot", "admissionReceiptRoot"):
-            _root(endpoint.get(field), f"{role}.{field}")
-        _root(endpoint.get("projectCutRoot"), f"{role}.projectCutRoot", optional=True)
+            assignment_canonical._root(endpoint.get(field), f"{role}.{field}")
+        assignment_canonical._root(
+            endpoint.get("projectCutRoot"), f"{role}.projectCutRoot", optional=True
+        )
         for field in ("evidenceRoots", "captureReceiptRoots"):
             roots = endpoint.get(field)
             if not isinstance(roots, list) or roots != sorted(set(roots)):
                 raise ValueError(f"{role}.{field} must be sorted and unique")
             for root in roots:
-                _root(root, f"{role}.{field}")
+                assignment_canonical._root(root, f"{role}.{field}")
     if value["parent"]["workspaceIdentity"] == value["child"]["workspaceIdentity"]:
         raise ValueError("cross-workspace binding endpoints name the same workspace")
     return {
         "schema": "kungfu.assignment-orchestration.cross-workspace-binding-verification/v1",
-        "ok": semantic_root(value) == declared,
+        "ok": assignment_canonical.semantic_root(value) == declared,
         "bindingRoot": declared,
         "parentWorkspaceId": value["parent"]["workspaceIdentity"]["workspaceId"],
         "childWorkspaceId": value["child"]["workspaceIdentity"]["workspaceId"],
@@ -1505,19 +983,19 @@ def cross_workspace_binding_plan(
         storage_root, storage_kind = root, "home-workspace"
     else:
         storage_root, storage_kind = _sealed_state_storage(root)
-    digest = str(binding["bindingRoot"]).removeprefix(ROOT)
+    digest = str(binding["bindingRoot"]).removeprefix(assignment_canonical.ROOT)
     relative = Path("assignment-bindings") / "sha256" / digest[:2] / digest
     receipt = {
         "schema": "kungfu.assignment-orchestration.cross-workspace-binding-receipt/v1",
         "bindingRoot": binding["bindingRoot"],
         "localRole": role,
         "localWorkspaceIdentity": identity,
-        "localEndpointRoot": semantic_root(binding[role]),
+        "localEndpointRoot": assignment_canonical.semantic_root(binding[role]),
         "storageKind": storage_kind,
         "portable": True,
         "pathIsIdentity": False,
     }
-    receipt["receiptRoot"] = semantic_root(receipt)
+    receipt["receiptRoot"] = assignment_canonical.semantic_root(receipt)
     return {
         "schema": "kungfu.assignment-orchestration.cross-workspace-binding-plan/v1",
         "bindingRoot": binding["bindingRoot"],
@@ -1546,7 +1024,7 @@ def apply_cross_workspace_binding(
         (binding_path, binding),
         (receipt_path, plan["receipt"]),
     ):
-        content = (canonical_json(value) + "\n").encode("utf-8")
+        content = (assignment_canonical.canonical_json(value) + "\n").encode("utf-8")
         if path.exists() and path.read_bytes() != content:
             raise ValueError(f"immutable cross-workspace binding collision: {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1566,7 +1044,9 @@ def verify_cross_workspace_binding_receipt(
     binding = json.loads(Path(binding_file).read_text(encoding="utf-8"))
     receipt = json.loads(Path(receipt_file).read_text(encoding="utf-8"))
     binding_verification = verify_cross_workspace_binding(binding)
-    declared_receipt_root = _root(receipt.pop("receiptRoot", ""), "receiptRoot")
+    declared_receipt_root = assignment_canonical._root(
+        receipt.pop("receiptRoot", ""), "receiptRoot"
+    )
     local_role = str(receipt.get("localRole") or "")
     ok = bool(
         binding_verification["ok"]
@@ -1574,8 +1054,9 @@ def verify_cross_workspace_binding_receipt(
         and receipt.get("bindingRoot") == binding.get("bindingRoot")
         and receipt.get("localWorkspaceIdentity")
         == binding[local_role]["workspaceIdentity"]
-        and receipt.get("localEndpointRoot") == semantic_root(binding[local_role])
-        and declared_receipt_root == semantic_root(receipt)
+        and receipt.get("localEndpointRoot")
+        == assignment_canonical.semantic_root(binding[local_role])
+        and declared_receipt_root == assignment_canonical.semantic_root(receipt)
     )
     return {
         "schema": "kungfu.assignment-orchestration.cross-workspace-binding-receipt-verification/v1",

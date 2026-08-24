@@ -66,7 +66,6 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/aws-us-windows-burst-qualification.yml` | `trust` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/build.yml` | `auditable-demo-fast-sentinel` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/build.yml` | `build` | qualification | none | qualifying | token:write, oidc, repo-secret:BUILDCHAIN_ARTIFACT_RELAY_S3_DOWNLOAD_ROLE_ARN+BUILDCHAIN_ARTIFACT_RELAY_S3_ROLE_ARN+BUILDCHAIN_ARTIFACT_RELAY_S3_UPLOAD_ROLE_ARN+KUNGFU_GITHUB_TOKEN | none | 0 |
-| `.github/workflows/build.yml` | `finalize-upgrade-publication-admission` | qualification | none | diagnostic | token:read | none | 6 |
 | `.github/workflows/build.yml` | `kungfu-phase-b` | qualification | none | qualifying | token:read | none | 0 |
 | `.github/workflows/build.yml` | `phase-b-package` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/build.yml` | `precompute-alpha-publication-tail` | qualification | none | diagnostic | token:read | none | 4 |
@@ -79,8 +78,7 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/core-build-profiles.yml` | `shifu_observation` | qualification | none | diagnostic | token:read | none | 4 |
 | `.github/workflows/dco.yml` | `signoff` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/dev-alpha-candidate-patrol.yml` | `candidate` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
-| `.github/workflows/dev-alpha-candidate-patrol.yml` | `candidate-provenance` | qualification | none | diagnostic | token:read | none | 3 |
-| `.github/workflows/dev-alpha-candidate-patrol.yml` | `release-cut-lock` | qualification | none | diagnostic | token:read | none | 3 |
+| `.github/workflows/dev-alpha-candidate-patrol.yml` | `release-cut-lock` | qualification | none | diagnostic | token:read | none | 2 |
 | `.github/workflows/dev-alpha-candidate-patrol.yml` | `resolve-channels` | qualification | none | diagnostic | token:none | none | 1 |
 | `.github/workflows/dev-delivery-warrant-terminal.yml` | `cancel-queued` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/dev-delivery-warrant-terminal.yml` | `close` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
@@ -92,6 +90,8 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/dev-post-merge-advisory.yml` | `qualified_core_candidate` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/dev-pr-auto-merge.yml` | `admission` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/dev-pr-auto-merge.yml` | `delivery-contract` | qualification | none | diagnostic | token:read | none | 12 |
+| `.github/workflows/dev-pr-auto-merge.yml` | `landing` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
+| `.github/workflows/dev-pr-auto-merge.yml` | `native-check-bridge` | qualification | none | qualifying | token:write | none | 3 |
 | `.github/workflows/dev-pr-auto-merge.yml` | `resolve-target` | qualification | none | diagnostic | token:read | none | 1 |
 | `.github/workflows/dev-qualification-patrol.yml` | `patrol` | qualification | none | diagnostic | token:write, repo-secret:KUNGFU_GITHUB_TOKEN | none | 0 |
 | `.github/workflows/dev-verify-patrol.yml` | `bind-source` | qualification | none | diagnostic | token:read | none | 1 |
@@ -119,8 +119,9 @@ without changing and refreshing the manifest fails the Gate catalog check.
 | `.github/workflows/python-structure.yml` | `exact-root-ratchet` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/queue-admission-lease.yml` | `admission` | qualification | none | diagnostic | token:read | none | 5 |
 | `.github/workflows/release-new-version.yml` | `alpha-timeline` | qualification | none | diagnostic | token:write | none | 11 |
+| `.github/workflows/release-new-version.yml` | `github-release-latest` | release-control | product | qualifying | token:write | none | 3 |
 | `.github/workflows/release-new-version.yml` | `promote` | release-control | channel | qualifying | token:write, oidc, repo-secret:BUILDCHAIN_ISSUE_APP_ID+BUILDCHAIN_ISSUE_APP_PRIVATE_KEY+KUNGFU_ALPHA_CHANNEL_SIGNING_PRIVATE_KEY+KUNGFU_GITHUB_TOKEN+KUNGFU_GOVERNANCE_AUDITOR_APP_PRIVATE_KEY | none | 0 |
-| `.github/workflows/release-new-version.yml` | `promotion-contract` | qualification | none | diagnostic | token:read | none | 11 |
+| `.github/workflows/release-new-version.yml` | `promotion-contract` | qualification | none | diagnostic | token:read | none | 9 |
 | `.github/workflows/release-new-version.yml` | `recover` | release-control | channel | qualifying | token:write, oidc, repo-secret:BUILDCHAIN_ISSUE_APP_ID+BUILDCHAIN_ISSUE_APP_PRIVATE_KEY+KUNGFU_ALPHA_CHANNEL_SIGNING_PRIVATE_KEY+KUNGFU_GITHUB_TOKEN+KUNGFU_GOVERNANCE_AUDITOR_APP_PRIVATE_KEY | none | 0 |
 | `.github/workflows/release-new-version.yml` | `recovery-preflight` | qualification | none | diagnostic | token:read | none | 8 |
 | `.github/workflows/release-shifu.yml` | `build` | qualification | none | diagnostic | token:write, oidc | none | 7 |

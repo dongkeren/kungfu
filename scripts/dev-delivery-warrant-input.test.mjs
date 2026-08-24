@@ -88,6 +88,14 @@ test('consumer input projects exact base-independent Warrant roots', () => {
   assert.equal(result.deliveryClass, 'native-proof-required');
   assert.deepEqual(result.affectedPaths, ['framework/core/CMakeLists.txt']);
   assert.ok(result.shardEvidenceRoots.includes(`sha256:${descriptor.proofId}`));
+  assert.equal(
+    result.environmentRoot,
+    digest({
+      schema: 'kungfu.github-hosted-native-environment/v1',
+      platformTier: descriptor.identity.platformTier,
+      toolchain: descriptor.identity.toolchain,
+    }),
+  );
   for (const field of [
     'assignmentRoot',
     'initiativeRoot',
@@ -97,6 +105,7 @@ test('consumer input projects exact base-independent Warrant roots', () => {
     'closureRoot',
     'dependencyRoot',
     'toolchainRoot',
+    'environmentRoot',
     'inputRoot',
   ]) {
     assert.match(result[field], /^sha256:[0-9a-f]{64}$/u, field);
@@ -229,11 +238,11 @@ test('terminal consumer executes only protected event and Buildchain authority',
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/u);
   assert.match(
     workflow,
-    /dev-delivery-warrant-close\.yml@fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /dev-delivery-warrant-close\.yml@4dabecd7056e168f7345d460e3729465a932db9c/u,
   );
   assert.match(
     workflow,
-    /dev-delivery-warrant-cancel\.yml@fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /dev-delivery-warrant-cancel\.yml@4dabecd7056e168f7345d460e3729465a932db9c/u,
   );
   assert.doesNotMatch(workflow, /github\.event\.pull_request\.head\.ref/u);
   assert.doesNotMatch(workflow, /checkout[^\n]*pull_request\.head/u);
@@ -254,4 +263,29 @@ test('protected caller makes the Warrant mandatory for exact delivery', () => {
     workflow,
     /active-lease-context: \$\{\{ needs\.delivery-contract\.outputs\.active-lease-context \}\}/u,
   );
+  assert.match(
+    workflow,
+    /required-status-checks: \|-\n\s+Candidate source acceptance \/ check/u,
+  );
+  assert.match(workflow, /require-approval: true/u);
+  assert.match(workflow, /landing-mode: queue/u);
+  assert.match(
+    workflow,
+    /expected-head-sha: \$\{\{ needs\.resolve-target\.outputs\.expected-head-sha \}\}/u,
+  );
+
+  for (const weakened of [
+    workflow.replaceAll('require-approval: true', 'require-approval: false'),
+    workflow.replaceAll(
+      'Candidate source acceptance / check',
+      'Candidate source acceptance omitted',
+    ),
+  ]) {
+    const protectedBoundary =
+      /require-approval: true/u.test(weakened) &&
+      /required-status-checks: \|-\n\s+Candidate source acceptance \/ check/u.test(
+        weakened,
+      );
+    assert.equal(protectedBoundary, false);
+  }
 });

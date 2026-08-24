@@ -8,9 +8,13 @@
   "buildchain": {
     "workflow_shell_ref": "v3-alpha",
     "workflow_shell_resolved_sha": "a60957e3ffc8f9a02f0e9419deebc8d35a3f7198",
+    "build_channel_ref": "v3-alpha",
+    "build_major": "v3",
+    "build_workflow_shell_resolved_sha": "675b4f2a51af7e5f2aac58011c7ede0313b2b105",
+    "build_runtime_resolved_sha": "675b4f2a51af7e5f2aac58011c7ede0313b2b105",
     "alpha": {
       "workflow_ref": "v3-alpha",
-      "resolved_sha": "82701ca66f5366ade6ec694c9950d5d8d6db082d",
+      "resolved_sha": "a5f43da50ea4ad5138ccf901135b89a711a1780c",
       "contract_lock": ".buildchain/alpha-contract-lock.json",
       "publish_channel": "alpha",
       "publish_dist_tag": "alpha"
@@ -48,7 +52,6 @@
     ],
     "kfd_2_claims": [
       ".buildchain/kfd/kfd-2/claims/agent-onboarding-pack.json",
-      ".buildchain/kfd/kfd-2/claims/codex-report-receipts.json",
       ".buildchain/kfd/kfd-2/claims/remote-fact-boundary.json"
     ],
     "kfd_3_prebuild_witnesses": [

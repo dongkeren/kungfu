@@ -16,6 +16,15 @@ inputs:
   protected-base:
     description: Exact protected dev branch.
     required: true
+  qualified-base:
+    description: Exact protected base commit used by the native execution.
+    required: true
+  toolchain-root:
+    description: Exact native toolchain contract root.
+    required: true
+  environment-root:
+    description: Exact native execution environment contract root.
+    required: true
   allowed-phases:
     description: Comma-separated Warrant phases admitted for this execution.
     required: true
@@ -30,7 +39,7 @@ runs:
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
         repository: kungfu-systems/buildchain
-        ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718
+        ref: 4dabecd7056e168f7345d460e3729465a932db9c
         path: .buildchain/dev-delivery-native-runtime
         fetch-depth: 1
         persist-credentials: false
@@ -39,7 +48,7 @@ runs:
       working-directory: .buildchain/dev-delivery-native-runtime
       run: |
         set -euo pipefail
-        test "$(git rev-parse HEAD)" = fefb02fbb874bf4bc86dc3fd4a707a9468e14718
+        test "$(git rev-parse HEAD)" = 4dabecd7056e168f7345d460e3729465a932db9c
         if [ ! -d node_modules ]; then
           # shifu-entry-contract: allow exact pinned Buildchain dependency bootstrap before its CLI is runnable
           corepack pnpm install --frozen-lockfile --ignore-scripts
@@ -55,6 +64,9 @@ runs:
         --branch "${{ inputs.protected-base }}"
         --pull-request "${{ inputs.pull-request }}"
         --source-head "${{ inputs.source-head }}"
+        --qualified-base "${{ inputs.qualified-base }}"
+        --toolchain-root "${{ inputs.toolchain-root }}"
+        --environment-root "${{ inputs.environment-root }}"
         --allowed-phases "${{ inputs.allowed-phases }}"
         --runtime-root .buildchain/dev-delivery-native-runtime
         --heartbeat-seconds 300

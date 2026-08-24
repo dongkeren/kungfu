@@ -61,6 +61,18 @@ execution; Shifu owns how the task is executed after source checkout.
   Run
   `./shifu check:production-graph` to emit the exact protected-CI verification
   receipt over the deterministic conformance fixtures.
+  The bounded
+  [`native-build-lowering-contract.json`](native-build-lowering-contract.json)
+  exploration reads that same `journal` node and existing Core authority into
+  one backend-neutral Native Build IR, then lowers it to a non-executable Bazel
+  data fixture. It emits rooted IR, projection, and receipt identities while
+  leaving dependency labels, platform/toolchain constraints, and artifact
+  staging as explicit provider prerequisites. It installs or invokes no Bazel,
+  writes no build file, executes no node, and leaves `./shifu build:core`
+  unchanged. The authority inventory, prerequisites, residual risks, and
+  conditional-go boundary are recorded in the machine contract.
+  Run `./shifu production-graph:native-build-lowering:verify` to print the
+  exact fixture-only receipt.
   Before any node starts, `./shifu production-graph:admit --request REQUEST`
   verifies one exact native `kungfu.work-ref/v1`, Work Control query and run-gate
   roots, external authorization evidence, actor, attempt, executor policy,
@@ -83,6 +95,16 @@ execution; Shifu owns how the task is executed after source checkout.
   dependency-skip events and one rooted receipt. Replaying the same inputs
   returns the existing exact receipt without starting a process. It is not a
   scheduler, and it cannot mutate Work or Assignment authority.
+  `./shifu core-production-subgraph:execute` is the additive adapter for the
+  typed journal Core slice. It re-verifies the typed subgraph and plan, the
+  current describe-only verification receipt, the projected execution graph,
+  policy, source, toolchain, and live execution admission before delegating
+  `dependency-bootstrap`, `native-build`, and `artifact-stage` serially to the
+  existing Core build internals. Each internal handler requires the exact
+  admitted node and policy bindings; later stages are dependency-skipped after
+  failure, timeout, or cancellation. The public `./shifu build:core` argv and
+  package scripts remain unchanged and authoritative, while removing this
+  adapter restores the prior describe-only state without a cutover.
   `./shifu production-graph:build-result --execution-receipt RECEIPT
   --output-dir DIR [--expected-receipt-root ROOT]` deterministically settles
   one exact terminal local-execution receipt into a content-addressed

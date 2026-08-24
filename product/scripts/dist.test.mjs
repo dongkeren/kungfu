@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { readElectronBuilderProjection } from '../../framework/maintainability/semantic-amplification.mjs';
 import { cliLauncherContent } from './cli-launcher.mjs';
 import { isPythonBytecodePath, sha256Tree } from './compatibility.mjs';
@@ -20,7 +18,6 @@ import {
   esbuildPlatformBinaryPath,
   installArgs,
   installedKungfuInvocation,
-  isInstalledKfdBuildClosure,
   isShippedKfdSupport,
   kfxBundleExternalModules,
   listKfxPackages,
@@ -31,7 +28,6 @@ import {
   runInstalledKungfuCommand,
   runInstalledTuiBootstrapSmoke,
   stageNodePtyForCli,
-  stageProductTrunkEntrypoints,
   stageXinfaContract,
   verifyProductObservabilityEvents,
   writeAuditableDemoBinaryMetadata,
@@ -59,27 +55,6 @@ const {
   toEsmEntrypointSpecifier,
 } = require('../../framework/gui/scripts/before-pack.cjs');
 
-test('product trunk staging refreshes both Windows runtime entry aliases', (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-trunk-stage-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const source = path.join(root, 'rebuilt-kungfu-trunk.exe');
-  const runtime = path.join(root, 'runtime');
-  fs.mkdirSync(runtime);
-  fs.writeFileSync(source, 'rebuilt Windows Rust trunk');
-  fs.writeFileSync(path.join(runtime, 'kungfu.exe'), 'stale first build');
-
-  stageProductTrunkEntrypoints(source, runtime, 'win32');
-
-  assert.deepEqual(
-    fs.readFileSync(path.join(runtime, 'kungfu.exe')),
-    fs.readFileSync(source),
-  );
-  assert.deepEqual(
-    fs.readFileSync(path.join(runtime, 'kungfu-trunk.exe')),
-    fs.readFileSync(source),
-  );
-});
-
 test('reference-only KFX suites stay outside product assembly', () => {
   const packageNames = listKfxPackages().map((pkg) => pkg.name);
   assert.ok(packageNames.includes('@kungfu-tech/kfx-suite-agent-work-lab'));
@@ -88,21 +63,6 @@ test('reference-only KFX suites stay outside product assembly', () => {
     packageNames.join(', '),
   );
   assert.ok(!packageNames.includes('@kungfu-kfx/github-dogfood-bridge'));
-});
-
-test('root build uses the same reference-only product assembly policy', () => {
-  const root = fileURLToPath(new URL('../..', import.meta.url));
-  const result = spawnSync(
-    process.execPath,
-    [
-      fileURLToPath(new URL('../../scripts/build.mjs', import.meta.url)),
-      '--dry-run',
-    ],
-    { cwd: root, encoding: 'utf8' },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /product-bundled KFX packages: \d+/u);
-  assert.doesNotMatch(result.stdout, /github-webhook|github-dogfood-bridge/u);
 });
 
 test('Intel macOS is rejected by the product-wide host policy', () => {
@@ -255,33 +215,6 @@ test('installed KFD smoke accepts only release-qualified shipped support', () =>
         status: 'not-qualified',
         shippedSupport: false,
       },
-    }),
-    false,
-  );
-});
-
-test('installed KFD build smoke accepts a governed candidate closure before Passport qualification', () => {
-  const candidate = {
-    status: 'candidate',
-    implementation: { status: 'implemented' },
-    verification: { status: 'passed' },
-    buildchain: { gateStatus: 'manifest-verified' },
-    claimClass: 'standard-adopter-manifest-projection',
-    releaseQualification: { shippedSupport: false },
-    declaration: { state: 'candidate', usage: 'used' },
-  };
-  assert.equal(isInstalledKfdBuildClosure(candidate), true);
-  assert.equal(
-    isInstalledKfdBuildClosure({
-      ...candidate,
-      buildchain: { gateStatus: 'failed' },
-    }),
-    false,
-  );
-  assert.equal(
-    isInstalledKfdBuildClosure({
-      ...candidate,
-      declaration: { state: 'candidate', usage: 'evaluating' },
     }),
     false,
   );

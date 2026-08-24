@@ -468,15 +468,18 @@ test('workflow contract keeps candidates exact-source, independent, and publish-
   );
   assert.match(
     workflow,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@v3-alpha/u,
+    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@675b4f2a51af7e5f2aac58011c7ede0313b2b105/u,
   );
   assert.match(
     workflow,
-    /^\s+buildchain-ref: \$\{\{ inputs\.buildchain-ref \|\| 'v3-alpha' \}\}$/mu,
+    /^\s+buildchain-ref: 675b4f2a51af7e5f2aac58011c7ede0313b2b105$/mu,
   );
+  assert.match(workflow, /^\s+buildchain-contract-expected-channel: alpha$/mu);
+  assert.match(workflow, /^\s+buildchain-contract-expected-major: v3$/mu);
+  assert.doesNotMatch(workflow, /inputs\.buildchain-ref/u);
   assert.match(
     affectedNativeWorkflow,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/check\.yml@58e48d73ae7fef0dd06ae02baf6d090e4da5487d[\s\S]*buildchain-ref: 58e48d73ae7fef0dd06ae02baf6d090e4da5487d/u,
+    /source_acceptance:[\s\S]*uses: kungfu-systems\/buildchain\/\.github\/workflows\/check\.yml@1342b7d68936ab3c31b58b255df1de49c234bc02[\s\S]*buildchain-ref: 1342b7d68936ab3c31b58b255df1de49c234bc02[\s\S]*source-proof-reuse: true[\s\S]*source-proof-policy-paths-json: '\["\.github\/workflows\/affected-native-pr\.yml"\]'[\s\S]*source-proof-closure-paths-json: '\["\.buildchain\/buildchain\.toml","shifu","scripts\/source-acceptance\.mjs","scripts\/require-shifu\.mjs"\]'[\s\S]*source-proof-dependency-paths-json: '\["package\.json","pnpm-lock\.yaml"\]'[\s\S]*source-proof-required-contexts-json: '\["Candidate source acceptance \/ check"\]'/u,
   );
   assert.match(
     affectedNativeWorkflow,
@@ -494,6 +497,10 @@ test('workflow contract keeps candidates exact-source, independent, and publish-
   assert.match(
     signing,
     /id = "kungfu-cli-macos-arm64"[\s\S]*entitlements_profile = "jit-executable-v1"[\s\S]*entitlements_paths = \[[\s\S]*"kungfu-episodes-cli-darwin-arm64\/runtime\/kungfu"[\s\S]*"kungfu-episodes-cli-darwin-arm64\/runtime\/python\/bin\/python3"[\s\S]*"kungfu-episodes-cli-darwin-arm64\/runtime\/python\/bin\/python3\.13"[\s\S]*\]/u,
+  );
+  assert.match(
+    signing,
+    /\[lifecycle\.signing-finalization\][\s\S]*command = "node product\/scripts\/verify-cli-surface-qualification\.mjs[^\n]+ && node product\/scripts\/upgrade-manifest\.mjs finalize-macos-release-artifacts"/u,
   );
   assert.match(workflow, /checkout-history-mode: full/u);
   assert.match(

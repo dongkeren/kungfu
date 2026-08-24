@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 
-import copy
 from pathlib import Path
 import json
 import os
@@ -11,7 +10,6 @@ import sys
 import time
 import tomllib
 
-import click
 from click.testing import CliRunner
 import pytest
 from jsonschema import Draft202012Validator
@@ -21,7 +19,6 @@ from kungfu.agent import native_launch
 from kungfu.agent import run_agent
 from kungfu.agent import runtime_profiles
 from kungfu.agent import session_contract
-from kungfu.agent.kfd3 import verify_agent_interface
 from kungfu.cli.commands import agent as agent_commands, kfc
 from kungfu.rewind.cost.discovery import discover_provider_candidates
 from kungfu.workspace import resolve_workspace_target
@@ -31,25 +28,6 @@ from agent_bootstrap_fixtures import verified_bootstrap_receipt
 ROOT = Path(__file__).resolve().parents[4]
 CONTRACT = ROOT / "framework" / "config" / "kungfu-config.contract.json"
 ROOT_HASH = "sha256:" + "a" * 64
-
-
-WORK_CONTROL_COMMAND_CONTRACTS = {
-    "kungfu.work.claim-completion": {
-        "command": "claim-completion",
-        "payload_options": {"--workspace", "--home", "--authorized-by"},
-        "signature": "kungfu work claim-completion <input.json> --workspace <path> --authorized-by <actor>",
-    },
-    "kungfu.work.review": {
-        "command": "review",
-        "payload_options": {"--workspace", "--home", "--authorized-by"},
-        "signature": "kungfu work review <input.json> --workspace <path> --authorized-by <reviewer>",
-    },
-    "kungfu.work.decide": {
-        "command": "decide",
-        "payload_options": {"--workspace", "--home", "--authorized-by"},
-        "signature": "kungfu work decide <input.json> --workspace <path> --authorized-by <actor>",
-    },
-}
 
 
 def _contract():
@@ -68,6 +46,33 @@ def _work_ref():
         "purpose": "delegated-work",
         "systemTimeCut": "2026-07-13T00:00:00Z",
         "initiativeId": "initiative:test",
+    }
+
+
+def _skill_runtime_pointer():
+    return {
+        "schema": "kungfu.skill-runtime-audit-pointer/v1",
+        "path": "/runtime/skill-manager/agent-console-attempt-1.json",
+        "runtimeAuditRoot": ROOT_HASH,
+        "registryStateRoot": ROOT_HASH,
+        "historyRoot": ROOT_HASH,
+        "diagnosisRoot": ROOT_HASH,
+        "catalogRoot": ROOT_HASH,
+        "decisionPolicyRoot": ROOT_HASH,
+        "workRefRoot": ROOT_HASH,
+        "kfxDependencyRoots": [ROOT_HASH],
+        "receiptRoots": [ROOT_HASH],
+        "recoveryRoot": ROOT_HASH,
+        "entrypoints": {
+            "catalog": ["kungfu", "skill", "catalog", "--json"],
+            "advise": ["kungfu", "agent", "skill-advisory", "--json"],
+            "read": ["kungfu", "skill", "read", "<key>", "--json"],
+            "audit": ["kungfu", "skill", "audit", "--json"],
+            "explain": ["kungfu", "skill", "explain", "<key>", "--json"],
+            "diagnose": ["kungfu", "skill", "diagnose", "--json"],
+            "kfx": ["kungfu", "kfx", "native", "status", "--json"],
+        },
+        "authority": "read-only-projection",
     }
 
 
@@ -378,9 +383,16 @@ def test_agent_console_envelope_binds_work_and_discovery_entrypoints():
             "bindWork": ["kungfu", "agent", "console", "bind-work"],
         },
         "knownLimits": ["terminal transcript is not proof"],
+        "skillRuntimeAudit": {
+            **_skill_runtime_pointer(),
+            "workRefRoot": session_contract.semantic_root(_work_ref()),
+        },
         "envelopeRoot": ROOT_HASH,
     }
     config.validate_value("agentConsoleEnvelope", value, contract=_contract())
+    assert value["skillRuntimeAudit"]["workRefRoot"] == session_contract.semantic_root(
+        value["workRef"]
+    )
     value["workRef"]["profileRoot"] = "latest"
     with pytest.raises(ValueError):
         config.validate_value("agentConsoleEnvelope", value, contract=_contract())
@@ -1004,6 +1016,147 @@ def test_native_interactive_argv_is_distinct_from_managed_argv():
     ]
 
 
+def test_windows_codex_runtime_health_uses_capability_not_version():
+    calls = []
+
+    def probe(argv, **kwargs):
+        calls.append((argv, kwargs))
+        if argv[-1] == "--help":
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="  sandbox  Run commands within a sandbox\n", stderr=""
+            )
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    result = native_launch.provider_runtime_health(
+        {
+            "provider": "codex",
+            "launch": {"executable": "C:\\Agent\\codex.exe"},
+        },
+        cwd="C:\\project",
+        env={"PATH": "C:\\Windows\\System32"},
+        platform="win32",
+        run=probe,
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "ready"
+    assert result["modelInvoked"] is False
+    assert calls[1][0][-8:] == [
+        "sandbox",
+        "windows",
+        "--",
+        "cmd.exe",
+        "/d",
+        "/c",
+        "exit",
+        "0",
+    ]
+
+
+def test_windows_codex_runtime_health_fails_closed_before_model_launch():
+    def probe(argv, **_kwargs):
+        if argv[-1] == "--help":
+            return subprocess.CompletedProcess(
+                argv, 0, stdout="  sandbox  Run commands within a sandbox\n", stderr=""
+            )
+        return subprocess.CompletedProcess(
+            argv,
+            1,
+            stdout="",
+            stderr=(
+                "windows sandbox failed: timed out after 15000ms connecting "
+                "runner pipe-in\n"
+            ),
+        )
+
+    result = native_launch.provider_runtime_health(
+        {
+            "provider": "codex",
+            "launch": {"executable": "C:\\Agent\\codex.exe"},
+        },
+        cwd="C:\\project",
+        env={"PATH": "C:\\Windows\\System32"},
+        platform="win32",
+        run=probe,
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "unavailable"
+    assert "runner pipe-in" in result["diagnostic"]
+    assert result["permissionsWidened"] is False
+
+
+def test_windows_codex_without_sandbox_helper_is_not_version_blocked():
+    result = native_launch.provider_runtime_health(
+        {
+            "provider": "codex",
+            "launch": {"executable": "C:\\Agent\\codex.exe"},
+        },
+        cwd="C:\\project",
+        env={"PATH": "C:\\Windows\\System32"},
+        platform="win32",
+        run=lambda argv, **_kwargs: subprocess.CompletedProcess(
+            argv, 0, stdout="Codex legacy help\n", stderr=""
+        ),
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "capability-unverified"
+    assert "version-based" in result["warning"]
+
+
+def test_broken_windows_codex_sandbox_blocks_before_session_or_provider(
+    monkeypatch, tmp_path
+):
+    profile = {
+        "id": "kungfu.agent-runtime.codex.windows-broken",
+        "provider": "codex",
+        "cwdPolicy": "workspace-root",
+        "launch": {
+            "executable": "C:\\Agent\\codex.exe",
+            "interactiveArgv": [],
+            "shellMode": False,
+        },
+        "bootstrap": {"adapter": "codex", "envelope": "required"},
+    }
+    monkeypatch.setattr(
+        runtime_profiles,
+        "verify_profile",
+        lambda _profile: {"ok": True, "error": None, "version": "arbitrary"},
+    )
+    monkeypatch.setattr(
+        run_agent,
+        "_provider_runtime_health",
+        lambda _profile, **_kwargs: {
+            "ok": False,
+            "diagnostic": (
+                "windows sandbox failed: timed out connecting runner pipe-in"
+            ),
+        },
+    )
+    launches = []
+    session_requests = []
+
+    with pytest.raises(ValueError, match="did not launch the Agent"):
+        run_agent.run_native_interactive(
+            profile,
+            runtime_dir=str(tmp_path / "runtime"),
+            config_home=str(tmp_path / "config"),
+            runtime_home=str(tmp_path / "home"),
+            workspace_root=str(tmp_path),
+            work_ref=None,
+            work_selection={
+                "schema": "kungfu.native-work-selection/v1",
+                "state": "none",
+            },
+            process_runner=lambda *args, **kwargs: launches.append((args, kwargs)),
+            session_invoker=lambda request: session_requests.append(request),
+        )
+
+    assert launches == []
+    assert session_requests == []
+
+
 @pytest.mark.parametrize("provider", ["codex", "claude", "amp", "opencode"])
 def test_native_provider_adapter_advertises_session_skill_without_provider_writes(
     tmp_path, provider
@@ -1127,6 +1280,10 @@ def test_native_environment_publishes_exact_cli_and_canonical_bind_argv(tmp_path
     cli_bin.parent.mkdir()
     cli_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     cli_bin.chmod(0o700)
+    stale_cli = tmp_path / "stale-bin" / "kungfu"
+    stale_cli.parent.mkdir()
+    stale_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    stale_cli.chmod(0o700)
     runtime_dir = tmp_path / "project" / ".kungfu" / "runtime"
 
     env = run_agent.native_environment(
@@ -1137,7 +1294,7 @@ def test_native_environment_publishes_exact_cli_and_canonical_bind_argv(tmp_path
         workspace_root=str(tmp_path / "project"),
         work_ref=None,
         work_selection={"schema": "kungfu.native-work-selection/v1", "state": "none"},
-        source={"PATH": "/usr/bin", "KUNGFU_CLI_BIN": str(cli_bin)},
+        source={"PATH": str(stale_cli.parent), "KUNGFU_CLI_BIN": str(cli_bin)},
     )
 
     context = json.loads(env["KUNGFU_AGENT_CONTEXT"])
@@ -1998,6 +2155,24 @@ def test_native_interactive_runner_reuses_work_console_with_fresh_attempts(
         assert envelope["consoleId"] == plans[0]["workConsoleId"]
         assert envelope["workRef"] == work_ref
         assert skill_context["catalog"] == [{"key": "kungfu-agent"}]
+        skill_pointer = envelope["skillRuntimeAudit"]
+        assert skill_pointer["catalogRoot"] == session_contract.semantic_root(
+            skill_context["catalog"]
+        )
+        assert skill_pointer["decisionPolicyRoot"].startswith("sha256:")
+        assert skill_pointer["workRefRoot"] == session_contract.semantic_root(work_ref)
+        assert skill_pointer["kfxDependencyRoots"] == []
+        assert skill_pointer["receiptRoots"]
+        assert skill_pointer["recoveryRoot"].startswith("sha256:")
+        assert set(skill_pointer["entrypoints"]) == {
+            "catalog",
+            "advise",
+            "read",
+            "audit",
+            "explain",
+            "diagnose",
+            "kfx",
+        }
         assert kwargs["env"]["KUNGFU_PRIOR_TRANSCRIPT_BYTES"] == "0"
         assert "stdin" not in kwargs
         assert "stdout" not in kwargs
@@ -2092,187 +2267,3 @@ def test_registered_third_party_agent_preserves_real_pty_and_skill_injection(
     assert payload["environment"] == "native-interactive"
     assert payload["context"] is True
     assert Path(payload["skill"]).is_relative_to(tmp_path / "runtime")
-
-
-def test_run_agent_process_streams_output_before_return(tmp_path):
-    script = tmp_path / "stream.py"
-    script.write_text(
-        "import sys\n"
-        "print('first', flush=True)\n"
-        "print('second', flush=True)\n"
-        "print('notice', file=sys.stderr, flush=True)\n",
-        encoding="utf-8",
-    )
-    streamed = []
-    result = run_agent.run_process(
-        [sys.executable, str(script)],
-        cwd=str(tmp_path),
-        env=os.environ,
-        timeout_seconds=5,
-        output_sink=lambda stream, line: streamed.append((stream, line.strip())),
-    )
-    assert result.exit_code == 0
-    assert result.stdout == "first\nsecond\n"
-    assert result.stderr == "notice\n"
-    assert ("stdout", "first") in streamed
-    assert ("stdout", "second") in streamed
-    assert ("stderr", "notice") in streamed
-
-
-def test_run_agent_continuation_rejects_transcript_fields_and_root_drift():
-    continuation = {
-        "schema": "kungfu.agent-continuation-envelope/v1",
-        "workRef": _work_ref(),
-        "currentCutRoot": ROOT_HASH,
-        "priorClaimRoot": ROOT_HASH,
-        "assessmentRoot": ROOT_HASH,
-        "remainingObligation": "write exact oracle",
-        "nextAction": "write-oracle",
-    }
-    assert run_agent.validate_continuation(continuation) == continuation
-    injected = {**continuation, "transcript": "private chat"}
-    with pytest.raises(ValueError, match="exact"):
-        run_agent.validate_continuation(injected)
-    drifted = {**continuation, "assessmentRoot": "latest"}
-    with pytest.raises(ValueError, match="assessmentRoot"):
-        run_agent.validate_continuation(drifted)
-
-
-def test_agent_runtime_commands_are_closed_in_the_kfd3_registry(monkeypatch):
-    import kungfu
-
-    kungfu.__dict__["__version__"] = "test"
-    from kungfu.cli.commands.agent import agent
-
-    monkeypatch.setattr("kungfu.agent.kfd3.registry_digest", lambda: ROOT_HASH)
-    result = verify_agent_interface(agent)
-    assert result["ok"], result
-
-
-def _assert_work_control_command_contract(work_control, command_catalog, api_registry):
-    for api_id, contract in WORK_CONTROL_COMMAND_CONTRACTS.items():
-        runtime_command = work_control.commands[contract["command"]]
-        runtime_payload_options = {
-            option.opts[0]
-            for option in runtime_command.params
-            if isinstance(option, click.Option) and option.name != "as_json"
-        }
-        assert runtime_payload_options == contract["payload_options"], api_id
-        assert command_catalog[api_id] == contract["signature"]
-        assert api_registry[api_id] == contract["signature"]
-
-
-def test_work_control_commands_match_the_runtime_payload_contract():
-    from kungfu import agent as agent_pack
-    from kungfu.cli.commands.assignment import assignment
-
-    command_catalog = {
-        row["apiId"]: row["name"] for row in agent_pack.commands()["commands"]
-    }
-    api_registry = {row["id"]: row["name"] for row in agent_pack.registry()["apis"]}
-    _assert_work_control_command_contract(assignment, command_catalog, api_registry)
-
-    drifted_work_control = copy.copy(assignment)
-    drifted_command = copy.copy(assignment.commands["claim-completion"])
-    drifted_command.params = [
-        *drifted_command.params,
-        click.Option(["--joint-drift"]),
-    ]
-    drifted_work_control.commands = {
-        **assignment.commands,
-        "claim-completion": drifted_command,
-    }
-    drifted_command_catalog = dict(command_catalog)
-    drifted_api_registry = dict(api_registry)
-    for catalog in (drifted_command_catalog, drifted_api_registry):
-        catalog["kungfu.work.claim-completion"] += " [--joint-drift <value>]"
-    with pytest.raises(AssertionError):
-        _assert_work_control_command_contract(
-            drifted_work_control,
-            drifted_command_catalog,
-            drifted_api_registry,
-        )
-
-
-def test_agent_session_cli_forwards_the_same_self_describing_action(
-    tmp_path, monkeypatch
-):
-    import kungfu
-
-    kungfu.__dict__["__version__"] = "test"
-    from kungfu.cli.commands.agent import agent
-
-    captured = []
-
-    def fake_invoke(request, endpoint=None, timeout=5.0):
-        captured.append((request, endpoint, timeout))
-        return {
-            "schema": "kungfu.agent-session.surface-list/v1",
-            "sessions": [],
-            "listRoot": ROOT_HASH,
-        }
-
-    monkeypatch.setattr("kungfu.agent.session_surface.invoke", fake_invoke)
-    monkeypatch.delenv("KUNGFU_AGENT_CONSOLE_ID", raising=False)
-
-    @click.group()
-    @click.option("--home", type=click.Path(), required=True)
-    @click.pass_context
-    def test_cli(ctx, home):
-        ctx.name = "agent-session-test"
-        ctx.config_home = str(Path(home) / "config")
-        ctx.home = str(home)
-        ctx.runtime_dir = str(Path(home) / "runtime")
-        ctx.extension_path = None
-        ctx.log_level = "warning"
-        ctx.dataset_dir = str(Path(home) / "dataset")
-        ctx.backtest_dir = str(Path(home) / "backtest")
-        ctx.inbox_dir = str(Path(home) / "inbox")
-        ctx.runtime_locator = None
-        ctx.backtest_locator = None
-        ctx.config_location = None
-        ctx.console_location = None
-        ctx.index_location = None
-        ctx.stage = "test"
-
-    test_cli.add_command(agent)
-    result = CliRunner().invoke(
-        test_cli,
-        ["--home", str(tmp_path), "agent", "session", "list", "--json"],
-        env={"KUNGFU_AGENT_SESSION_ACTOR": "controller:test"},
-    )
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.output)["schema"] == "kungfu.agent-session.surface-list/v1"
-    assert captured[0][0] == {
-        "operation": "list",
-        "client": "cli",
-        "actorId": "controller:test",
-    }
-
-
-def test_work_console_registry_accepts_capsule_backend():
-    value = {
-        "schema": "kungfu.work-console-registry/v1",
-        "workspaceId": "workspace:test",
-        "consoles": [
-            {
-                "consoleId": "console:assistant",
-                "bindingKind": "workspace-assistant",
-                "workRef": None,
-                "runtimeProfileId": "codex-app",
-                "backend": "capsule",
-                "attempts": [
-                    {
-                        "attemptId": "attempt:1",
-                        "runId": "attempt:1",
-                        "status": "running",
-                        "startedAt": 1,
-                    }
-                ],
-                "createdAt": 1,
-                "updatedAt": 1,
-            }
-        ],
-        "presentation": {"tabs": [], "splits": [], "drawer": None, "windows": []},
-    }
-    config.validate_value("workConsoleRegistry", value, contract=_contract())

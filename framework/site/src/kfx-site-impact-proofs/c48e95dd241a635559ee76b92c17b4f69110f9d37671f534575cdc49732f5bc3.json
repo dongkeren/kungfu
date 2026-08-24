@@ -1,0 +1,85 @@
+{
+  "contract": "kungfu.kfx-site-impact-proof/v1",
+  "baseRevision": "22cecbb84201aa19f2ef02917316c1c7adc83de3",
+  "changeRoot": "sha256:3c595d05220425e9a06426ce5b8c40853e9d9c1912e04dd6c60bf38a1ee4b6ca",
+  "changes": [
+    {
+      "baseContentRoot": "sha256:03aed7221ea244c38e0d9526cbcbb00acd2b5ed49721f49de9eb01ecbc2a3476",
+      "contentRoot": "sha256:c6617d01a8e20adc01b8539a1c701c09f7b63d9a58c62d468a6d3aaeb88f131f",
+      "path": ".xinfa/portable-atlas-classification.json.gz",
+      "status": "modified"
+    },
+    {
+      "baseContentRoot": "sha256:984dd260b18b5abd30787fc22d121d4f7be0ee4e7753f12313a8435a16f77116",
+      "contentRoot": "sha256:2ee9bd29d4e4dbf871e9213a4dd62b42c15acb85aca185475c015b2b1be33373",
+      "path": ".xinfa/product-atlas-bundle.json",
+      "status": "modified"
+    },
+    {
+      "baseContentRoot": "sha256:0c3b1efb72dc61596deed2871f442bf476532a8707e8ae7c570c0dd0a1f1a328",
+      "contentRoot": "sha256:4a90d7a265cc1c681ff35e165d8e207ce8e0a68939c0af0cd4a074ef536efb93",
+      "path": "framework/core/architecture/LAYERS.md",
+      "status": "modified"
+    },
+    {
+      "baseContentRoot": "sha256:05ec5399f037482246d47d930b1ca16d6700d425b59605c98d4750594c55c25b",
+      "contentRoot": "sha256:aea9f39c353c8d3b3066ee7f5c7511952ad46927335e1b3e34eeb714466adf42",
+      "path": "framework/core/architecture/TARGETS.cmake",
+      "status": "modified"
+    },
+    {
+      "contentRoot": "sha256:8e7b04bfe96393625fd96381a7f8c52191919287d04baa6e090323489caca48c",
+      "path": "framework/core/src/libkungfu/src/runtime/kfx/native_registry_discovery.cpp",
+      "status": "added"
+    },
+    {
+      "contentRoot": "sha256:3f0743f376615c453592e98406b421dca876966029c64ba0bb97e58ec3487315",
+      "path": "framework/core/src/libkungfu/src/runtime/kfx/native_registry_internal.h",
+      "status": "added"
+    },
+    {
+      "contentRoot": "sha256:bd787355d0672fde9a3ac469fc28ed38973cd3ae0283da23e819a2c4e876949a",
+      "path": "framework/core/src/libkungfu/src/runtime/kfx/native_registry_lifecycle.cpp",
+      "status": "added"
+    },
+    {
+      "baseContentRoot": "sha256:98881b2110239f54706b05da88d8a847442b82782a32805aaa6d65faa9b21808",
+      "contentRoot": "sha256:4dd36277fa3394c0be12d772382d56e66580f4570ad6950651e047c1a700b1ef",
+      "path": "framework/core/src/libkungfu/src/runtime/kfx/native_registry.cpp",
+      "status": "modified"
+    },
+    {
+      "contentRoot": "sha256:f20d42d8e8e688c151c46e31371e8035d4bdec2ac2353f31d35f2e9d10de73f1",
+      "path": "framework/core/src/libkungfu/src/runtime/query/fact_query_evaluator.cpp",
+      "status": "added"
+    },
+    {
+      "contentRoot": "sha256:edbb31cf350fc5b789df5fc95558b5f815e174e7427ce008ed2e273cbda71ea0",
+      "path": "framework/core/src/libkungfu/src/runtime/query/fact_query_internal.h",
+      "status": "added"
+    },
+    {
+      "contentRoot": "sha256:a6e7a52d4546955857a3c1b45fab998a2f90e51888800a319d00d7468cbf17ef",
+      "path": "framework/core/src/libkungfu/src/runtime/query/fact_query_parser.cpp",
+      "status": "added"
+    },
+    {
+      "baseContentRoot": "sha256:9bc17ad13a14f2a57d5d0295ed8f5391db82f02a4bcc6b0b7dc712bee7c666a2",
+      "contentRoot": "sha256:df6a1d6182a5394f481e34e7ab1c3a13317f61087b4250d54f8961659ce32061",
+      "path": "framework/core/src/libkungfu/src/runtime/query/fact_query.cpp",
+      "status": "modified"
+    }
+  ],
+  "affectedFacets": [
+    "architecture",
+    "capabilities",
+    "registry-admission-lifecycle"
+  ],
+  "rationale": "Decompose internal fact-query and native-registry responsibilities without changing public KFX Site facets, schemas, or bundle authority.",
+  "attestation": {
+    "publicBehaviorUnchanged": true,
+    "publicContractUnchanged": true,
+    "readerJourneyUnchanged": true
+  },
+  "proofRoot": "sha256:c48e95dd241a635559ee76b92c17b4f69110f9d37671f534575cdc49732f5bc3"
+}

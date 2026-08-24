@@ -314,7 +314,8 @@ storage_episode_bundle_result parse_storage_episode_bundle(const nlohmann::json 
           frame.bytes.size() < sizeof(kungfu::yijinjing::types::frame_header)) {
         throw std::invalid_argument("episode_bundle_frame_bytes_malformed");
       }
-      const auto &header = *reinterpret_cast<const kungfu::yijinjing::types::frame_header *>(frame.bytes.data());
+      kungfu::yijinjing::types::frame_header header{};
+      std::memcpy(&header, frame.bytes.data(), sizeof(header));
       if (header.length != frame.frame_length || header.journal_frame_uid != frame.frame_uid ||
           header.gen_time != frame.gen_time || header.carrier_type != frame.carrier_type ||
           header.length < header.header_length ||

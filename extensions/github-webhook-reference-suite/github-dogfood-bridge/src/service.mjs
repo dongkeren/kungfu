@@ -9,15 +9,15 @@ import {
 export const packageIdentity = Object.freeze({
   key: 'github-dogfood-bridge',
   version: '0.1.0',
-  productVersion: '4.0.0-alpha.2',
+  productVersion: '4.0.0-alpha.3',
   kitRoot:
-    'sha256:36486ad8eb493de96f551089191e2ccf130c638ee44194a36d6f58d8a2f12ca6',
+    'sha256:819ae3f7ebd4934cadb28ee5b37f346e1feeb8d4fb1de35d290d75c35ed8c62f',
   sdkRoot:
-    'sha256:2dc5182cd834d7e0597277af523d2196509b7e1583d6a62b70a25874f5c69fce',
+    'sha256:422a4c00c8f42a5aacc0cca8ed80c96ed433bd0e9f56a9ed297f60719264e842',
 });
 
 export const DOGFOOD_PROVIDER = 'kungfu.dogfood-feedback';
-export const DOGFOOD_VERSION = '4.0.0-alpha.2';
+export const DOGFOOD_VERSION = '4.0.0-alpha.3';
 export const FINDING_CAPABILITY = 'dogfood.finding.capture';
 
 export const declaration = Object.freeze({
@@ -215,7 +215,8 @@ export class GitHubDogfoodBridge {
       !ROOT_PATTERN.test(effect.findingRoot ?? '') ||
       effect.issueAdmitted === true ||
       effect.workMutated === true ||
-      effect.githubMutated === true
+      effect.githubMutated === true ||
+      effect.semanticCompletion === true
     ) {
       throw new Error('Dogfood capability returned an invalid Finding effect');
     }

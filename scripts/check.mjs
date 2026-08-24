@@ -487,6 +487,13 @@ function testTestManifest() {
   ]);
 }
 
+function testGithubReleasePolicy() {
+  run('GitHub Release metadata policy tests', 'node', [
+    '--test',
+    path.join('scripts', 'github-release-policy.test.mjs'),
+  ]);
+}
+
 function checkKungfuGateCatalog() {
   run('Kungfu Gate catalog gate', 'node', [
     path.join('scripts', 'check-kungfu-gate-catalog.mjs'),
@@ -670,7 +677,6 @@ function testUpgradeControlPlane() {
   run('product upgrade qualification tests', 'node', [
     '--test',
     path.join('scripts', 'check-upgrade-qualification.test.mjs'),
-    path.join('scripts', 'upgrade-publication-admission.test.mjs'),
   ]);
 }
 
@@ -809,6 +815,22 @@ function checkInvariantSystem() {
   ]);
 }
 
+function checkKfxAuthoringKit(files = [], { force = false } = {}) {
+  const touched = files.some(
+    (file) =>
+      file === 'framework/api/package.json' ||
+      file === 'framework/kfx/package.json' ||
+      file === 'framework/api/src/capability/service-authz.ts' ||
+      file === 'scripts/generate-kfx-authoring-kit.mjs' ||
+      file.startsWith('framework/core/src/python/kungfu/kfx_authoring_assets/'),
+  );
+  if (!force && !touched) return;
+  run('installed KFX authoring kit generated-root check', 'node', [
+    path.join('scripts', 'generate-kfx-authoring-kit.mjs'),
+    '--check',
+  ]);
+}
+
 function checkStaged() {
   checkNoBashStaged();
   checkTestManifest();
@@ -871,6 +893,7 @@ function checkStaged() {
   checkBiomeFiles('staged', files);
   checkRustFiles('staged', files);
   checkBuildchainKfdEvidence(files);
+  checkKfxAuthoringKit(files);
   checkLibwasmCargoCache(files);
   checkXinfaCrate(files);
 
@@ -880,6 +903,7 @@ function checkStaged() {
 function checkShared() {
   checkTestManifest();
   testTestManifest();
+  testGithubReleasePolicy();
   testShifuEntryContract();
   testShifuCacheContract();
   testShifuProductionGraphContract();
@@ -942,6 +966,7 @@ function checkChanged() {
   checkBiomeFiles('changed', files);
   checkRustFiles('changed', files);
   checkBuildchainKfdEvidence(files);
+  checkKfxAuthoringKit(files);
   checkLibwasmCargoCache(files);
   checkXinfaCrate(files);
   checkShared();
@@ -965,6 +990,7 @@ function checkAll() {
   run('repo lint + format check', 'pnpm', ['run', 'lint']);
   checkRustFiles('all', [], { force: true });
   checkBuildchainKfdEvidence([], { force: true });
+  checkKfxAuthoringKit([], { force: true });
   checkLibwasmCargoCache([], { force: true });
   checkXinfaCrate([], { force: true });
   checkShared();

@@ -2,14 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 // @ts-check
 
-import { spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { ownerFor } from '../../scripts/code-complexity-budget.mjs';
+import {
+  baselineBytes,
+  baselineChangedPaths,
+  currentBytes,
+  digest,
+  git,
+  lineCount as lines,
+  ordered,
+  ownerFor,
+  readJson,
+} from './source-analysis-kernel.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -149,74 +157,6 @@ function writeElectronBuilderProjections() {
   )) {
     fs.writeFileSync(projectionPath, expected[name]);
   }
-}
-
-function git(args, binary = false) {
-  const result = spawnSync('git', args, {
-    cwd: ROOT,
-    encoding: binary ? null : 'utf8',
-    maxBuffer: 128 * 1024 * 1024,
-  });
-  if (result.status !== 0)
-    throw new Error(
-      `git ${args.join(' ')} failed: ${String(result.stderr || '').trim()}`,
-    );
-  return result.stdout;
-}
-
-function gitLines(args) {
-  return String(git(args))
-    .split('\n')
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-function ordered(value) {
-  if (Array.isArray(value)) return value.map(ordered);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort()
-        .map((key) => [key, ordered(value[key])]),
-    );
-  return value;
-}
-
-function digest(value) {
-  return `sha256:${crypto
-    .createHash('sha256')
-    .update(
-      Buffer.isBuffer(value)
-        ? value
-        : Buffer.from(JSON.stringify(ordered(value))),
-    )
-    .digest('hex')}`;
-}
-
-function readJson(relative) {
-  return JSON.parse(fs.readFileSync(path.join(ROOT, relative), 'utf8'));
-}
-
-function lines(bytes) {
-  if (!bytes.length) return 0;
-  let count = 1;
-  for (const byte of bytes) if (byte === 10) count += 1;
-  return bytes[bytes.length - 1] === 10 ? count - 1 : count;
-}
-
-function baselineBytes(ref, relative) {
-  return Buffer.from(git(['show', `${ref}:${relative}`], true));
-}
-
-function currentBytes(relative) {
-  return fs.readFileSync(path.join(ROOT, relative));
-}
-
-function changedPaths(ref) {
-  return new Set([
-    ...gitLines(['diff', '--name-only', ref, '--']),
-    ...gitLines(['ls-files', '--others', '--exclude-standard']),
-  ]);
 }
 
 function allFamilyPaths(family) {
@@ -858,6 +798,19 @@ function validateManifest(
             ),
           );
     }
+    for (const finding of integrity.findings)
+      if (
+        manifest.integrityPolicy.findingClasses?.[finding.class]?.severity ===
+        'blocking'
+      )
+        issues.push(
+          issue(
+            finding.class,
+            finding.topology,
+            finding.target,
+            finding.message,
+          ),
+        );
     if (integrity.baselineComparison.ratchet !== 'pass')
       issues.push(
         issue(
@@ -872,7 +825,7 @@ function validateManifest(
 }
 
 function buildReport(manifest, layers) {
-  const changed = changedPaths(manifest.baselineRef);
+  const changed = baselineChangedPaths(manifest.baselineRef);
   const terminalMatrix = readJson(TERMINAL_MATRIX_PATH);
   const issues = validateManifest(manifest, layers, changed, terminalMatrix);
   const integrity = evaluateIntegrity(manifest.integrityPolicy);
@@ -1177,6 +1130,7 @@ if (
 }
 
 export {
+  baselineChangedPaths,
   buildReport,
   checkElectronBuilderProjections,
   ELECTRON_BUILDER_PROJECTION_PATHS as electronBuilderProjectionPaths,

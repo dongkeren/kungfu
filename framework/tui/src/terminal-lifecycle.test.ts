@@ -22,10 +22,58 @@ import {
   decodeTerminalMouseInput,
   existingProjectWorkspaceRoot,
   resolveTuiAgentSessionExecutable,
+  resolveTuiCliProcess,
   resolveTuiCoreDir,
   resolveTuiProductPaths,
   tuiChildCliEnvironment,
 } from './terminal-lifecycle.js';
+
+test('Windows command launchers enter the TUI through cmd.exe', () => {
+  assert.deepEqual(
+    resolveTuiCliProcess({
+      bin: String.raw`C:\Program Files\Kungfu\kungfu.cmd`,
+      argsPrefix: ['runtime'],
+      platform: 'win32',
+      comspec: String.raw`C:\Windows\System32\cmd.exe`,
+    }),
+    {
+      bin: String.raw`C:\Windows\System32\cmd.exe`,
+      argsPrefix: [
+        '/d',
+        '/s',
+        '/c',
+        'call',
+        String.raw`C:\Program Files\Kungfu\kungfu.cmd`,
+        'runtime',
+      ],
+    },
+  );
+});
+
+test('Windows executables remain direct TUI child processes', () => {
+  assert.deepEqual(
+    resolveTuiCliProcess({
+      bin: String.raw`C:\Program Files\Kungfu\kungfu.exe`,
+      argsPrefix: ['runtime'],
+      platform: 'win32',
+    }),
+    {
+      bin: String.raw`C:\Program Files\Kungfu\kungfu.exe`,
+      argsPrefix: ['runtime'],
+    },
+  );
+});
+
+test('non-Windows command-shaped paths remain direct TUI child processes', () => {
+  assert.deepEqual(
+    resolveTuiCliProcess({
+      bin: '/workspace/kungfu.cmd',
+      argsPrefix: ['runtime'],
+      platform: 'linux',
+    }),
+    { bin: '/workspace/kungfu.cmd', argsPrefix: ['runtime'] },
+  );
+});
 
 test('Project CLI receives installed Mock Agent paths without replacing explicit overrides', () => {
   assert.deepEqual(
@@ -109,6 +157,8 @@ test('child CLI retains installed authority without recursive libnode selection'
 
   assert.equal(child.KUNGFU_AS_VARIANT, undefined);
   assert.equal(child.KUNGFU_NODE_VARIANT_ENTRY, undefined);
+  assert.equal(Object.hasOwn(child, 'KUNGFU_AS_VARIANT'), false);
+  assert.equal(Object.hasOwn(child, 'KUNGFU_NODE_VARIANT_ENTRY'), false);
   assert.equal(child.KUNGFU_INSTALL_SOURCE, 'archive');
   assert.equal(child.KUNGFU_DIR, '/product/runtime');
   assert.equal(

@@ -583,32 +583,35 @@ test('KFD tree-equivalence rejects non-commit Git objects', () => {
   assert.deepEqual(calls, [['cat-file', '-t', sourceSha]]);
 });
 
-test('KFD product gates preserve a source-bound committed verification cut', () => {
+test('KFD product gates remain checkable without ignored runtime outputs', () => {
   const sourceSha = 'a'.repeat(40);
   const commitCheckedAt = '2026-07-31T02:20:37+00:00';
-  const resolve = (
-    retainedGateResults,
-    commitTimestamp = () => commitCheckedAt,
-  ) =>
+  assert.equal(
     resolveKfdProductGateCheckedAt({
       write: false,
-      now: () => assert.fail('check mode must not use the wall clock'),
-      retainedGateResults,
+      now: () => {
+        throw new Error('check mode must not use the wall clock');
+      },
+      retainedGateResults: [null, null, null],
       sourceSha,
-      commitTimestamp,
-    });
-  assert.equal(resolve([null, null, null]), commitCheckedAt);
-  const sealed = {
-    source: { sha: sourceSha },
-    verificationCut: { checkedAt: '2026-07-30T00:00:00Z' },
-  };
-  assert.equal(
-    resolve([sealed], () => assert.fail('the sealed cut is authoritative')),
-    sealed.verificationCut.checkedAt,
+      commitTimestamp: (commit) => {
+        assert.equal(commit, sourceSha);
+        return commitCheckedAt;
+      },
+    }),
+    commitCheckedAt,
   );
   assert.equal(
-    resolve([{ ...sealed, source: { sha: 'b'.repeat(40) } }]),
-    commitCheckedAt,
+    resolveKfdProductGateCheckedAt({
+      write: false,
+      now: () => '',
+      retainedGateResults: [null, { checkedAt: '2026-07-30T00:00:00Z' }],
+      sourceSha,
+      commitTimestamp: () => {
+        throw new Error('retained evidence must preserve its timestamp');
+      },
+    }),
+    '2026-07-30T00:00:00Z',
   );
 });
 
@@ -784,6 +787,9 @@ test('source plan covers representative source-only checks', () => {
   assert.ok(labels.includes('core architecture contract'));
   assert.ok(labels.includes('core architecture negative fixtures'));
   assert.ok(labels.includes('core affected-native negative fixtures'));
+  assert.ok(
+    labels.some((label) => label.startsWith('changed-code function-risk')),
+  );
   assert.ok(labels.includes('runtime activation contract'));
   assert.ok(labels.includes('runtime upgrade contract'));
   assert.ok(labels.includes('product upgrade qualification'));
@@ -870,8 +876,8 @@ test('source plan covers representative source-only checks', () => {
     contractTests.args.includes('scripts/check-upgrade-qualification.test.mjs'),
   );
   assert.ok(
-    contractTests.args.includes(
-      'scripts/upgrade-publication-admission.test.mjs',
+    !contractTests.args.some((entry) =>
+      entry.includes('upgrade-publication-admission'),
     ),
   );
   assert.ok(

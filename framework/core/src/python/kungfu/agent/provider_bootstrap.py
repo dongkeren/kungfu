@@ -9,8 +9,17 @@ import json
 import os
 from pathlib import Path
 import re
-from typing import Any, Callable, Mapping
+import shutil
+import subprocess
+import sys
+from typing import Any, Callable, Mapping, Sequence
 import uuid
+
+from kungfu.skill import (
+    build_skill_runtime_audit,
+    read_audit_file,
+    write_skill_runtime_audit,
+)
 
 
 _TEMPLATE = re.compile(
@@ -18,6 +27,306 @@ _TEMPLATE = re.compile(
 )
 _UNRESOLVED_TEMPLATE = re.compile(r"\{[a-z_]+(?::json)?\}")
 _TMUX_PROCESS_ENVIRONMENT = frozenset({"TMUX", "TMUX_PANE"})
+COMMAND_WRAPPER_SUFFIXES = {".bat", ".cmd"}
+_FORWARDING_WRAPPER = re.compile(
+    r'\A\s*@echo\s+off\s*\r?\n\s*call\s+"(?P<target>[^"\r\n]+)"\s+%\*\s*\Z',
+    re.IGNORECASE,
+)
+_NPM_WRAPPER_ENTRY = re.compile(
+    r"^\s*endlocal\s+&\s+goto\s+#_undefined_#\s+2>nul\s+\|\|\s+"
+    r'title\s+%comspec%\s+&\s+"%_prog%"\s+'
+    r'"%dp0%\\(?P<entry>[^"\r\n]+)"\s+%\*\s*$',
+    re.IGNORECASE | re.MULTILINE,
+)
+_NPM_WRAPPER_MARKERS = (
+    "goto start",
+    ":find_dp0",
+    "set dp0=%~dp0",
+    "call :find_dp0",
+    'set "_prog=',
+)
+_ENV_REFERENCE = re.compile(r"%([^%\r\n]+)%")
+_PROMPT_INSTRUCTION_PREFIX = (
+    "Kungfu Windows command-wrapper transport: the complete prompt follows as "
+    "ASCII text with Unicode escapes. Interpret every backslash-u escape, "
+    "including surrogate pairs, then follow the decoded prompt exactly: "
+)
+_PROMPT_SAFE_CHARACTERS = frozenset(" .,:;/_-")
+
+
+def resolve_command_wrapper(
+    argv: Sequence[str],
+    *,
+    env: Mapping[str, str],
+    platform: str | None = None,
+) -> list[str]:
+    """Resolve exact forwarding and standard npm wrappers before shell parsing."""
+
+    resolved = [str(value) for value in argv]
+    if (sys.platform if platform is None else platform) != "win32" or not resolved:
+        return resolved
+    environment = {str(key).casefold(): str(value) for key, value in env.items()}
+    observed: set[str] = set()
+    for _ in range(8):
+        wrapper = Path(resolved[0])
+        identity = str(wrapper.resolve(strict=False)).casefold()
+        if (
+            wrapper.suffix.lower() not in COMMAND_WRAPPER_SUFFIXES
+            or identity in observed
+        ):
+            break
+        observed.add(identity)
+        try:
+            if wrapper.stat().st_size > 16 * 1024:
+                break
+            content = wrapper.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            break
+        forwarding_match = _FORWARDING_WRAPPER.fullmatch(content)
+        if forwarding_match is None:
+            npm_launch = _resolve_npm_wrapper(
+                wrapper, content=content, environment=environment
+            )
+            if npm_launch is None:
+                break
+            resolved = [*npm_launch, *resolved[1:]]
+            break
+
+        missing_environment = False
+
+        def expand_environment(reference: re.Match[str]) -> str:
+            nonlocal missing_environment
+            value = environment.get(reference.group(1).casefold())
+            if value is None:
+                missing_environment = True
+                return reference.group(0)
+            return value
+
+        target_text = _ENV_REFERENCE.sub(
+            expand_environment, forwarding_match.group("target")
+        )
+        if missing_environment:
+            break
+        target = Path(target_text)
+        if not target.is_absolute():
+            target = wrapper.parent / target
+        if not target.is_file():
+            break
+        resolved[0] = str(target)
+    return resolved
+
+
+def _runtime_health_base(
+    profile: Mapping[str, Any], effective_platform: str
+) -> dict[str, Any]:
+    return {
+        "schema": "kungfu.native-provider-runtime-health/v1",
+        "provider": str(profile.get("provider") or ""),
+        "executable": str((profile.get("launch") or {}).get("executable") or ""),
+        "platform": effective_platform,
+        "probe": "codex-windows-sandbox-smoke",
+        "modelInvoked": False,
+        "networkRequired": False,
+        "permissionsWidened": False,
+    }
+
+
+def provider_runtime_health(
+    profile: Mapping[str, Any],
+    *,
+    cwd: str,
+    env: Mapping[str, str] | None = None,
+    platform: str | None = None,
+    run: Callable[..., Any] = subprocess.run,
+    timeout_seconds: float = 20.0,
+) -> dict[str, Any]:
+    """Probe a provider-owned runtime boundary before starting its native UI."""
+
+    effective_platform = sys.platform if platform is None else platform
+    base = _runtime_health_base(profile, effective_platform)
+    if effective_platform != "win32" or base["provider"] != "codex":
+        return {**base, "status": "not-applicable", "ok": True, "warning": None}
+
+    ambient = dict(os.environ if env is None else env)
+    command = resolve_command_wrapper(
+        [base["executable"]], env=ambient, platform=effective_platform
+    )
+    try:
+        help_result = run(
+            [*command, "--help"],
+            cwd=cwd,
+            env=ambient,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        return {
+            **base,
+            "status": "capability-unverified",
+            "ok": True,
+            "warning": f"Codex capability probe was unavailable: {error}",
+        }
+    help_text = f"{help_result.stdout or ''}\n{help_result.stderr or ''}"
+    if (
+        help_result.returncode != 0
+        or re.search(r"(?im)^\s*sandbox\s+.*sandbox", help_text) is None
+    ):
+        return {
+            **base,
+            "status": "capability-unverified",
+            "ok": True,
+            "warning": (
+                "Codex does not advertise the model-free Windows sandbox helper; "
+                "continuing without a version-based admission rule"
+            ),
+        }
+
+    try:
+        result = run(
+            [
+                *command,
+                "sandbox",
+                "windows",
+                "--",
+                "cmd.exe",
+                "/d",
+                "/c",
+                "exit",
+                "0",
+            ],
+            cwd=cwd,
+            env=ambient,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        return {
+            **base,
+            "status": "unavailable",
+            "ok": False,
+            "warning": None,
+            "diagnostic": str(error)[:512],
+        }
+    diagnostic = (result.stderr or result.stdout or "").strip().splitlines()
+    return {
+        **base,
+        "status": "ready" if result.returncode == 0 else "unavailable",
+        "ok": result.returncode == 0,
+        "warning": None,
+        "diagnostic": diagnostic[0][:512] if diagnostic else None,
+    }
+
+
+def _resolve_npm_wrapper(
+    wrapper: Path, *, content: str, environment: Mapping[str, str]
+) -> list[str] | None:
+    """Return the native argv prefix for a standard npm-generated shim."""
+
+    lowered = content.casefold()
+    if not all(marker in lowered for marker in _NPM_WRAPPER_MARKERS):
+        return None
+    match = _NPM_WRAPPER_ENTRY.search(content)
+    if match is None:
+        return None
+
+    wrapper_root = wrapper.parent.resolve(strict=False)
+    entrypoint = (wrapper_root / match.group("entry")).resolve(strict=False)
+    try:
+        entrypoint.relative_to(wrapper_root)
+    except ValueError:
+        return None
+    if not entrypoint.is_file():
+        return None
+
+    local_node = wrapper_root / "node.exe"
+    if local_node.is_file():
+        executable = local_node
+    else:
+        node = shutil.which("node", path=environment.get("path"))
+        if not node:
+            return None
+        executable = Path(node)
+    if not executable.is_file():
+        return None
+    return [str(executable), str(entrypoint)]
+
+
+def encode_wrapper_prompt(argv: Sequence[str]) -> list[str]:
+    """Encode multiline prompts outside ``cmd.exe`` metacharacter syntax."""
+
+    resolved = [str(value) for value in argv]
+    if not resolved or not any(marker in resolved[-1] for marker in ("\r", "\n")):
+        return resolved
+    resolved[-1] = _PROMPT_INSTRUCTION_PREFIX + _escape_prompt(resolved[-1])
+    return resolved
+
+
+def _escape_prompt(value: str) -> str:
+    encoded: list[str] = []
+    for character in value:
+        codepoint = ord(character)
+        if character.isascii() and (
+            character.isalnum() or character in _PROMPT_SAFE_CHARACTERS
+        ):
+            encoded.append(character)
+        elif codepoint <= 0xFFFF:
+            encoded.append(f"\\u{codepoint:04x}")
+        else:
+            scalar = codepoint - 0x10000
+            encoded.append(f"\\u{0xD800 + (scalar >> 10):04x}")
+            encoded.append(f"\\u{0xDC00 + (scalar & 0x3FF):04x}")
+    return "".join(encoded)
+
+
+def prepare_native_skill_runtime_audit(
+    runtime_home: str,
+    runtime_dir: str,
+    attempt_id: str,
+    work_ref: Mapping[str, Any] | None,
+) -> tuple[str | None, dict[str, Any], str, str]:
+    """Write the launch audit and return its native Console coordinates."""
+
+    skill_work_ref = None
+    if work_ref is not None:
+        skill_work_ref = (
+            str(work_ref.get("entityId") or work_ref.get("workspaceId") or "") or None
+        )
+    document = build_skill_runtime_audit(
+        runtime_home,
+        run_id=attempt_id,
+        work_ref=skill_work_ref,
+    )
+    audit_root = Path(runtime_dir) / "skill-manager"
+    launch_path = str(audit_root / f"agent-console-{attempt_id}.json")
+    final_path = str(audit_root / f"agent-console-{attempt_id}-final.json")
+    write_skill_runtime_audit(launch_path, document)
+    return skill_work_ref, document, launch_path, final_path
+
+
+def refresh_native_skill_runtime_audit(env: Mapping[str, str]) -> None:
+    """Refresh the Agent Console pointer after rooted on-demand Skill activity."""
+
+    output_path = env.get("KUNGFU_SKILL_RUNTIME_AUDIT_FINAL_FILE")
+    runtime_home = env.get("KF_HOME")
+    if not output_path or not runtime_home:
+        return
+    audit_documents = []
+    audit_path = env.get("KUNGFU_SKILL_AUDIT_FILE")
+    if audit_path and Path(audit_path).is_file():
+        audit_documents.append(read_audit_file(audit_path))
+    document = build_skill_runtime_audit(
+        runtime_home,
+        audit_documents=audit_documents,
+        run_id=env.get("KUNGFU_SKILL_RUN_ID"),
+        work_ref=env.get("KUNGFU_SKILL_WORK_REF"),
+    )
+    write_skill_runtime_audit(output_path, document)
 
 
 def native_process_environment(

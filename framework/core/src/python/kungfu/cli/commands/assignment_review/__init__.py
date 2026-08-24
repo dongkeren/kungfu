@@ -8,7 +8,9 @@ import json
 import os
 from pathlib import Path
 
+from kungfu import assignment_evidence
 from kungfu import assignment_orchestration as orchestration
+from kungfu.initiative_family.canonical import semantic_root
 from kungfu import profile_sdk
 from kungfu.agent import run_agent
 from kungfu.workspace import resolve_workspace_target
@@ -25,6 +27,7 @@ def review_work_ref(plan):
         "entityRoot": plan["work"]["assignmentRoot"],
         "purpose": "independent-completion-review",
         "systemTimeCut": plan["work"]["queryProofRoot"],
+        "initiativeId": plan["work"]["initiativeId"],
     }
 
 
@@ -176,6 +179,61 @@ def parse_reviewer_result(report, acceptance_checks):
     }
 
 
+def find_passing_evidence(runtime_dir, plan):
+    """Return only an exact, read-only passing review from a fresh process."""
+
+    expected_prompt_root = run_agent.canonical_root(review_agent_prompt(plan))
+    reports = sorted(
+        (Path(runtime_dir) / "agent-runs").glob("*/bundle/report.json"),
+        key=lambda candidate: candidate.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for report_path in reports:
+        try:
+            _, report = assignment_evidence.load_execution_agent_report(
+                report_path,
+                runtime_dir,
+                plan["work"]["initiativeId"],
+                plan["work"]["assignmentId"],
+            )
+            work_ref = report["work"]["workRef"]
+            runtime_profile = report["runtimeProfile"]
+            launch = report["launch"]
+            privacy = report["privacy"]
+            argv = list(launch.get("argvWithoutPrompt") or [])
+            read_only_launch = launch.get("permissionMode") == "read-only" or (
+                "--sandbox" in argv and "read-only" in argv
+            )
+            matches = (
+                work_ref.get("workspaceId") == plan["workspace"]["id"]
+                and work_ref.get("profileId") == "kungfu.work-control"
+                and work_ref.get("profileRoot")
+                == plan["execution"]["workRef"]["profileRoot"]
+                and work_ref.get("entityRoot") == plan["work"]["assignmentRoot"]
+                and work_ref.get("purpose") == "independent-completion-review"
+                and runtime_profile.get("id") == plan["reviewer"]["id"]
+                and runtime_profile.get("root") == plan["reviewer"]["profileRoot"]
+                and launch.get("cwd") == plan["workspace"]["root"]
+                and launch.get("promptRoot") == expected_prompt_root
+                and read_only_launch
+                and privacy.get("priorTranscriptBytesGivenToAgent") == 0
+                and privacy.get("privateProviderSessionStoreRead") is False
+            )
+            if not matches:
+                continue
+            assessment = parse_reviewer_result(report, plan["work"]["acceptanceChecks"])
+            if assessment["verdict"] != "fit":
+                continue
+        except (KeyError, OSError, ValueError, json.JSONDecodeError):
+            continue
+        return {
+            "reportPath": str(report_path),
+            "report": report,
+            "assessment": assessment,
+        }
+    return None
+
+
 def exact_pending_fit_review(current, *, missing_message, conflicting_message):
     reviews = list(current.get("independent_reviews") or [])
     decisions = list(current.get("continuation_decisions") or [])
@@ -218,7 +276,7 @@ def build_plan(
     status_reader,
 ):
     captured = orchestration.load_captured_request(request_file)
-    projected = orchestration.atlas_assignment_projection(
+    projected = orchestration.assignment_projection(
         captured,
         initiative_id=initiative_id,
         assignment_id=assignment_id,
@@ -326,7 +384,7 @@ def build_plan(
         ),
         "writeOccurred": False,
     }
-    return {**body, "planRoot": orchestration.semantic_root(body)}
+    return {**body, "planRoot": semantic_root(body)}
 
 
 def provider_project_trust(provider, workspace_root):
@@ -494,7 +552,7 @@ def project_prompt(plan):
 
 
 def receipt(body):
-    return {**body, "receiptRoot": orchestration.semantic_root(body)}
+    return {**body, "receiptRoot": semantic_root(body)}
 
 
 def native_receipt_root(payload):

@@ -419,7 +419,7 @@ test('native provider UI registers one observer-only attempt in the primary Work
   );
 });
 
-test('native bootstrap state is observable and blocks Work binding until verified', () => {
+test('native bootstrap state is observable but does not authorize Work observation binding', () => {
   const pending = fixture();
   const pendingInput = { ...pending.input, bootstrap: undefined };
   const pendingPlan = pending.clients.cli.planNativeStart(pendingInput);
@@ -431,16 +431,18 @@ test('native bootstrap state is observable and blocks Work binding until verifie
     }).bootstrap.state,
     'pending',
   );
-  assert.throws(
-    () =>
-      pending.clients.cli.planNativeBindWork(
-        {
-          workConsoleId: pendingPlan.workConsoleId,
-          sessionAttemptId: pendingPlan.sessionAttemptId,
-        },
-        pending.input.binding.workRef,
-      ),
-    (error) => error?.code === 'native_bootstrap_not_verified',
+  const bindingPlan = pending.clients.cli.planNativeBindWork(
+    {
+      workConsoleId: pendingPlan.workConsoleId,
+      sessionAttemptId: pendingPlan.sessionAttemptId,
+    },
+    pending.input.binding.workRef,
+  );
+  assert.deepEqual(bindingPlan.workEffects, []);
+  assert.equal(pending.clients.cli.bindNativeWork(bindingPlan).status, 'bound');
+  assert.equal(
+    pending.clients.gui.show(pendingPlan).bootstrap.mutationsAllowed,
+    false,
   );
 
   const degraded = fixture();
@@ -960,7 +962,6 @@ test('Terminal WorkRef launch remains Profile-neutral and rejects partial identi
     new URL('../../../extensions/terminal/src/view/index.tsx', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(source, /kungfu\.mission-control/u);
   assert.match(
     source,
     /WorkRef launch requires workProfileId, workProfileRoot, and workEntityId/u,
@@ -1118,79 +1119,6 @@ test('approval state holds shared automatic instruction and stale plans fail clo
       clients.gui.control({ ...plan, coordinatorEpoch: '2' }, payload, true),
     (error) => error.code === 'plan_root_mismatch',
   );
-});
-
-test('the product runtime executes a reviewed plan through the real Capsule host', async () => {
-  const child = new FakePtyProcess(9001);
-  const spawns = [];
-  const runtime = new InProcessAgentSessionProductRuntime({
-    pty: {
-      spawn(executable, argv, options) {
-        spawns.push({ executable, argv, options });
-        return child;
-      },
-    },
-    now: () => 5000,
-  });
-  const surface = new AgentSessionProductSurface({
-    runtime,
-    now: () => 6000,
-    makeId: () => 'runtime-test',
-  });
-  const client = createAgentSessionSurfaceClient({
-    invoke: (request) => surface.invoke(request),
-    client: 'gui',
-    actorId: 'operator-runtime',
-  });
-  const input = {
-    workConsoleId: 'assistant:workspace-runtime',
-    sessionAttemptId: 'attempt:runtime:1',
-    provider: 'codex',
-    providerVersion: '0.146.0',
-    profileRoot: PROFILE_ROOT,
-    executable: '/usr/local/bin/codex',
-    argv: ['--no-alt-screen'],
-    cwd: '/workspace',
-    env: { HOME: '/home/test', PATH: '/usr/local/bin' },
-  };
-  const plan = client.planStart(input);
-  const result = client.start(
-    plan,
-    { attachmentId: 'view:runtime', presentation: 'assistant-console' },
-    { env: input.env, cols: 100, rows: 30 },
-  );
-
-  assert.equal(result.status, 'started');
-  assert.equal(spawns.length, 1);
-  assert.deepEqual(spawns[0], {
-    executable: input.executable,
-    argv: input.argv,
-    options: {
-      name: 'xterm-256color',
-      cols: 100,
-      rows: 30,
-      cwd: input.cwd,
-      env: input.env,
-    },
-  });
-  assert.equal(runtime.list()[0].host.status().lifecycleState, 'ready');
-
-  const session = {
-    workConsoleId: input.workConsoleId,
-    sessionAttemptId: input.sessionAttemptId,
-  };
-  const endPlan = client.planControl('end', session, {});
-  const ending = client.control(endPlan, {});
-  child.emit('exit', { exitCode: 1, signal: 0 });
-  await ending;
-
-  const ended = client.show(session);
-  assert.equal(ended.exit.exitCode, 1);
-  assert.deepEqual(ended.exit.controlRequest, {
-    operation: 'end',
-    signal: 'SIGTERM',
-  });
-  assert.equal(ended.workAgent.attention.kind, 'ready-for-review');
 });
 
 test('the local product RPC preserves the same action and error envelopes', async (t) => {

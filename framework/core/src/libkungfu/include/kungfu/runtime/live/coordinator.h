@@ -70,6 +70,8 @@ public:
 
   void notify_coordinator_deregister_on_exit();
 
+  void flush_deregister_pages_on_exit();
+
   void on_notify() override;
 
   // React hook mirroring peer::on_react(): a subclass (including a Python

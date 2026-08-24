@@ -19,6 +19,12 @@ permissions:
   pull-requests: read
   statuses: read
 
+env:
+  # Public, immutable bootstrap cache. Shifu still verifies the exact official
+  # release digest before extracting the archive.
+  KUNGFU_FNM_DIST_MIRROR: ${{ vars.KUNGFU_FNM_DIST_MIRROR }}
+  KUNGFU_FNM_SHA256: ${{ vars.KUNGFU_FNM_SHA256 }}
+
 jobs:
   dco:
     name: Candidate DCO
@@ -70,11 +76,18 @@ jobs:
 
   source_acceptance:
     name: Candidate source acceptance
-    uses: kungfu-systems/buildchain/.github/workflows/check.yml@58e48d73ae7fef0dd06ae02baf6d090e4da5487d
+    # Protected Buildchain merge 1342b7d preserves exact proof reuse when
+    # GitHub omits a PR backlink while retaining every rooted source binding.
+    uses: kungfu-systems/buildchain/.github/workflows/check.yml@1342b7d68936ab3c31b58b255df1de49c234bc02
     with:
-      buildchain-ref: 58e48d73ae7fef0dd06ae02baf6d090e4da5487d
+      buildchain-ref: 1342b7d68936ab3c31b58b255df1de49c234bc02
       mode: source
       upload-artifacts: true
+      source-proof-reuse: true
+      source-proof-policy-paths-json: '[".github/workflows/affected-native-pr.yml"]'
+      source-proof-closure-paths-json: '[".buildchain/buildchain.toml","shifu","scripts/source-acceptance.mjs","scripts/require-shifu.mjs"]'
+      source-proof-dependency-paths-json: '["package.json","pnpm-lock.yaml"]'
+      source-proof-required-contexts-json: '["Candidate source acceptance / check"]'
 
   cancel_after_source_failure:
     name: Stop selected lanes after source failure
@@ -453,7 +466,11 @@ jobs:
     if: >-
       ${{
         needs.candidate_preflight.result == 'success' &&
-        needs.proof_probe.result == 'success'
+        needs.proof_probe.result == 'success' &&
+        (needs.candidate_preflight.outputs.native-required == 'true' ||
+         needs.candidate_preflight.outputs.sdk-required == 'true' ||
+         needs.candidate_preflight.outputs.shifu-required == 'true' ||
+         needs.candidate_preflight.outputs.kfd-required == 'true')
       }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -464,13 +481,18 @@ jobs:
       pull-request: ${{ steps.identity.outputs.pull-request }}
       source-head: ${{ steps.identity.outputs.source-head }}
       protected-base: ${{ steps.identity.outputs.protected-base }}
+      qualified-base: ${{ steps.identity.outputs.qualified-base }}
+      toolchain-root: ${{ steps.identity.outputs.toolchain-root }}
+      environment-root: ${{ steps.identity.outputs.environment-root }}
       allowed-phases: ${{ steps.identity.outputs.allowed-phases }}
     steps:
       - name: Check out exact Buildchain Warrant runtime
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: kungfu-systems/buildchain
-          ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718
+          # Use the protected v4 read-only compatibility runtime while the
+          # mutating dev-pr-auto-merge scheduler retains its v3 authority.
+          ref: 0f4004d0d2b2474c2135a3e88d29d9c85bc37834
           path: .buildchain/dev-delivery-runtime
           fetch-depth: 1
           persist-credentials: false
@@ -495,6 +517,7 @@ jobs:
               pull_request="$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")"
               source_head="$(jq -r '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
               protected_base="$(jq -r '.pull_request.base.ref' "$GITHUB_EVENT_PATH")"
+              qualified_base="$(jq -r '.pull_request.base.sha' "$GITHUB_EVENT_PATH")"
               allowed_phase='^(provisional|qualified)$'
               ;;
             merge_group)
@@ -502,6 +525,7 @@ jobs:
               test -n "$pull_request"
               source_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pull_request" --jq .head.sha)"
               protected_base="$(jq -r '.merge_group.base_ref' "$GITHUB_EVENT_PATH" | sed 's#^refs/heads/##')"
+              qualified_base="$(jq -r '.merge_group.base_sha' "$GITHUB_EVENT_PATH")"
               allowed_phase='^qualified$'
               ;;
             *)
@@ -521,12 +545,17 @@ jobs:
             --arg allowedPhase "$allowed_phase" \
             '.observation.activeWarrant.pullRequestNumber == $pullRequest
              and .observation.activeWarrant.sourceHead == $sourceHead
+             and (.observation.activeCandidate.toolchainRoot | test("^sha256:[0-9a-f]{64}$"))
+             and (.observation.activeCandidate.environmentRoot | test("^sha256:[0-9a-f]{64}$"))
              and (.observation.activeWarrant.phase | test($allowedPhase))' \
             .buildchain/warrant-observation.json >/dev/null
           {
             echo "pull-request=$pull_request"
             echo "source-head=$source_head"
             echo "protected-base=$protected_base"
+            echo "qualified-base=$qualified_base"
+            echo "toolchain-root=$(jq -er '.observation.activeCandidate.toolchainRoot' .buildchain/warrant-observation.json)"
+            echo "environment-root=$(jq -er '.observation.activeCandidate.environmentRoot' .buildchain/warrant-observation.json)"
             if [ "$GITHUB_EVENT_NAME" = "merge_group" ]; then
               echo "allowed-phases=qualified"
             else
@@ -644,15 +673,43 @@ jobs:
         # shifu-entry-contract: allow source-tool bootstrap before Gate dependencies are runnable
         run: node scripts/buildchain-install.mjs
       - name: Ensure compiler cache tool
+        id: compiler-cache-tool
         if: ${{ steps.plan.outputs.required == 'true' }}
         shell: bash
+        timeout-minutes: 6
         run: |
           set -euo pipefail
+          available=true
           if ! command -v ccache >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y ccache
+            installed=false
+            for attempt in 1 2; do
+              if sudo timeout --signal=TERM 120s apt-get \
+                   -o Acquire::Retries=2 \
+                   -o Acquire::http::Timeout=30 \
+                   -o Acquire::https::Timeout=30 \
+                   -o DPkg::Lock::Timeout=30 \
+                   update -qq \
+                 && sudo timeout --signal=TERM 120s apt-get \
+                   -o Acquire::Retries=2 \
+                   -o Acquire::http::Timeout=30 \
+                   -o Acquire::https::Timeout=30 \
+                   -o DPkg::Lock::Timeout=30 \
+                   install -y ccache; then
+                installed=true
+                break
+              fi
+              echo "ccache installation attempt ${attempt} failed" >&2
+            done
+            if [ "$installed" != true ]; then
+              available=false
+              echo "::warning::ccache installation failed after two bounded attempts; the native Gate remains the cold authority"
+            fi
           fi
-          ccache --version
+          mkdir -p "$HOME/.cache/ccache"
+          echo "available=${available}" >> "$GITHUB_OUTPUT"
+          if [ "$available" = true ]; then
+            ccache --version
+          fi
       - name: Write portable cache manifests
         if: ${{ steps.plan.outputs.native-required == 'true' }}
         shell: bash
@@ -688,7 +745,11 @@ jobs:
           --output product/qualification/affected-native/cache/compiler.plan.json
           --github-output "$GITHUB_OUTPUT"
       - name: Restore compiler cache
-        if: ${{ steps.plan.outputs.native-required == 'true' }}
+        if: >-
+          ${{
+            steps.plan.outputs.native-required == 'true' &&
+            steps.compiler-cache-tool.outputs.available == 'true'
+          }}
         id: compiler-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -696,24 +757,28 @@ jobs:
           key: ${{ steps.compiler-plan.outputs.cache-key }}
           restore-keys: ${{ steps.compiler-plan.outputs.restore-keys }}
       - name: Enable compiler cache when available
-        if: ${{ steps.plan.outputs.required == 'true' }}
+        if: >-
+          ${{
+            steps.plan.outputs.required == 'true' &&
+            steps.compiler-cache-tool.outputs.available == 'true'
+          }}
         shell: bash
         run: |
           set -euo pipefail
-          if command -v ccache >/dev/null 2>&1; then
-            {
-              echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
-              echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
-              echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
-              echo "CCACHE_NOHASHDIR=true"
-              echo "CCACHE_COMPRESS=true"
-              echo "CCACHE_MAXSIZE=1G"
-            } >> "$GITHUB_ENV"
-          else
-            echo "ccache unavailable; the current build remains the cold authority"
-          fi
+          {
+            echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+            echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
+            echo "CCACHE_NOHASHDIR=true"
+            echo "CCACHE_COMPRESS=true"
+            echo "CCACHE_MAXSIZE=1G"
+          } >> "$GITHUB_ENV"
       - name: Reset compiler cache statistics
-        if: ${{ steps.plan.outputs.required == 'true' }}
+        if: >-
+          ${{
+            steps.plan.outputs.required == 'true' &&
+            steps.compiler-cache-tool.outputs.available == 'true'
+          }}
         shell: bash
         run: ccache --zero-stats
       - name: Run all expensive native qualification under the live Warrant
@@ -724,6 +789,9 @@ jobs:
           pull-request: ${{ needs.warrant_admission.outputs.pull-request }}
           source-head: ${{ needs.warrant_admission.outputs.source-head }}
           protected-base: ${{ needs.warrant_admission.outputs.protected-base }}
+          qualified-base: ${{ needs.warrant_admission.outputs.qualified-base }}
+          toolchain-root: ${{ needs.warrant_admission.outputs.toolchain-root }}
+          environment-root: ${{ needs.warrant_admission.outputs.environment-root }}
           allowed-phases: ${{ needs.warrant_admission.outputs.allowed-phases }}
           output: product/qualification/affected-native/warrant-execution-${{ matrix.partition }}.json
           command: |
@@ -748,7 +816,12 @@ jobs:
               ./shifu gate run source.changed-scope --omit-dependency source.acceptance --capability native-toolchain
             fi
       - name: Record compiler cache statistics
-        if: ${{ always() && steps.plan.outputs.native-required == 'true' }}
+        if: >-
+          ${{
+            always() &&
+            steps.plan.outputs.native-required == 'true' &&
+            steps.compiler-cache-tool.outputs.available == 'true'
+          }}
         shell: bash
         run: |
           set -euo pipefail
@@ -857,6 +930,9 @@ jobs:
           pull-request: ${{ needs.warrant_admission.outputs.pull-request }}
           source-head: ${{ needs.warrant_admission.outputs.source-head }}
           protected-base: ${{ needs.warrant_admission.outputs.protected-base }}
+          qualified-base: ${{ needs.warrant_admission.outputs.qualified-base }}
+          toolchain-root: ${{ needs.warrant_admission.outputs.toolchain-root }}
+          environment-root: ${{ needs.warrant_admission.outputs.environment-root }}
           allowed-phases: ${{ needs.warrant_admission.outputs.allowed-phases }}
           output: product/qualification/affected-native/shifu-warrant-execution.json
           command: |
@@ -893,6 +969,9 @@ jobs:
           pull-request: ${{ needs.warrant_admission.outputs.pull-request }}
           source-head: ${{ needs.warrant_admission.outputs.source-head }}
           protected-base: ${{ needs.warrant_admission.outputs.protected-base }}
+          qualified-base: ${{ needs.warrant_admission.outputs.qualified-base }}
+          toolchain-root: ${{ needs.warrant_admission.outputs.toolchain-root }}
+          environment-root: ${{ needs.warrant_admission.outputs.environment-root }}
           allowed-phases: ${{ needs.warrant_admission.outputs.allowed-phases }}
           output: product/qualification/affected-native/kfd-warrant-execution.json
           command: |
@@ -926,7 +1005,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Fail closed without the exact active Warrant
-        if: ${{ needs.warrant_admission.result != 'success' }}
+        if: >-
+          ${{
+            needs.warrant_admission.result != 'success' &&
+            (needs.candidate_preflight.outputs.native-required == 'true' ||
+             needs.candidate_preflight.outputs.sdk-required == 'true' ||
+             needs.candidate_preflight.outputs.shifu-required == 'true' ||
+             needs.candidate_preflight.outputs.kfd-required == 'true')
+          }}
         shell: bash
         run: |
           echo "Expensive native qualification requires the exact active Delivery Warrant." >&2
@@ -934,7 +1020,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: kungfu-systems/buildchain
-          ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718
+          # Read the scheduler's legacy v3 queue through the protected v4
+          # compatibility path without moving mutation authority.
+          ref: 0f4004d0d2b2474c2135a3e88d29d9c85bc37834
           path: .buildchain/dev-delivery-runtime
           persist-credentials: false
       - uses: actions/setup-node@v6.4.0
@@ -1271,6 +1359,11 @@ jobs:
             decision=reused
             bundle="$admission/proof-reuse"
           fi
+          delta_args=()
+          delta_plan="$admission/proof-admission/dev-delta-plan.json"
+          if [ -f "$delta_plan" ]; then
+            delta_args=(--dev-delta-plan "$delta_plan")
+          fi
           # shifu-entry-contract: allow attempt sealing after exact proof admission
           node scripts/affected-native-proof.mjs seal-attempt \
             --descriptor "$admission/proof-admission/descriptor.json" \
@@ -1281,7 +1374,8 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --event "$GITHUB_EVENT_NAME" \
             --trigger-head-sha "$GITHUB_SHA" \
-            --checkout-sha "$(git rev-parse HEAD)"
+            --checkout-sha "$(git rev-parse HEAD)" \
+            "${delta_args[@]}"
       - name: Consume Warrant and record exact Integration Delivery Proof
         if: >-
           ${{
@@ -1391,6 +1485,11 @@ jobs:
         run: |
           set -euo pipefail
           admission=product/qualification/affected-native
+          delta_args=()
+          delta_plan="$admission/proof-admission/dev-delta-plan.json"
+          if [ -f "$delta_plan" ]; then
+            delta_args=(--dev-delta-plan "$delta_plan")
+          fi
           # shifu-entry-contract: allow sealing post-admission cache transport authority
           node scripts/affected-native-proof.mjs seal-cache-authority \
             --descriptor "$admission/proof-admission/descriptor.json" \
@@ -1402,7 +1501,8 @@ jobs:
             --target-source-tree "$(git rev-parse 'HEAD^{tree}')" \
             --producer-run-id "$PRODUCER_RUN_ID" \
             --producer-event "$PRODUCER_EVENT" \
-            --producer-head-sha "$PRODUCER_HEAD_SHA"
+            --producer-head-sha "$PRODUCER_HEAD_SHA" \
+            "${delta_args[@]}"
       - name: Upload authoritative producer proof
         if: ${{ steps.admit.outputs.proof-created == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

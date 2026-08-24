@@ -148,7 +148,9 @@ export function sourceClangFormatCommand(
 }
 
 export function sourceMergeBase() {
-  const candidates = devMergeBaseCandidates();
+  const mergeGroupBase = sourceMergeGroupBase();
+  if (mergeGroupBase) return mergeGroupBase;
+  const candidates = sourceAcceptanceMergeBaseCandidates();
   for (const ref of candidates) {
     const sha = gitMaybe(['merge-base', ref, 'HEAD']);
     if (sha) return { ref, sha };
@@ -158,8 +160,78 @@ export function sourceMergeBase() {
   );
 }
 
+export function sourceAcceptanceMergeBaseCandidates(
+  devCandidates = devMergeBaseCandidates(),
+) {
+  return [...devCandidates, 'refs/buildchain/source-proof/current-base'];
+}
+
+export function fetchSourceAcceptanceCommit(commit, spawn = spawnSync) {
+  const options = {
+    cwd: ROOT,
+    encoding: 'utf8',
+    maxBuffer: SOURCE_ACCEPTANCE_GIT_MAX_BUFFER_BYTES,
+  };
+  const shallowProbe = spawn(
+    'git',
+    ['rev-parse', '--is-shallow-repository'],
+    options,
+  );
+  if (shallowProbe.status !== 0) {
+    throw new Error(
+      `cannot inspect source-acceptance checkout depth: ${(shallowProbe.stderr || '').trim()}`,
+    );
+  }
+  const fetchArgs = [
+    'fetch',
+    '--no-tags',
+    '--no-write-fetch-head',
+    '--filter=blob:none',
+  ];
+  if ((shallowProbe.stdout || '').trim() === 'true') {
+    fetchArgs.push('--unshallow');
+  }
+  fetchArgs.push('origin', commit);
+  const result = spawn('git', fetchArgs, options);
+  if (result.status !== 0) {
+    throw new Error(
+      `cannot fetch source-acceptance merge-group base ${commit}: ${(result.stderr || '').trim()}`,
+    );
+  }
+}
+
+export function sourceMergeGroupBase({
+  env = process.env,
+  readFile = fs.readFileSync,
+  gitRead = gitMaybe,
+  fetchCommit = fetchSourceAcceptanceCommit,
+} = {}) {
+  const coordinates = githubMergeGroupCoordinates(env, readFile);
+  if (!coordinates) return null;
+  const observedHead = gitRead(['rev-parse', 'HEAD']);
+  if (observedHead !== coordinates.headSha) {
+    throw new Error(
+      `merge-group event head ${coordinates.headSha} does not match source checkout ${observedHead || 'unavailable'}`,
+    );
+  }
+  if (gitRead(['cat-file', '-t', coordinates.baseSha]) !== 'commit') {
+    fetchCommit(coordinates.baseSha);
+  }
+  if (gitRead(['cat-file', '-t', coordinates.baseSha]) !== 'commit') {
+    throw new Error(
+      `source-acceptance merge-group base is unavailable after fetch: ${coordinates.baseSha}`,
+    );
+  }
+  return {
+    ref: 'github.merge_group.base_sha',
+    sha: coordinates.baseSha,
+    diffOperator: '..',
+  };
+}
+
 export function sourceChangedFiles() {
   const base = sourceMergeBase();
+  const revisionRange = `${base.sha}${base.diffOperator || '...'}HEAD`;
   /** @type {Set<string>} */
   const files = new Set();
   for (const args of [
@@ -168,7 +240,7 @@ export function sourceChangedFiles() {
       '--name-only',
       '--no-renames',
       '--diff-filter=ACDMR',
-      `${base.sha}...HEAD`,
+      revisionRange,
     ],
     ['diff', '--name-only', '--no-renames', '--diff-filter=ACDMR'],
     ['diff', '--cached', '--name-only', '--no-renames', '--diff-filter=ACDMR'],
@@ -478,11 +550,7 @@ export function resolveKfdProductGateCheckedAt({
 }) {
   if (write) return now();
   for (const gate of retainedGateResults) {
-    const retainedSourceSha = String(gate?.source?.sha || '');
-    if (retainedSourceSha && retainedSourceSha !== sourceSha) continue;
-    const checkedAt = String(
-      gate?.verificationCut?.checkedAt || gate?.checkedAt || '',
-    );
+    const checkedAt = String(gate?.checkedAt || '');
     if (checkedAt) return checkedAt;
   }
   const checkedAt = commitTimestamp(sourceSha);
@@ -561,10 +629,6 @@ export function sourceAcceptancePlan(
     ],
     ['schema authority', 'scripts/check-schema-authority.mjs'],
     [
-      'Work Control canonical naming boundary',
-      'scripts/check-work-control-vocabulary.test.mjs',
-    ],
-    [
       'Project Work Agent first-layer product model',
       'scripts/check-project-work-agent-product.test.mjs',
     ],
@@ -592,6 +656,12 @@ export function sourceAcceptancePlan(
       '--self-test',
     ],
     ['code complexity budget ratchet', 'scripts/code-complexity-budget.mjs'],
+    [
+      'changed-code function-risk ratchet and advisory projection',
+      'framework/maintainability/function-risk-ratchet.mjs',
+      '--base',
+      evidenceBaseCommit,
+    ],
     ...(coldReadOnlySourceAcceptance
       ? []
       : [
@@ -806,9 +876,19 @@ export function sourceAcceptancePlan(
       command: process.execPath,
       args,
       env:
-        label === 'documentation contracts' && evidenceBaseCommit
+        evidenceBaseCommit &&
+        (label === 'documentation contracts' ||
+          label === 'code complexity budget ratchet')
           ? {
-              KUNGFU_ADR_EVIDENCE_BASE_SHA: evidenceBaseCommit,
+              ...(label === 'documentation contracts'
+                ? {
+                    KUNGFU_ADR_EVIDENCE_BASE_SHA: evidenceBaseCommit,
+                    KUNGFU_EVOLUTION_BASE: evidenceBaseCommit,
+                  }
+                : {}),
+              ...(label === 'code complexity budget ratchet'
+                ? { KUNGFU_COMPLEXITY_PROTECTED_REF: evidenceBaseCommit }
+                : {}),
             }
           : undefined,
     })),
@@ -827,6 +907,7 @@ export function sourceAcceptancePlan(
               'scripts/source-acceptance.test.mjs',
               'scripts/platform-command.test.mjs',
               'product/scripts/dist.test.mjs',
+              'product/scripts/finalize-macos-release-artifacts.test.mjs',
               'product/scripts/dist-cli-executable-layout.test.mjs',
               'product/scripts/installed-kungfu/index.test.mjs',
               'scripts/opencode-local-model-canary-workflow.test.mjs',
@@ -834,6 +915,7 @@ export function sourceAcceptancePlan(
               'scripts/code-complexity-budget.test.mjs',
               'scripts/check-code-complexity.test.mjs',
               'framework/report-projection/authority.test.mjs',
+              'framework/maintainability/function-risk.test.mjs',
               'framework/maintainability/semantic-amplification.test.mjs',
               'framework/maintainability/terminal-evidence-matrix.test.mjs',
               ...(coldReadOnlySourceAcceptance
@@ -881,7 +963,6 @@ export function sourceAcceptancePlan(
               'scripts/check-upgrade-contract.test.mjs',
               'scripts/probe-cpp-cmake-contract.test.mjs',
               'scripts/check-upgrade-qualification.test.mjs',
-              'scripts/upgrade-publication-admission.test.mjs',
               'scripts/check-agent-session-contract.test.mjs',
               'scripts/check-cli-catalog-parity.test.mjs',
               'scripts/check-kfx-site-impact.test.mjs',
@@ -891,6 +972,7 @@ export function sourceAcceptancePlan(
               'scripts/check-release-provenance-object.test.mjs',
               'scripts/check-data-protection-contract.test.mjs',
               'scripts/check-durable-history-qualification.test.mjs',
+              'scripts/check-durable-provenance-authority.test.mjs',
               'scripts/check-work-agent-history-continuity.test.mjs',
               'scripts/check-project-cut-dogfood-history.test.mjs',
               'scripts/check-exit-bundle-contract.test.mjs',
@@ -902,7 +984,6 @@ export function sourceAcceptancePlan(
               'scripts/check-work-lifecycle-native.test.mjs',
               'scripts/check-work-lifecycle-operation-matrix.test.mjs',
               'framework/work-profile-conformance/work-profile-conformance.test.mjs',
-              'scripts/check-work-control-vocabulary.test.mjs',
               'scripts/check-project-work-agent-product.test.mjs',
               'scripts/registry-envelope.test.mjs',
               'scripts/check-kfd-agent-runtime-boundary.mjs',

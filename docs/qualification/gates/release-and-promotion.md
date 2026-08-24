@@ -59,6 +59,23 @@ fail-fast and cancel stale runs for the same pull request. The manual Build
 workflow and preflight workflow expose an explicit diagnostic mode that keeps
 all platform lanes running.
 
+### Topology-independent candidate provenance
+
+The production authority is the local immutable Fact/Cut chain under
+`release-provenance/`. Alpha.1 and Alpha.2 are retained as exact semantic
+bodies, Versions, an explicit `acknowledges` relation, historical Cuts, and
+durable refs. Export, clean-host import, fsck, pinned-Cut replay, and rollback
+produce the same semantic roots without a repository, GitHub API, branch,
+commit ancestry, or parent order.
+
+Candidate Patrol, Build preflight, and `Release - New Version` verify the
+checked-in portable authority before proceeding. Git SHA and tree remain exact
+transport coordinates for source checkout and binary construction; they do not
+supply historical semantics. The former candidate/promotion provenance
+dual-write and dual-read jobs are retired. Their v1/v2 contracts, objects, and
+the Alpha.2 source-lock file remain unchanged as offline historical evidence,
+not an active release route or fallback.
+
 ### Fresh GitHub-hosted functional matrix
 
 Formal Alpha and Release candidates execute credential-free Linux x64, Linux
@@ -185,6 +202,28 @@ retain the 25-minute default.
 - **Current source:** .github/workflows/release-new-version.yml (promote; merged alpha or release pull request, or manual source-locked dry-run measurement); .github/workflows/release-new-version.yml (recover; manual recovery of one verified sealed Alpha candidate without product rebuild).
 - **Retirement:** remove only after every selecting profile and workflow binding is migrated or explicitly replaced, with the registry and matrix changed in the same review.
 <!-- /gate-doc:release.artifact-admission -->
+
+### GitHub product discovery metadata gate
+
+GitHub Release presentation metadata is not the Alpha maturity authority.
+SemVer, the protected channel, catalog, Release Passport, compatibility and
+support documents retain that role. All public Kungfu product releases,
+including `vX.Y.Z-alpha.N`, must read back as `draft=false` and
+`prerelease=false`, and the publication operation must explicitly make the
+product GitHub Latest. Shifu, Xinfa, and other component-tag publication paths
+must explicitly opt out with `make_latest=false` (the `gh` CLI spelling is
+`--latest=false`).
+
+After a real product promotion, `.github/workflows/release-new-version.yml`
+runs `./shifu release:github:latest:verify`. The gate implemented by
+`scripts/github-release-policy.mjs` enumerates public product releases and
+requires `/releases/latest` to identify the newest one. It then follows
+`/releases/latest/download/buildchain.release.json`, requires its first bounded
+redirect to equal the selected release asset URL, and validates the Publication
+Bundle's Kungfu product repository, product name, exact tag/ref/version, and
+retained Alpha or release channel. The gate is read-only; a missing or
+component-owned Latest pointer, an unexpected redirect, duplicate/missing
+bundle, or identity drift is non-qualifying.
 
 The handler executes once in the Linux promotion controller. Its admitted
 payload remains cross-platform: the controller still requires exact Linux x64,

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Mapping
 
 from kungfu import kfx_contract, runtime_broker
@@ -178,6 +179,95 @@ def _package_dirs(suite_dir: Path) -> list[Path]:
                 seen.add(resolved)
                 result.append(resolved)
     return result
+
+
+def resolve_profile_source(
+    source: str | Path,
+    decision_factory: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    """Resolve each declared member exactly once and bind its package closure."""
+
+    suite_dir = Path(source).expanduser().resolve()
+    manifest = kfx_contract.read_manifest_from_dir(str(suite_dir))
+    suite = (manifest.get("kungfuConfig") or {}).get("suite")
+    if not isinstance(suite, Mapping):
+        raise ProfileSdkError(
+            "suite-manifest-required", "source is not a KFX Suite package"
+        )
+    profile_rel = str(suite.get("profile") or "")
+    if not profile_rel:
+        raise ProfileSdkError(
+            "profile-path-required", "Suite manifest does not declare suite.profile"
+        )
+    profile_path = _confined(suite_dir, profile_rel)
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ProfileSdkError(
+            "profile-unreadable", str(error), path=str(profile_path)
+        ) from error
+    members = list(suite.get("members") or [])
+    kfx_contract.validate_profile_suite(profile, suite_members=members)
+    candidates: dict[str, list[Path]] = {key: [] for key in sorted(set(members))}
+    for directory in _package_dirs(suite_dir):
+        try:
+            candidate = kfx_contract.read_manifest_from_dir(str(directory))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        key = kfx_contract.package_key(candidate)
+        if key in candidates:
+            candidates[key].append(directory)
+    duplicates = {
+        key: [str(package) for package in packages]
+        for key, packages in candidates.items()
+        if len(packages) > 1
+    }
+    missing = [key for key, packages in candidates.items() if not packages]
+    if missing or duplicates:
+        cards = []
+        if missing:
+            cards.append(
+                decision_factory(
+                    "profile-member-missing",
+                    "One or more declared Suite members cannot be resolved.",
+                    choices=["supply-member-package", "remove-member-and-replan"],
+                    basis={"source": str(suite_dir), "members": missing},
+                    required_authority="profile-author",
+                    resume_command=f"kungfu profile validate {suite_dir} --json",
+                )
+            )
+        if duplicates:
+            cards.append(
+                decision_factory(
+                    "profile-member-duplicate",
+                    "A Suite member identity resolves to multiple package closures.",
+                    choices=["remove-duplicate", "rename-and-redeclare-member"],
+                    basis={"duplicates": duplicates},
+                    required_authority="profile-author",
+                    resume_command=f"kungfu profile validate {suite_dir} --json",
+                )
+            )
+        raise ProfileSdkError(
+            "member-resolution-failed",
+            "Suite members did not resolve exactly once",
+            decisionCards=cards,
+        )
+    roots = {
+        key: package_content_root(packages[0]) for key, packages in candidates.items()
+    }
+    return {
+        "schema": "kungfu.profile-source-resolution/v1",
+        "source": str(suite_dir),
+        "suiteKey": kfx_contract.package_key(manifest),
+        "profilePath": str(profile_path),
+        "profile": profile,
+        "memberRoots": roots,
+        "memberPackages": {
+            key: str(packages[0]) for key, packages in candidates.items()
+        },
+        "contract": kfx_contract.contract_metadata(),
+        "verified": True,
+    }
 
 
 def _read_ref_json(

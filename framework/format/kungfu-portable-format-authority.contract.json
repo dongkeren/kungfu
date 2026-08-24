@@ -110,7 +110,7 @@
     },
     {
       "protocolId": "kungfu.workspace.episode-layout/v1",
-      "source": "framework/core/src/libkungfu/include/kungfu/runtime/storage/service.h",
+      "source": "framework/core/src/libkungfu/include/kungfu/runtime/storage/service_layout.h",
       "sourceRole": "workspace-path-and-persistence-class-inventory",
       "identityDomain": "workspace-relative storage role, not semantic object identity",
       "versionAxis": "workspace layout version",

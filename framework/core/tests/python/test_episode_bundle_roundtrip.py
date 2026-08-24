@@ -18,8 +18,24 @@ from pathlib import Path
 
 from kungfu.storage import service
 from kungfu.storage.episode_lifecycle import RuntimeEpisodeLifecycle
+from kungfu.storage.transfer import StorageTransfer
 
 EPISODE_BUNDLE_SCHEMA = "kungfu.storage.episode-bundle/v1"
+
+
+def test_transfer_owner_preserves_public_facade_and_jsonl_format(tmp_path):
+    assert service.write_jsonl is StorageTransfer.write_jsonl
+    assert service.export_jsonl is StorageTransfer.export_jsonl
+    assert service.export_bundle_json is StorageTransfer.export_bundle_json
+    assert service.build_export_bundle is StorageTransfer.build_export_bundle
+    assert service.import_bundle is StorageTransfer.import_bundle
+
+    output = tmp_path / "nested" / "records.jsonl"
+    output.parent.mkdir()
+    service.write_jsonl([{"z": "保留", "a": 1}, {"payload_state": "redacted"}], output)
+    assert output.read_bytes() == (
+        b'{"a":1,"z":"\xe4\xbf\x9d\xe7\x95\x99"}\n{"payload_state":"redacted"}\n'
+    )
 
 
 def _lifecycle(
@@ -228,37 +244,6 @@ def test_execute_rejects_journal_order_conflict(tmp_path):
         if row["kind"] == "frame_bytes"
     }
     assert "episode_frame_order_conflict" in reasons
-
-
-def test_atlas_projection_survives_the_roundtrip(tmp_path):
-    # The P10 product claim: an atlas import batch (a sealed Episode since
-    # KF-ADR-019f86da-4f90-726e-b31f-ed180aa2e7a8's prerequisite work) moves between data roots as one bundle,
-    # and the destination folds the same projection. Card payload bodies
-    # resolve through the provider content store in a materialized home — the
-    # atlas store mirror is the import-side original and is absent there.
-    from test_atlas_storage import _atlas_fixture
-
-    from kungfu.atlas import store as atlas_store
-
-    repo = tmp_path / "atlas-repo"
-    _atlas_fixture(repo)
-
-    source_root = tmp_path / "source"
-    result = atlas_store.ImportStore(str(source_root)).run_import(str(repo))
-    episode_id = int(result["episode_id"])
-    assert episode_id != 0, result
-
-    bundle = _export(source_root, episode_id)
-    destination_root = tmp_path / "destination"
-    receipt = service.import_bundle(destination_root, bundle, execute=True)
-    assert receipt["ok"], receipt
-
-    source_projection = atlas_store.load(str(source_root))
-    destination_projection = atlas_store.load(str(destination_root))
-    assert destination_projection is not None
-    assert destination_projection["missions"] == source_projection["missions"]
-    assert destination_projection["goals"] == source_projection["goals"]
-    assert destination_projection["markers"] == source_projection["markers"]
 
 
 def test_repair_apply_materializes_missing_journal(tmp_path):

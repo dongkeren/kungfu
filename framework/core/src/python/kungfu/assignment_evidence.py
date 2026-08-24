@@ -11,11 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from kungfu import assignment_orchestration as orchestration
+from kungfu.initiative_family.canonical import semantic_root
 from kungfu.assignment_lifecycle.ports import AssignmentRuntimePort
 from kungfu.agent.session_evidence import (
+    _final_observation_text as _final_observation_text,
     finalize_session_agent_report as finalize_session_agent_report,
-    load_execution_agent_report,
+    load_execution_agent_report as load_execution_agent_report,
 )
 
 JsonObject = dict[str, Any]
@@ -233,7 +234,7 @@ def resume_starter_work(
             assignment_value["work_definition"].get("acceptance_criteria") or []
         ),
     }
-    plan_root = orchestration.semantic_root(
+    plan_root = semantic_root(
         {
             "schema": "kungfu.work-start.resume-plan/v1",
             "queryProofRoot": status_value["query_proof_root"],

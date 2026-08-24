@@ -103,20 +103,6 @@ const GOVERNED_SOURCES = new Map([
     },
   ],
   [
-    'framework/release/buildchain-kfd-runtime.mjs',
-    {
-      role: 'read-only-kfd5-candidate-reference',
-      required: [
-        /framework\/primitive\/kungfu-primitive-catalog\.contract\.json/u,
-      ],
-      forbidden: [
-        /incubation-passport/u,
-        /primitiveDeclarations/u,
-        /writeJson\([^)]*kungfu-primitive-catalog/u,
-      ],
-    },
-  ],
-  [
     'scripts/check-primitive-authority-boundary.mjs',
     {
       role: 'authority-boundary-enforcer',

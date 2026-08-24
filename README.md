@@ -12,25 +12,42 @@ same Work across Codex, Claude, OpenCode, Amp, or your own execution surface.
 > **Kungfu UNGFU™** · Never Guess. Facts Unfold. [Why this signature
 > exists](docs/concepts/why-kungfu.md).
 
-> **Exploring the source? Start with your Agent.** Agents should read
-> [`AGENTS.md`](AGENTS.md) before explaining or evaluating Kungfu. Ask for the
-> smallest mental model your question needs; Kungfu's internal vocabulary is
-> machine-readable implementation structure, not a syllabus you need to learn.
+## See one Work survive failure
 
-Paste this into your Agent:
+Kungfu is currently Alpha. On macOS or Linux, install Kungfu and make the `kungfu` command available with the reviewed per-user installer:
 
-```text
-Inspect https://github.com/kungfu-systems/kungfu.
-Read AGENTS.md first. Explain what Kungfu does and evaluate its architecture.
-Give me only the smallest mental model I need; do not make me learn the
-repository's full ontology.
+```sh
+curl -fsSL https://kungfu.tech/install.sh | sh
 ```
 
-## Start where you already work
+It does not use `sudo` or edit your shell profile. Follow the exact `PATH` step
+it prints, then open a project and run the deterministic recovery story:
 
-First, [install Kungfu and make the `kungfu` command available on your
-`PATH`](docs/guides/installing-cli.md), then choose the entry that matches how
-you already work.
+```sh
+cd your-project
+KUNGFU_MOCK_AGENT_SCENARIO=recovery-story kungfu
+```
+
+The built-in Mock Agent needs no provider credentials. It starts the same Work
+through three consecutive Attempts: a disconnect, a crash, then a recovered
+delivery. Because the scenario is deterministic, it tests Kungfu's local
+continuity and recovery path rather than a particular model.
+
+For a quicker onboarding check that crosses a question, an approval, and a
+ready-for-review result in one Attempt, run:
+
+```sh
+KUNGFU_MOCK_AGENT_SCENARIO=multi-step kungfu
+```
+
+See the [installation guide](docs/guides/installing-cli.md) for Windows,
+higher-assurance installation, explicit version pinning, and troubleshooting.
+
+## Keep the Agent interface you already use
+
+The Mock Agent covers Work creation and execution. Regular onboarding still
+needs a supported real Agent for independent review, so this is not yet an
+end-to-end zero-external-Agent path.
 
 **Stay in your current Agent.** Paste this sentence into Codex, Claude, OpenCode,
 Amp, or another Agent that can run local commands:
@@ -153,6 +170,16 @@ From a source checkout, give your Agent the task you actually want to complete:
 
 ```text
 Read `AGENTS.md`. I want to <task>. Use the repository's verified task-context route. Before editing, explain only the concepts, current implementation owners, authority boundaries, and qualification path this task requires.
+```
+
+If you are exploring or evaluating the repository rather than changing it,
+paste this into your Agent:
+
+```text
+Inspect https://github.com/kungfu-systems/kungfu.
+Read AGENTS.md first. Explain what Kungfu does and evaluate its architecture.
+Give me only the smallest mental model I need; do not make me learn the
+repository's full ontology.
 ```
 
 For a whole-system explanation, start with the [Evolution

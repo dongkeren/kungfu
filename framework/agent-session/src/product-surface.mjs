@@ -778,15 +778,6 @@ export class AgentSessionProductSurface {
         'native SessionAttempt is unavailable',
       );
     }
-    if (
-      projection.attempt.bootstrap?.state !== 'verified' ||
-      projection.attempt.bootstrap?.mutationsAllowed !== true
-    ) {
-      throw new AgentSessionSurfaceError(
-        'native_bootstrap_not_verified',
-        'native Agent bootstrap is not verified; Work binding is disabled',
-      );
-    }
     const consoleWorkspaceId = projection.console.workspaceId;
     const declaredSourceWorkspaceId = sourceWorkspaceId ?? consoleWorkspaceId;
     if (declaredSourceWorkspaceId !== consoleWorkspaceId) {
@@ -1172,7 +1163,7 @@ export class AgentSessionProductSurface {
           initializeParams: input.structured?.initializeParams ?? {
             clientInfo: {
               name: 'kungfu-agent-session',
-              version: '4.0.0-alpha.2',
+              version: '4.0.0-alpha.3',
             },
           },
           threadStartParams: input.structured?.threadStartParams ?? {

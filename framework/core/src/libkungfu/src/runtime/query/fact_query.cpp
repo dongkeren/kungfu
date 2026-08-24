@@ -20,11 +20,312 @@
 #include <kungfu/yijinjing/storage/content_hash.h>
 #include <kungfu/yijinjing/storage/episode_manifest.h>
 
+#include "fact_query_internal.h"
+
 namespace kungfu::runtime::query {
+
+using namespace fact_query_internal;
+
+namespace {
+
+void parse_query_shape(const nlohmann::json &value, query_definition &definition) {
+  definition.schema = optional_text(value, "schema", QUERY_DEFINITION_SCHEMA_V1);
+  if (definition.schema != QUERY_DEFINITION_SCHEMA_V1) {
+    throw std::invalid_argument("unsupported query definition schema: " + definition.schema);
+  }
+  definition.object = optional_text(value, "object", "episodes");
+  if (definition.object != "episodes" && definition.object != "fact-state") {
+    throw std::invalid_argument(
+        "KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 supports only object=episodes or object=fact-state");
+  }
+  if (value.contains("subject_keys")) {
+    if (!value.at("subject_keys").is_array() || value.at("subject_keys").size() > 256) {
+      throw std::invalid_argument("definition.subject_keys must be an array with at most 256 entries");
+    }
+    for (const auto &item : value.at("subject_keys")) {
+      if (!item.is_string() || item.get<std::string>().empty() || item.get<std::string>().size() > 512) {
+        throw std::invalid_argument("definition.subject_keys entries must contain 1..512 bytes");
+      }
+      definition.subject_keys.push_back(item.get<std::string>());
+    }
+    std::sort(definition.subject_keys.begin(), definition.subject_keys.end());
+    definition.subject_keys.erase(std::unique(definition.subject_keys.begin(), definition.subject_keys.end()),
+                                  definition.subject_keys.end());
+  }
+  if (definition.object == "episodes" && !definition.subject_keys.empty()) {
+    throw std::invalid_argument("definition.subject_keys is supported only for object=fact-state");
+  }
+  definition.limit = optional_uint64(value, "limit", 100);
+  if (definition.limit == 0 || definition.limit > 1000) {
+    throw std::invalid_argument("KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q0 requires 1 <= limit <= 1000");
+  }
+  definition.evidence = optional_text(value, "evidence", "proof");
+  if (definition.evidence != "proof") {
+    throw std::invalid_argument("KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q1 supports only evidence=proof");
+  }
+}
+
+void parse_temporal_definition(const nlohmann::json &value, query_definition &definition) {
+  if (value.contains("temporal_pattern")) {
+    const auto &pattern = value.at("temporal_pattern");
+    reject_unknown_fields(
+        pattern, {"schema", "partition_by", "order_by", "sequence", "repeat", "within_ns", "as_of_time", "absence"},
+        "definition.temporal_pattern");
+    for (const auto *required :
+         {"schema", "partition_by", "order_by", "sequence", "repeat", "within_ns", "as_of_time"}) {
+      if (!pattern.contains(required)) {
+        throw std::invalid_argument(std::string("definition.temporal_pattern requires field: ") + required);
+      }
+    }
+    definition.has_temporal_pattern = true;
+    definition.pattern.schema = optional_text(pattern, "schema", QUERY_TEMPORAL_PATTERN_SCHEMA_V1);
+    if (definition.pattern.schema != QUERY_TEMPORAL_PATTERN_SCHEMA_V1) {
+      throw std::invalid_argument("unsupported temporal pattern schema: " + definition.pattern.schema);
+    }
+    definition.pattern.partition_by = optional_text(pattern, "partition_by", "source");
+    definition.pattern.order_by = optional_text(pattern, "order_by", "begin_time");
+    static const std::regex field_name("^[a-z][a-z0-9_]{0,63}$");
+    if (!std::regex_match(definition.pattern.partition_by, field_name) ||
+        !std::regex_match(definition.pattern.order_by, field_name)) {
+      throw std::invalid_argument("temporal pattern partition_by/order_by must be safe field names");
+    }
+    static constexpr const char *PARTITION_FIELDS[] = {
+        "episode_id", "title", "actor", "source", "status", "reason", "content_root_status"};
+    if (std::find(std::begin(PARTITION_FIELDS), std::end(PARTITION_FIELDS), definition.pattern.partition_by) ==
+        std::end(PARTITION_FIELDS)) {
+      throw std::invalid_argument("temporal pattern partition_by uses unsupported Episode field");
+    }
+    if (definition.pattern.order_by != "begin_time" && definition.pattern.order_by != "end_time") {
+      throw std::invalid_argument("temporal pattern order_by must be begin_time or end_time");
+    }
+    if (!pattern.contains("sequence") || !pattern.at("sequence").is_array() || pattern.at("sequence").size() != 2) {
+      throw std::invalid_argument("temporal pattern sequence requires exactly two predicates");
+    }
+    definition.pattern.sequence.push_back(
+        parse_event_predicate(pattern.at("sequence").at(0), "definition.temporal_pattern.sequence[0]"));
+    definition.pattern.sequence.push_back(
+        parse_event_predicate(pattern.at("sequence").at(1), "definition.temporal_pattern.sequence[1]"));
+    const auto repeat = pattern.value("repeat", nlohmann::json::object());
+    reject_unknown_fields(repeat, {"min", "max"}, "definition.temporal_pattern.repeat");
+    definition.pattern.repeat_min = optional_uint64(repeat, "min", 1);
+    definition.pattern.repeat_max = optional_uint64(repeat, "max", definition.pattern.repeat_min);
+    if (definition.pattern.repeat_min == 0 || definition.pattern.repeat_max < definition.pattern.repeat_min ||
+        definition.pattern.repeat_max > 16) {
+      throw std::invalid_argument("temporal pattern repeat requires 1 <= min <= max <= 16");
+    }
+    definition.pattern.within_ns = optional_uint64(pattern, "within_ns");
+    constexpr uint64_t MAX_PATTERN_WINDOW_NS = 30ULL * 24ULL * 60ULL * 60ULL * 1000000000ULL;
+    if (definition.pattern.within_ns == 0 || definition.pattern.within_ns > MAX_PATTERN_WINDOW_NS) {
+      throw std::invalid_argument("temporal pattern within_ns must be between 1ns and 30 days");
+    }
+    if (!pattern.contains("as_of_time")) {
+      throw std::invalid_argument("temporal pattern requires explicit as_of_time");
+    }
+    definition.pattern.as_of_time = int64_value(pattern.at("as_of_time"), "temporal_pattern.as_of_time");
+    if (definition.pattern.as_of_time <= 0) {
+      throw std::invalid_argument("temporal pattern as_of_time must be positive");
+    }
+    if (pattern.contains("absence")) {
+      definition.pattern.has_absence = true;
+      definition.pattern.absence = parse_event_predicate(pattern.at("absence"), "definition.temporal_pattern.absence");
+    }
+  }
+}
+
+void parse_query_basis(const nlohmann::json &value, query_definition &definition) {
+  const auto basis = value.value("basis", nlohmann::json::object());
+  reject_unknown_fields(
+      basis, {"contract_world", "fact_surfaces", "scope", "episode_id", "perspective", "cut", "policy", "time_basis"},
+      "definition.basis");
+  if (!basis.contains("contract_world") || !basis.contains("fact_surfaces")) {
+    throw std::invalid_argument("definition.basis requires explicit contract_world and fact_surfaces declarations");
+  }
+  definition.basis.contract_world =
+      parse_declaration_reference(basis.at("contract_world"), "definition.basis.contract_world");
+  const auto &fact_surfaces = basis.at("fact_surfaces");
+  if (!fact_surfaces.is_array() || fact_surfaces.empty() || fact_surfaces.size() > 16) {
+    throw std::invalid_argument("definition.basis.fact_surfaces requires 1..16 declaration references");
+  }
+  for (size_t index = 0; index < fact_surfaces.size(); ++index) {
+    const auto path = std::string("definition.basis.fact_surfaces[") + std::to_string(index) + "]";
+    definition.basis.fact_surfaces.push_back(parse_declaration_reference(fact_surfaces.at(index), path.c_str()));
+  }
+  const auto expected_scope = definition.object == "episodes" ? "episode-manifest" : "domain-fact-ledger";
+  definition.basis.scope = optional_text(basis, "scope", expected_scope);
+  if (definition.basis.scope != expected_scope) {
+    throw std::invalid_argument("query basis scope does not match the selected object");
+  }
+  definition.basis.episode_id = optional_uint64(basis, "episode_id");
+  if (definition.object == "fact-state" && definition.basis.episode_id != 0) {
+    throw std::invalid_argument("object=fact-state does not accept basis.episode_id");
+  }
+  const auto expected_perspective =
+      definition.object == "episodes" ? "manifest-append-order" : "system-time-then-observation-id";
+  definition.basis.perspective = optional_text(basis, "perspective", expected_perspective);
+  if (definition.basis.perspective != expected_perspective) {
+    throw std::invalid_argument("query basis perspective does not match the selected object");
+  }
+
+  const auto selected_cut = basis.value("cut", nlohmann::json{{"kind", "head"}});
+  reject_unknown_fields(selected_cut, {"kind", "manifest_frame_uid", "system_time"}, "definition.basis.cut");
+  const auto cut_name = optional_text(selected_cut, "kind", "head");
+  if (cut_name == "head") {
+    if (selected_cut.contains("manifest_frame_uid") || selected_cut.contains("system_time")) {
+      throw std::invalid_argument("head cut must not include a cut token");
+    }
+    definition.basis.selected_cut.kind = cut_kind::Head;
+  } else if (cut_name == "manifest_frame_uid") {
+    if (definition.object != "episodes") {
+      throw std::invalid_argument("manifest_frame_uid cuts are supported only for object=episodes");
+    }
+    definition.basis.selected_cut.kind = cut_kind::ManifestFrameUid;
+    definition.basis.selected_cut.manifest_frame_uid = optional_uint64(selected_cut, "manifest_frame_uid");
+    if (definition.basis.selected_cut.manifest_frame_uid == 0) {
+      throw std::invalid_argument("manifest_frame_uid cut requires a non-zero token");
+    }
+    if (selected_cut.contains("system_time")) {
+      throw std::invalid_argument("manifest_frame_uid cut must not include system_time");
+    }
+  } else if (cut_name == "system_time") {
+    if (definition.object != "fact-state" || !selected_cut.contains("system_time")) {
+      throw std::invalid_argument("system_time cuts require object=fact-state and a system_time token");
+    }
+    definition.basis.selected_cut.kind = cut_kind::SystemTime;
+    definition.basis.selected_cut.system_time = int64_value(selected_cut.at("system_time"), "cut.system_time");
+    if (definition.basis.selected_cut.system_time <= 0) {
+      throw std::invalid_argument("system_time cut requires a positive token");
+    }
+    if (selected_cut.contains("manifest_frame_uid")) {
+      throw std::invalid_argument("system_time cut must not include manifest_frame_uid");
+    }
+  } else {
+    throw std::invalid_argument("unsupported query cut: " + cut_name);
+  }
+
+  const auto policy = basis.value("policy", nlohmann::json::object());
+  reject_unknown_fields(policy, {"fold", "schema", "engine", "conflict", "redaction"}, "definition.basis.policy");
+  definition.basis.policy.fold = optional_text(policy, "fold", definition.basis.policy.fold);
+  definition.basis.policy.schema = optional_text(policy, "schema", definition.basis.policy.schema);
+  definition.basis.policy.engine = optional_text(policy, "engine", definition.basis.policy.engine);
+  definition.basis.policy.conflict = optional_text(policy, "conflict", definition.basis.policy.conflict);
+  definition.basis.policy.redaction = optional_text(policy, "redaction", definition.basis.policy.redaction);
+  const auto time_basis = basis.value("time_basis", nlohmann::json::object());
+  reject_unknown_fields(time_basis, {"valid_time", "system_time", "causal_time"}, "definition.basis.time_basis");
+  definition.basis.valid_time = optional_text(time_basis, "valid_time", definition.basis.valid_time);
+  definition.basis.system_time = optional_text(time_basis, "system_time", definition.basis.system_time);
+  definition.basis.causal_time = optional_text(time_basis, "causal_time", definition.basis.causal_time);
+  const query_policy supported_policy =
+      definition.object == "episodes"
+          ? query_policy{}
+          : query_policy{"latest-admitted-per-source/v1", "kungfu.facts.domain-fact-event/v1", "fact-authority-scan/v1",
+                         "preserve-source-claims/v1", "hash-and-ref/v1"};
+  if (definition.basis.policy.fold != supported_policy.fold ||
+      definition.basis.policy.schema != supported_policy.schema ||
+      definition.basis.policy.engine != supported_policy.engine ||
+      definition.basis.policy.conflict != supported_policy.conflict ||
+      definition.basis.policy.redaction != supported_policy.redaction) {
+    throw std::invalid_argument("unsupported KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q0 policy version");
+  }
+  const query_basis supported_basis =
+      definition.object == "episodes"
+          ? query_basis{}
+          : query_basis{
+                {},         {},      "domain-fact-ledger", 0, "system-time-then-observation-id", {}, supported_policy,
+                "explicit", "event", "event-parent"};
+  if (definition.basis.valid_time != supported_basis.valid_time ||
+      definition.basis.system_time != supported_basis.system_time ||
+      definition.basis.causal_time != supported_basis.causal_time) {
+    throw std::invalid_argument("unsupported KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q0 time basis");
+  }
+  if (definition.has_temporal_pattern && definition.object != "episodes") {
+    throw std::invalid_argument("temporal pattern requires object=episodes");
+  }
+  if (definition.has_temporal_pattern && definition.basis.episode_id != 0) {
+    throw std::invalid_argument("temporal pattern requires basis.episode_id=0 so the partition can span Episodes");
+  }
+}
+
+} // namespace
+
+query_definition parse_query_definition(const nlohmann::json &value) {
+  if (!value.is_object()) {
+    throw std::invalid_argument("query definition must be an object");
+  }
+  reject_unknown_fields(value, {"schema", "basis", "object", "subject_keys", "limit", "evidence", "temporal_pattern"},
+                        "definition");
+  query_definition definition;
+  parse_query_shape(value, definition);
+  parse_temporal_definition(value, definition);
+  parse_query_basis(value, definition);
+  return definition;
+}
+
+nlohmann::json query_definition_json(const query_definition &definition) {
+  auto normalized = definition;
+  normalize_declaration_basis(normalized.basis);
+  auto fact_surfaces = nlohmann::json::array();
+  for (const auto &surface : normalized.basis.fact_surfaces) {
+    fact_surfaces.push_back(declaration_reference_json(surface));
+  }
+  nlohmann::json value = {{"schema", normalized.schema},
+                          {"basis",
+                           {{"contract_world", declaration_reference_json(normalized.basis.contract_world)},
+                            {"fact_surfaces", fact_surfaces},
+                            {"scope", normalized.basis.scope},
+                            {"episode_id", std::to_string(normalized.basis.episode_id)},
+                            {"perspective", normalized.basis.perspective},
+                            {"cut", cut_json(normalized.basis.selected_cut)},
+                            {"policy", policy_json(normalized.basis.policy)},
+                            {"time_basis",
+                             {{"valid_time", normalized.basis.valid_time},
+                              {"system_time", normalized.basis.system_time},
+                              {"causal_time", normalized.basis.causal_time}}}}},
+                          {"object", normalized.object},
+                          {"limit", normalized.limit},
+                          {"evidence", normalized.evidence}};
+  if (!normalized.subject_keys.empty()) {
+    value["subject_keys"] = normalized.subject_keys;
+  }
+  if (normalized.has_temporal_pattern) {
+    value["temporal_pattern"] = temporal_pattern_json(normalized.pattern);
+  }
+  return value;
+}
+
+logical_plan plan_query(const query_definition &definition) {
+  logical_plan plan;
+  plan.definition = definition;
+  normalize_declaration_basis(plan.definition.basis);
+  const auto &normalized = plan.definition;
+  plan.row_schema = normalized.object == "fact-state"
+                        ? fact_state_result_schema()
+                        : (normalized.has_temporal_pattern ? temporal_match_result_schema() : episode_result_schema());
+  plan.query_definition_hash = json_hash(query_definition_json(normalized));
+  plan.operators.push_back({"authority_scan", authority_scan_operator{normalized.object, normalized.basis}});
+  if (normalized.basis.episode_id != 0) {
+    plan.operators.push_back(
+        {"filter", scalar_filter_operator{"episode_id", "eq", std::to_string(normalized.basis.episode_id)}});
+  }
+  if (!normalized.subject_keys.empty()) {
+    plan.operators.push_back({"filter", set_filter_operator{"subject_key", "in", normalized.subject_keys}});
+  }
+  if (normalized.has_temporal_pattern) {
+    plan.operators.push_back({"temporal_match", normalized.pattern});
+  } else if (normalized.object == "episodes") {
+    plan.operators.push_back({"order", order_operator{"episode_id", "asc"}});
+  } else {
+    plan.operators.push_back({"order", order_operator{"observation_id", "asc"}});
+  }
+  plan.operators.push_back({"limit", limit_operator{normalized.limit}});
+  plan.operators.push_back({"project", project_operator{plan.row_schema}});
+  plan.operators.push_back({"evidence", evidence_operator{normalized.evidence}});
+  plan.logical_plan_hash = json_hash(logical_plan_payload_json(plan));
+  return plan;
+}
 
 namespace yy_storage = kungfu::yijinjing::storage;
 
-namespace {
+namespace fact_query_internal {
 
 void reject_unknown_fields(const nlohmann::json &object, std::initializer_list<const char *> allowed,
                            const char *path) {
@@ -62,7 +363,7 @@ uint64_t uint64_value(const nlohmann::json &value, const char *field) {
   throw std::invalid_argument(std::string("invalid unsigned query field: ") + field);
 }
 
-uint64_t optional_uint64(const nlohmann::json &object, const char *field, uint64_t fallback = 0) {
+uint64_t optional_uint64(const nlohmann::json &object, const char *field, uint64_t fallback) {
   if (!object.is_object() || !object.contains(field) || object.at(field).is_null()) {
     return fallback;
   }
@@ -90,7 +391,7 @@ int64_t int64_value(const nlohmann::json &value, const char *field) {
   throw std::invalid_argument(std::string("invalid signed query field: ") + field);
 }
 
-std::string optional_text(const nlohmann::json &object, const char *field, const std::string &fallback = {}) {
+std::string optional_text(const nlohmann::json &object, const char *field, const std::string &fallback) {
   if (!object.is_object() || !object.contains(field) || object.at(field).is_null()) {
     return fallback;
   }
@@ -572,649 +873,9 @@ result_schema fact_state_result_schema() {
            {"causal_parent_event_id", "string", true}}};
 }
 
-} // namespace
+} // namespace fact_query_internal
 
-query_definition parse_query_definition(const nlohmann::json &value) {
-  if (!value.is_object()) {
-    throw std::invalid_argument("query definition must be an object");
-  }
-  reject_unknown_fields(value, {"schema", "basis", "object", "subject_keys", "limit", "evidence", "temporal_pattern"},
-                        "definition");
-  query_definition definition;
-  definition.schema = optional_text(value, "schema", QUERY_DEFINITION_SCHEMA_V1);
-  if (definition.schema != QUERY_DEFINITION_SCHEMA_V1) {
-    throw std::invalid_argument("unsupported query definition schema: " + definition.schema);
-  }
-  definition.object = optional_text(value, "object", "episodes");
-  if (definition.object != "episodes" && definition.object != "fact-state") {
-    throw std::invalid_argument(
-        "KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 supports only object=episodes or object=fact-state");
-  }
-  if (value.contains("subject_keys")) {
-    if (!value.at("subject_keys").is_array() || value.at("subject_keys").size() > 256) {
-      throw std::invalid_argument("definition.subject_keys must be an array with at most 256 entries");
-    }
-    for (const auto &item : value.at("subject_keys")) {
-      if (!item.is_string() || item.get<std::string>().empty() || item.get<std::string>().size() > 512) {
-        throw std::invalid_argument("definition.subject_keys entries must contain 1..512 bytes");
-      }
-      definition.subject_keys.push_back(item.get<std::string>());
-    }
-    std::sort(definition.subject_keys.begin(), definition.subject_keys.end());
-    definition.subject_keys.erase(std::unique(definition.subject_keys.begin(), definition.subject_keys.end()),
-                                  definition.subject_keys.end());
-  }
-  if (definition.object == "episodes" && !definition.subject_keys.empty()) {
-    throw std::invalid_argument("definition.subject_keys is supported only for object=fact-state");
-  }
-  definition.limit = optional_uint64(value, "limit", 100);
-  if (definition.limit == 0 || definition.limit > 1000) {
-    throw std::invalid_argument("KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q0 requires 1 <= limit <= 1000");
-  }
-  definition.evidence = optional_text(value, "evidence", "proof");
-  if (definition.evidence != "proof") {
-    throw std::invalid_argument("KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q1 supports only evidence=proof");
-  }
-  if (value.contains("temporal_pattern")) {
-    const auto &pattern = value.at("temporal_pattern");
-    reject_unknown_fields(
-        pattern, {"schema", "partition_by", "order_by", "sequence", "repeat", "within_ns", "as_of_time", "absence"},
-        "definition.temporal_pattern");
-    for (const auto *required :
-         {"schema", "partition_by", "order_by", "sequence", "repeat", "within_ns", "as_of_time"}) {
-      if (!pattern.contains(required)) {
-        throw std::invalid_argument(std::string("definition.temporal_pattern requires field: ") + required);
-      }
-    }
-    definition.has_temporal_pattern = true;
-    definition.pattern.schema = optional_text(pattern, "schema", QUERY_TEMPORAL_PATTERN_SCHEMA_V1);
-    if (definition.pattern.schema != QUERY_TEMPORAL_PATTERN_SCHEMA_V1) {
-      throw std::invalid_argument("unsupported temporal pattern schema: " + definition.pattern.schema);
-    }
-    definition.pattern.partition_by = optional_text(pattern, "partition_by", "source");
-    definition.pattern.order_by = optional_text(pattern, "order_by", "begin_time");
-    static const std::regex field_name("^[a-z][a-z0-9_]{0,63}$");
-    if (!std::regex_match(definition.pattern.partition_by, field_name) ||
-        !std::regex_match(definition.pattern.order_by, field_name)) {
-      throw std::invalid_argument("temporal pattern partition_by/order_by must be safe field names");
-    }
-    static constexpr const char *PARTITION_FIELDS[] = {
-        "episode_id", "title", "actor", "source", "status", "reason", "content_root_status"};
-    if (std::find(std::begin(PARTITION_FIELDS), std::end(PARTITION_FIELDS), definition.pattern.partition_by) ==
-        std::end(PARTITION_FIELDS)) {
-      throw std::invalid_argument("temporal pattern partition_by uses unsupported Episode field");
-    }
-    if (definition.pattern.order_by != "begin_time" && definition.pattern.order_by != "end_time") {
-      throw std::invalid_argument("temporal pattern order_by must be begin_time or end_time");
-    }
-    if (!pattern.contains("sequence") || !pattern.at("sequence").is_array() || pattern.at("sequence").size() != 2) {
-      throw std::invalid_argument("temporal pattern sequence requires exactly two predicates");
-    }
-    definition.pattern.sequence.push_back(
-        parse_event_predicate(pattern.at("sequence").at(0), "definition.temporal_pattern.sequence[0]"));
-    definition.pattern.sequence.push_back(
-        parse_event_predicate(pattern.at("sequence").at(1), "definition.temporal_pattern.sequence[1]"));
-    const auto repeat = pattern.value("repeat", nlohmann::json::object());
-    reject_unknown_fields(repeat, {"min", "max"}, "definition.temporal_pattern.repeat");
-    definition.pattern.repeat_min = optional_uint64(repeat, "min", 1);
-    definition.pattern.repeat_max = optional_uint64(repeat, "max", definition.pattern.repeat_min);
-    if (definition.pattern.repeat_min == 0 || definition.pattern.repeat_max < definition.pattern.repeat_min ||
-        definition.pattern.repeat_max > 16) {
-      throw std::invalid_argument("temporal pattern repeat requires 1 <= min <= max <= 16");
-    }
-    definition.pattern.within_ns = optional_uint64(pattern, "within_ns");
-    constexpr uint64_t MAX_PATTERN_WINDOW_NS = 30ULL * 24ULL * 60ULL * 60ULL * 1000000000ULL;
-    if (definition.pattern.within_ns == 0 || definition.pattern.within_ns > MAX_PATTERN_WINDOW_NS) {
-      throw std::invalid_argument("temporal pattern within_ns must be between 1ns and 30 days");
-    }
-    if (!pattern.contains("as_of_time")) {
-      throw std::invalid_argument("temporal pattern requires explicit as_of_time");
-    }
-    definition.pattern.as_of_time = int64_value(pattern.at("as_of_time"), "temporal_pattern.as_of_time");
-    if (definition.pattern.as_of_time <= 0) {
-      throw std::invalid_argument("temporal pattern as_of_time must be positive");
-    }
-    if (pattern.contains("absence")) {
-      definition.pattern.has_absence = true;
-      definition.pattern.absence = parse_event_predicate(pattern.at("absence"), "definition.temporal_pattern.absence");
-    }
-  }
-
-  const auto basis = value.value("basis", nlohmann::json::object());
-  reject_unknown_fields(
-      basis, {"contract_world", "fact_surfaces", "scope", "episode_id", "perspective", "cut", "policy", "time_basis"},
-      "definition.basis");
-  if (!basis.contains("contract_world") || !basis.contains("fact_surfaces")) {
-    throw std::invalid_argument("definition.basis requires explicit contract_world and fact_surfaces declarations");
-  }
-  definition.basis.contract_world =
-      parse_declaration_reference(basis.at("contract_world"), "definition.basis.contract_world");
-  const auto &fact_surfaces = basis.at("fact_surfaces");
-  if (!fact_surfaces.is_array() || fact_surfaces.empty() || fact_surfaces.size() > 16) {
-    throw std::invalid_argument("definition.basis.fact_surfaces requires 1..16 declaration references");
-  }
-  for (size_t index = 0; index < fact_surfaces.size(); ++index) {
-    const auto path = std::string("definition.basis.fact_surfaces[") + std::to_string(index) + "]";
-    definition.basis.fact_surfaces.push_back(parse_declaration_reference(fact_surfaces.at(index), path.c_str()));
-  }
-  const auto expected_scope = definition.object == "episodes" ? "episode-manifest" : "domain-fact-ledger";
-  definition.basis.scope = optional_text(basis, "scope", expected_scope);
-  if (definition.basis.scope != expected_scope) {
-    throw std::invalid_argument("query basis scope does not match the selected object");
-  }
-  definition.basis.episode_id = optional_uint64(basis, "episode_id");
-  if (definition.object == "fact-state" && definition.basis.episode_id != 0) {
-    throw std::invalid_argument("object=fact-state does not accept basis.episode_id");
-  }
-  const auto expected_perspective =
-      definition.object == "episodes" ? "manifest-append-order" : "system-time-then-observation-id";
-  definition.basis.perspective = optional_text(basis, "perspective", expected_perspective);
-  if (definition.basis.perspective != expected_perspective) {
-    throw std::invalid_argument("query basis perspective does not match the selected object");
-  }
-
-  const auto selected_cut = basis.value("cut", nlohmann::json{{"kind", "head"}});
-  reject_unknown_fields(selected_cut, {"kind", "manifest_frame_uid", "system_time"}, "definition.basis.cut");
-  const auto cut_name = optional_text(selected_cut, "kind", "head");
-  if (cut_name == "head") {
-    if (selected_cut.contains("manifest_frame_uid") || selected_cut.contains("system_time")) {
-      throw std::invalid_argument("head cut must not include a cut token");
-    }
-    definition.basis.selected_cut.kind = cut_kind::Head;
-  } else if (cut_name == "manifest_frame_uid") {
-    if (definition.object != "episodes") {
-      throw std::invalid_argument("manifest_frame_uid cuts are supported only for object=episodes");
-    }
-    definition.basis.selected_cut.kind = cut_kind::ManifestFrameUid;
-    definition.basis.selected_cut.manifest_frame_uid = optional_uint64(selected_cut, "manifest_frame_uid");
-    if (definition.basis.selected_cut.manifest_frame_uid == 0) {
-      throw std::invalid_argument("manifest_frame_uid cut requires a non-zero token");
-    }
-    if (selected_cut.contains("system_time")) {
-      throw std::invalid_argument("manifest_frame_uid cut must not include system_time");
-    }
-  } else if (cut_name == "system_time") {
-    if (definition.object != "fact-state" || !selected_cut.contains("system_time")) {
-      throw std::invalid_argument("system_time cuts require object=fact-state and a system_time token");
-    }
-    definition.basis.selected_cut.kind = cut_kind::SystemTime;
-    definition.basis.selected_cut.system_time = int64_value(selected_cut.at("system_time"), "cut.system_time");
-    if (definition.basis.selected_cut.system_time <= 0) {
-      throw std::invalid_argument("system_time cut requires a positive token");
-    }
-    if (selected_cut.contains("manifest_frame_uid")) {
-      throw std::invalid_argument("system_time cut must not include manifest_frame_uid");
-    }
-  } else {
-    throw std::invalid_argument("unsupported query cut: " + cut_name);
-  }
-
-  const auto policy = basis.value("policy", nlohmann::json::object());
-  reject_unknown_fields(policy, {"fold", "schema", "engine", "conflict", "redaction"}, "definition.basis.policy");
-  definition.basis.policy.fold = optional_text(policy, "fold", definition.basis.policy.fold);
-  definition.basis.policy.schema = optional_text(policy, "schema", definition.basis.policy.schema);
-  definition.basis.policy.engine = optional_text(policy, "engine", definition.basis.policy.engine);
-  definition.basis.policy.conflict = optional_text(policy, "conflict", definition.basis.policy.conflict);
-  definition.basis.policy.redaction = optional_text(policy, "redaction", definition.basis.policy.redaction);
-  const auto time_basis = basis.value("time_basis", nlohmann::json::object());
-  reject_unknown_fields(time_basis, {"valid_time", "system_time", "causal_time"}, "definition.basis.time_basis");
-  definition.basis.valid_time = optional_text(time_basis, "valid_time", definition.basis.valid_time);
-  definition.basis.system_time = optional_text(time_basis, "system_time", definition.basis.system_time);
-  definition.basis.causal_time = optional_text(time_basis, "causal_time", definition.basis.causal_time);
-  const query_policy supported_policy =
-      definition.object == "episodes"
-          ? query_policy{}
-          : query_policy{"latest-admitted-per-source/v1", "kungfu.facts.domain-fact-event/v1", "fact-authority-scan/v1",
-                         "preserve-source-claims/v1", "hash-and-ref/v1"};
-  if (definition.basis.policy.fold != supported_policy.fold ||
-      definition.basis.policy.schema != supported_policy.schema ||
-      definition.basis.policy.engine != supported_policy.engine ||
-      definition.basis.policy.conflict != supported_policy.conflict ||
-      definition.basis.policy.redaction != supported_policy.redaction) {
-    throw std::invalid_argument("unsupported KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q0 policy version");
-  }
-  const query_basis supported_basis =
-      definition.object == "episodes"
-          ? query_basis{}
-          : query_basis{
-                {},         {},      "domain-fact-ledger", 0, "system-time-then-observation-id", {}, supported_policy,
-                "explicit", "event", "event-parent"};
-  if (definition.basis.valid_time != supported_basis.valid_time ||
-      definition.basis.system_time != supported_basis.system_time ||
-      definition.basis.causal_time != supported_basis.causal_time) {
-    throw std::invalid_argument("unsupported KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Q0 time basis");
-  }
-  if (definition.has_temporal_pattern && definition.object != "episodes") {
-    throw std::invalid_argument("temporal pattern requires object=episodes");
-  }
-  if (definition.has_temporal_pattern && definition.basis.episode_id != 0) {
-    throw std::invalid_argument("temporal pattern requires basis.episode_id=0 so the partition can span Episodes");
-  }
-  return definition;
-}
-
-nlohmann::json query_definition_json(const query_definition &definition) {
-  auto normalized = definition;
-  normalize_declaration_basis(normalized.basis);
-  auto fact_surfaces = nlohmann::json::array();
-  for (const auto &surface : normalized.basis.fact_surfaces) {
-    fact_surfaces.push_back(declaration_reference_json(surface));
-  }
-  nlohmann::json value = {{"schema", normalized.schema},
-                          {"basis",
-                           {{"contract_world", declaration_reference_json(normalized.basis.contract_world)},
-                            {"fact_surfaces", fact_surfaces},
-                            {"scope", normalized.basis.scope},
-                            {"episode_id", std::to_string(normalized.basis.episode_id)},
-                            {"perspective", normalized.basis.perspective},
-                            {"cut", cut_json(normalized.basis.selected_cut)},
-                            {"policy", policy_json(normalized.basis.policy)},
-                            {"time_basis",
-                             {{"valid_time", normalized.basis.valid_time},
-                              {"system_time", normalized.basis.system_time},
-                              {"causal_time", normalized.basis.causal_time}}}}},
-                          {"object", normalized.object},
-                          {"limit", normalized.limit},
-                          {"evidence", normalized.evidence}};
-  if (!normalized.subject_keys.empty()) {
-    value["subject_keys"] = normalized.subject_keys;
-  }
-  if (normalized.has_temporal_pattern) {
-    value["temporal_pattern"] = temporal_pattern_json(normalized.pattern);
-  }
-  return value;
-}
-
-logical_plan plan_query(const query_definition &definition) {
-  logical_plan plan;
-  plan.definition = definition;
-  normalize_declaration_basis(plan.definition.basis);
-  const auto &normalized = plan.definition;
-  plan.row_schema = normalized.object == "fact-state"
-                        ? fact_state_result_schema()
-                        : (normalized.has_temporal_pattern ? temporal_match_result_schema() : episode_result_schema());
-  plan.query_definition_hash = json_hash(query_definition_json(normalized));
-  plan.operators.push_back({"authority_scan", authority_scan_operator{normalized.object, normalized.basis}});
-  if (normalized.basis.episode_id != 0) {
-    plan.operators.push_back(
-        {"filter", scalar_filter_operator{"episode_id", "eq", std::to_string(normalized.basis.episode_id)}});
-  }
-  if (!normalized.subject_keys.empty()) {
-    plan.operators.push_back({"filter", set_filter_operator{"subject_key", "in", normalized.subject_keys}});
-  }
-  if (normalized.has_temporal_pattern) {
-    plan.operators.push_back({"temporal_match", normalized.pattern});
-  } else if (normalized.object == "episodes") {
-    plan.operators.push_back({"order", order_operator{"episode_id", "asc"}});
-  } else {
-    plan.operators.push_back({"order", order_operator{"observation_id", "asc"}});
-  }
-  plan.operators.push_back({"limit", limit_operator{normalized.limit}});
-  plan.operators.push_back({"project", project_operator{plan.row_schema}});
-  plan.operators.push_back({"evidence", evidence_operator{normalized.evidence}});
-  plan.logical_plan_hash = json_hash(logical_plan_payload_json(plan));
-  return plan;
-}
-
-namespace {
-
-// Bounded SQL front-end. The dialect is a closed, non-recursive grammar
-// (KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104), so it is spelled out as a tokenizer plus a recursive-descent
-// parser rather than one opaque expression. Each clause is its own function,
-// which is what keeps a new clause a local addition instead of an edit to a
-// shared pattern.
-//
-// Accepted grammar (case-insensitive):
-//   SELECT * FROM episodes
-//     [WHERE episode_id = <u64>]
-//     [ORDER BY episode_id ASC]
-//     [LIMIT <1..1000>]
-//   SELECT * FROM episodes MATCH_RECOGNIZE (
-//     PARTITION BY <field> ORDER BY <field> ASC
-//     PATTERN ((A B){<u64>,<u64>})
-//     DEFINE A AS <field> = '<value>', B AS <field> = '<value>'
-//     WITHIN <u64> AS OF <u64> [ABSENT <field> = '<value>'])
-//     [LIMIT <u64>]
-// A single optional trailing semicolon is accepted. Everything else fails
-// closed rather than being delegated to SQLite.
-
-constexpr size_t SQL_MAX_FIELD_NAME = 64;
-constexpr size_t SQL_MAX_QUOTED_VALUE = 256;
-constexpr const char *SQL_ACCEPTED_FORMS = "accepted forms: SELECT * FROM episodes [WHERE episode_id = N] "
-                                           "[ORDER BY episode_id ASC] [LIMIT N], or the bounded MATCH_RECOGNIZE form";
-
-enum class sql_token_kind { word, number, quoted, symbol, end };
-
-struct sql_token {
-  sql_token_kind kind{sql_token_kind::end};
-  // Lexeme for words and numbers, body for quoted values, single character for
-  // symbols.
-  std::string text;
-  size_t offset{0};
-  // Whitespace immediately precedes this token. The dialect requires a
-  // separator in some junctions (SELECT *) and allows none in others (a='x'),
-  // so the distinction has to survive tokenization.
-  bool spaced{false};
-};
-
-// The classic "C" locale space set the previous std::regex \s resolved to.
-bool is_sql_space(char ch) { return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\v' || ch == '\f' || ch == '\r'; }
-
-bool is_sql_alpha(char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'); }
-
-bool is_sql_digit(char ch) { return ch >= '0' && ch <= '9'; }
-
-bool is_sql_word_start(char ch) { return is_sql_alpha(ch) || ch == '_'; }
-
-bool is_sql_word_char(char ch) { return is_sql_word_start(ch) || is_sql_digit(ch); }
-
-bool is_sql_symbol(char ch) {
-  return ch == '*' || ch == '(' || ch == ')' || ch == '{' || ch == '}' || ch == ',' || ch == '=' || ch == ';';
-}
-
-// The quoted-value class carries the whole trust boundary: no quote, no escape,
-// no backslash can appear inside a value, so a value can never re-enter the
-// grammar. Widening it is a security decision, not a parser detail.
-bool is_sql_quoted_char(char ch) {
-  return is_sql_word_char(ch) || ch == '.' || ch == ':' || ch == '@' || ch == '/' || ch == '+' || ch == '-';
-}
-
-[[noreturn]] void sql_error(size_t offset, const std::string &message) {
-  throw std::invalid_argument("unsupported SQL at byte " + std::to_string(offset) + ": " + message + "; " +
-                              SQL_ACCEPTED_FORMS);
-}
-
-std::vector<sql_token> tokenize_bounded_sql(const std::string &sql) {
-  std::vector<sql_token> tokens;
-  size_t index = 0;
-  bool spaced = false;
-  while (index < sql.size()) {
-    const char ch = sql[index];
-    if (is_sql_space(ch)) {
-      spaced = true;
-      ++index;
-      continue;
-    }
-    sql_token token;
-    token.offset = index;
-    token.spaced = spaced;
-    if (is_sql_word_start(ch)) {
-      const auto begin = index;
-      while (index < sql.size() && is_sql_word_char(sql[index])) {
-        ++index;
-      }
-      token.kind = sql_token_kind::word;
-      token.text = sql.substr(begin, index - begin);
-    } else if (is_sql_digit(ch)) {
-      const auto begin = index;
-      while (index < sql.size() && is_sql_digit(sql[index])) {
-        ++index;
-      }
-      token.kind = sql_token_kind::number;
-      token.text = sql.substr(begin, index - begin);
-    } else if (ch == '\'') {
-      const auto begin = index + 1;
-      auto scan = begin;
-      while (scan < sql.size() && sql[scan] != '\'') {
-        ++scan;
-      }
-      if (scan >= sql.size()) {
-        sql_error(token.offset, "unterminated quoted value");
-      }
-      token.kind = sql_token_kind::quoted;
-      token.text = sql.substr(begin, scan - begin);
-      index = scan + 1;
-    } else if (is_sql_symbol(ch)) {
-      token.kind = sql_token_kind::symbol;
-      token.text = std::string(1, ch);
-      ++index;
-    } else {
-      sql_error(index, "unexpected character");
-    }
-    tokens.push_back(std::move(token));
-    spaced = false;
-  }
-  sql_token end_token;
-  end_token.kind = sql_token_kind::end;
-  end_token.offset = sql.size();
-  end_token.spaced = spaced;
-  tokens.push_back(std::move(end_token));
-  return tokens;
-}
-
-class bounded_sql_parser {
-public:
-  explicit bounded_sql_parser(const std::string &sql) : tokens_(tokenize_bounded_sql(sql)) {}
-
-  // SELECT * FROM episodes <tail>
-  query_definition parse(const query_definition &base_definition) {
-    expect_word("select", false);
-    expect_symbol('*', true);
-    expect_word("from", true);
-    expect_word("episodes", true);
-    auto compiled = base_definition;
-    compiled.basis.episode_id = 0;
-    if (at_word("match_recognize")) {
-      parse_match_recognize(compiled);
-    } else {
-      parse_plain_tail(compiled);
-    }
-    expect_statement_end();
-    // Round-trip through the strict parser so a caller cannot use SQL as a way
-    // around QueryDefinition validation.
-    return parse_query_definition(query_definition_json(compiled));
-  }
-
-private:
-  const sql_token &peek() const { return tokens_[index_]; }
-
-  const sql_token &advance() { return tokens_[index_++]; }
-
-  bool at_word(const char *lowercase_keyword) const {
-    return peek().kind == sql_token_kind::word && ascii_lower(peek().text) == lowercase_keyword;
-  }
-
-  bool at_symbol(char symbol) const { return peek().kind == sql_token_kind::symbol && peek().text.front() == symbol; }
-
-  void require_gap(bool required, const std::string &before) const {
-    if (required && !peek().spaced) {
-      sql_error(peek().offset, "expected whitespace before " + before);
-    }
-  }
-
-  void expect_word(const char *lowercase_keyword, bool require_space) {
-    require_gap(require_space, lowercase_keyword);
-    if (!at_word(lowercase_keyword)) {
-      sql_error(peek().offset, std::string("expected ") + lowercase_keyword);
-    }
-    advance();
-  }
-
-  void expect_symbol(char symbol, bool require_space) {
-    require_gap(require_space, std::string("'") + symbol + "'");
-    if (!at_symbol(symbol)) {
-      sql_error(peek().offset, std::string("expected '") + symbol + "'");
-    }
-    advance();
-  }
-
-  // Numeric range is not checked here; the QueryDefinition parser owns it.
-  std::string expect_number(const char *field, bool require_space) {
-    require_gap(require_space, field);
-    if (peek().kind != sql_token_kind::number) {
-      sql_error(peek().offset, std::string("expected an unsigned number for ") + field);
-    }
-    return advance().text;
-  }
-
-  std::string expect_field_name(const char *field, bool require_space) {
-    require_gap(require_space, field);
-    const auto &token = peek();
-    if (token.kind != sql_token_kind::word) {
-      sql_error(token.offset, std::string("expected a field name for ") + field);
-    }
-    if (!is_sql_alpha(token.text.front()) || token.text.size() > SQL_MAX_FIELD_NAME) {
-      sql_error(token.offset, std::string("invalid field name for ") + field + "; expected [A-Za-z][A-Za-z0-9_]{0,63}");
-    }
-    return ascii_lower(advance().text);
-  }
-
-  std::string expect_quoted_value(const char *field, bool require_space) {
-    require_gap(require_space, field);
-    const auto &token = peek();
-    if (token.kind != sql_token_kind::quoted) {
-      sql_error(token.offset, std::string("expected a quoted value for ") + field);
-    }
-    if (token.text.empty() || token.text.size() > SQL_MAX_QUOTED_VALUE) {
-      sql_error(token.offset, std::string("invalid quoted value for ") + field + "; expected 1..256 characters");
-    }
-    if (!std::all_of(token.text.begin(), token.text.end(), is_sql_quoted_char)) {
-      sql_error(token.offset,
-                std::string("invalid quoted value for ") + field + "; expected only [A-Za-z0-9_.:@/+-] characters");
-    }
-    return advance().text;
-  }
-
-  // [WHERE episode_id = <u64>] [ORDER BY episode_id ASC] [LIMIT <1..1000>]
-  void parse_plain_tail(query_definition &compiled) {
-    compiled.has_temporal_pattern = false;
-    if (at_word("where")) {
-      expect_word("where", true);
-      expect_word("episode_id", true);
-      expect_symbol('=', false);
-      compiled.basis.episode_id = uint64_value(expect_number("sql.episode_id", false), "sql.episode_id");
-    }
-    if (at_word("order")) {
-      expect_word("order", true);
-      expect_word("by", true);
-      expect_word("episode_id", true);
-      expect_word("asc", true);
-    }
-    if (at_word("limit")) {
-      expect_word("limit", true);
-      compiled.limit = uint64_value(expect_number("sql.limit", true), "sql.limit");
-      if (compiled.limit == 0 || compiled.limit > 1000) {
-        throw std::invalid_argument("sql LIMIT must be between 1 and 1000");
-      }
-    }
-  }
-
-  // MATCH_RECOGNIZE (...) [LIMIT <u64>]
-  void parse_match_recognize(query_definition &compiled) {
-    compiled.has_temporal_pattern = true;
-    compiled.pattern = {};
-    expect_word("match_recognize", true);
-    expect_symbol('(', false);
-    parse_partition_clause(compiled.pattern);
-    parse_order_clause(compiled.pattern);
-    parse_pattern_clause(compiled.pattern);
-    parse_define_clause(compiled.pattern);
-    parse_within_clause(compiled.pattern);
-    parse_as_of_clause(compiled.pattern);
-    parse_optional_absent_clause(compiled.pattern);
-    expect_symbol(')', false);
-    if (at_word("limit")) {
-      expect_word("limit", true);
-      compiled.limit = uint64_value(expect_number("sql.limit", true), "sql.limit");
-    }
-  }
-
-  // PARTITION BY <field>
-  void parse_partition_clause(temporal_pattern &pattern) {
-    expect_word("partition", false);
-    expect_word("by", true);
-    pattern.partition_by = expect_field_name("sql.pattern.partition_by", true);
-  }
-
-  // ORDER BY <field> ASC
-  void parse_order_clause(temporal_pattern &pattern) {
-    expect_word("order", true);
-    expect_word("by", true);
-    pattern.order_by = expect_field_name("sql.pattern.order_by", true);
-    expect_word("asc", true);
-  }
-
-  // PATTERN ((A B){<u64>,<u64>})
-  void parse_pattern_clause(temporal_pattern &pattern) {
-    expect_word("pattern", true);
-    expect_symbol('(', false);
-    expect_symbol('(', false);
-    expect_word("a", false);
-    expect_word("b", true);
-    expect_symbol(')', false);
-    expect_symbol('{', false);
-    pattern.repeat_min = uint64_value(expect_number("sql.pattern.repeat_min", false), "sql.pattern.repeat_min");
-    expect_symbol(',', false);
-    pattern.repeat_max = uint64_value(expect_number("sql.pattern.repeat_max", false), "sql.pattern.repeat_max");
-    expect_symbol('}', false);
-    expect_symbol(')', false);
-  }
-
-  // DEFINE A AS <field> = '<value>', B AS <field> = '<value>'
-  void parse_define_clause(temporal_pattern &pattern) {
-    expect_word("define", true);
-    expect_word("a", true);
-    expect_word("as", true);
-    const auto first_field = expect_field_name("sql.pattern.sequence[0].field", true);
-    expect_symbol('=', false);
-    const auto first_value = expect_quoted_value("sql.pattern.sequence[0].equals", false);
-    expect_symbol(',', false);
-    expect_word("b", false);
-    expect_word("as", true);
-    const auto second_field = expect_field_name("sql.pattern.sequence[1].field", true);
-    expect_symbol('=', false);
-    const auto second_value = expect_quoted_value("sql.pattern.sequence[1].equals", false);
-    pattern.sequence = {{first_field, first_value}, {second_field, second_value}};
-  }
-
-  // WITHIN <u64>
-  void parse_within_clause(temporal_pattern &pattern) {
-    expect_word("within", true);
-    pattern.within_ns = uint64_value(expect_number("sql.pattern.within_ns", true), "sql.pattern.within_ns");
-  }
-
-  // AS OF <u64>
-  void parse_as_of_clause(temporal_pattern &pattern) {
-    expect_word("as", true);
-    expect_word("of", true);
-    pattern.as_of_time = int64_value(expect_number("sql.pattern.as_of_time", true), "sql.pattern.as_of_time");
-  }
-
-  // [ABSENT <field> = '<value>']
-  void parse_optional_absent_clause(temporal_pattern &pattern) {
-    if (!at_word("absent")) {
-      return;
-    }
-    expect_word("absent", true);
-    const auto field = expect_field_name("sql.pattern.absence.field", true);
-    expect_symbol('=', false);
-    const auto value = expect_quoted_value("sql.pattern.absence.equals", false);
-    pattern.has_absence = true;
-    pattern.absence = {field, value};
-  }
-
-  // An optional trailing semicolon, then nothing.
-  void expect_statement_end() {
-    if (at_symbol(';')) {
-      advance();
-    }
-    if (peek().kind != sql_token_kind::end) {
-      sql_error(peek().offset, "unexpected trailing input");
-    }
-  }
-
-  std::vector<sql_token> tokens_;
-  size_t index_{0};
-};
-
-} // namespace
-
-query_definition compile_episode_sql(const std::string &sql, const query_definition &base_definition) {
-  if (sql.empty() || sql.size() > 4096) {
-    throw std::invalid_argument("bounded SQL must contain 1..4096 bytes");
-  }
-  return bounded_sql_parser(sql).parse(base_definition);
-}
+using namespace fact_query_internal;
 
 nlohmann::json logical_plan_json(const logical_plan &plan) {
   auto value = logical_plan_payload_json(plan);
@@ -1659,6 +1320,8 @@ nlohmann::json query_result_json(const query_result &result) {
           {"lineage", lineage}};
 }
 
+using namespace fact_query_internal;
+
 namespace {
 
 nlohmann::json frontier_json(const query_frontier &frontier) {
@@ -2100,497 +1763,6 @@ changelog_page run_episode_changelog(const std::string &runtime_dir, const logic
     throw std::invalid_argument("episode changelog requires object=episodes");
   }
   return run_query_changelog(runtime_dir, plan, resume_token, max_messages);
-}
-
-namespace {
-
-std::string event_text(const nlohmann::json &row, const std::string &field) {
-  if (!row.contains(field) || row.at(field).is_null()) {
-    return {};
-  }
-  if (row.at(field).is_string()) {
-    return row.at(field).get<std::string>();
-  }
-  if (row.at(field).is_number_integer()) {
-    return std::to_string(row.at(field).get<int64_t>());
-  }
-  if (row.at(field).is_number_unsigned()) {
-    return std::to_string(row.at(field).get<uint64_t>());
-  }
-  if (row.at(field).is_boolean()) {
-    return row.at(field).get<bool>() ? "true" : "false";
-  }
-  return {};
-}
-
-bool event_matches(const nlohmann::json &row, const event_predicate &predicate) {
-  return event_text(row, predicate.field) == predicate.equals;
-}
-
-bool event_time(const nlohmann::json &row, const std::string &field, int64_t &value) {
-  if (!row.contains(field) || row.at(field).is_null()) {
-    return false;
-  }
-  try {
-    value = int64_value(row.at(field), field.c_str());
-    return true;
-  } catch (const std::invalid_argument &) {
-    return false;
-  }
-}
-
-nlohmann::json pattern_event_json(const nlohmann::json &row) {
-  nlohmann::json event = nlohmann::json::object();
-  for (const auto *field : {"episode_id", "title", "actor", "source", "status", "begin_time", "end_time", "reason",
-                            "content_root", "content_root_status"}) {
-    if (row.contains(field)) {
-      event[field] = row.at(field);
-    }
-  }
-  return event;
-}
-
-std::vector<dynamic_row> evaluate_temporal_pattern(const logical_plan &plan,
-                                                   const std::vector<nlohmann::json> &input_rows, lineage &proof) {
-  const auto &pattern = plan.definition.pattern;
-  struct ordered_event {
-    int64_t time = 0;
-    uint64_t episode_id = 0;
-    const nlohmann::json *row = nullptr;
-  };
-  std::map<std::string, std::vector<ordered_event>> partitions;
-  for (const auto &row : input_rows) {
-    const auto partition = event_text(row, pattern.partition_by);
-    int64_t time = 0;
-    if (partition.empty() || !event_time(row, pattern.order_by, time) || time <= 0) {
-      proof.unverifiable_inputs.push_back(
-          unverifiable_temporal_input{event_text(row, "episode_id"), "missing partition/order field"});
-      continue;
-    }
-    if (time > pattern.as_of_time) {
-      continue;
-    }
-    partitions[partition].push_back({time, optional_uint64(row, "episode_id"), &row});
-  }
-
-  std::vector<dynamic_row> matches;
-  for (auto &[partition, events] : partitions) {
-    std::sort(events.begin(), events.end(), [](const ordered_event &left, const ordered_event &right) {
-      return left.time < right.time || (left.time == right.time && left.episode_id < right.episode_id);
-    });
-    size_t cursor = 0;
-    std::vector<const ordered_event *> matched;
-    int64_t start_time = 0;
-    int64_t end_time = 0;
-    uint64_t repeat_count = 0;
-    while (cursor < events.size() && repeat_count < pattern.repeat_max) {
-      size_t first = cursor;
-      while (first < events.size() && !event_matches(*events[first].row, pattern.sequence[0])) {
-        ++first;
-      }
-      if (first == events.size()) {
-        break;
-      }
-      if (matched.empty()) {
-        start_time = events[first].time;
-      }
-      const auto max_time = pattern.within_ns > static_cast<uint64_t>(std::numeric_limits<int64_t>::max() - start_time)
-                                ? std::numeric_limits<int64_t>::max()
-                                : start_time + static_cast<int64_t>(pattern.within_ns);
-      if (events[first].time > max_time) {
-        break;
-      }
-      size_t second = first + 1;
-      while (second < events.size() && events[second].time <= max_time &&
-             !event_matches(*events[second].row, pattern.sequence[1])) {
-        ++second;
-      }
-      if (second == events.size() || events[second].time > max_time) {
-        break;
-      }
-      matched.push_back(&events[first]);
-      matched.push_back(&events[second]);
-      end_time = events[second].time;
-      ++repeat_count;
-      cursor = second + 1;
-    }
-    if (repeat_count < pattern.repeat_min) {
-      continue;
-    }
-    const auto window_end = pattern.within_ns > static_cast<uint64_t>(std::numeric_limits<int64_t>::max() - start_time)
-                                ? std::numeric_limits<int64_t>::max()
-                                : start_time + static_cast<int64_t>(pattern.within_ns);
-    if (pattern.as_of_time < window_end) {
-      proof.missing_inputs.push_back(missing_temporal_window{partition, window_end, pattern.as_of_time});
-      continue;
-    }
-    bool terminal_present = false;
-    if (pattern.has_absence) {
-      terminal_present = std::any_of(events.begin(), events.end(), [&](const ordered_event &event) {
-        return event.time >= start_time && event.time <= window_end && event_matches(*event.row, pattern.absence);
-      });
-    }
-    if (terminal_present) {
-      continue;
-    }
-
-    auto episode_ids = nlohmann::json::array();
-    auto matched_events = nlohmann::json::array();
-    auto evidence_refs = nlohmann::json::array();
-    nlohmann::json attribution_counts = nlohmann::json::object();
-    for (const auto *event : matched) {
-      episode_ids.push_back(event->episode_id);
-      matched_events.push_back(pattern_event_json(*event->row));
-      evidence_refs.push_back({{"episode_id", std::to_string(event->episode_id)},
-                               {"content_root", event->row->value("content_root", nlohmann::json(nullptr))},
-                               {"content_root_status", event->row->value("content_root_status", "unverifiable")}});
-      const auto attribution = event_text(*event->row, "actor");
-      if (!attribution.empty()) {
-        attribution_counts[attribution] = attribution_counts.value(attribution, 0) + 1;
-      }
-    }
-    nlohmann::json absence = nullptr;
-    if (pattern.has_absence) {
-      absence = event_predicate_json(pattern.absence);
-    }
-    // A match key must survive head advancement. The full QueryDefinition hash
-    // includes the resolved historical cut during changelog reconstruction, so
-    // deriving the key from it would turn a valid correction into a false Gap.
-    const auto match_id = json_hash({{"temporal_pattern", temporal_pattern_json(pattern)},
-                                     {"partition_key", partition},
-                                     {"matched_episode_ids", episode_ids}});
-    matches.push_back(make_dynamic_row(plan.row_schema, {{"match_id", match_id},
-                                                         {"partition_key", partition},
-                                                         {"repeat_count", repeat_count},
-                                                         {"start_time", start_time},
-                                                         {"end_time", end_time},
-                                                         {"as_of_time", pattern.as_of_time},
-                                                         {"elapsed_ns", pattern.as_of_time - start_time},
-                                                         {"matched_episode_ids", episode_ids},
-                                                         {"matched_events", matched_events},
-                                                         {"attribution_counts", attribution_counts},
-                                                         {"absence", absence},
-                                                         {"attention_required", true},
-                                                         {"evidence_refs", evidence_refs}}));
-    if (matches.size() >= plan.definition.limit) {
-      break;
-    }
-  }
-  return matches;
-}
-
-} // namespace
-
-static query_result run_episode_fold(const logical_plan &plan, const yy_storage::episode_manifest_fold &fold,
-                                     query_execution execution) {
-  const auto &definition = plan.definition;
-
-  query_result result;
-  result.definition = definition;
-  result.plan = plan;
-  result.row_schema = plan.row_schema;
-  result.proof.query_definition_hash = plan.query_definition_hash;
-  result.proof.logical_plan_hash = plan.logical_plan_hash;
-  result.proof.contract_world_declaration = definition.basis.contract_world;
-  result.proof.fact_surface_declarations = definition.basis.fact_surfaces;
-  result.proof.authority = episode_authority{"yijinjing-journal",
-                                             yy_storage::EPISODE_MANIFEST_SCHEMA_V1,
-                                             fold.first_manifest_frame_uid,
-                                             fold.last_manifest_frame_uid,
-                                             static_cast<uint64_t>(fold.total_record_count),
-                                             static_cast<uint64_t>(fold.unknown_record_count),
-                                             static_cast<uint64_t>(fold.unfolded_record_count)};
-  const auto resolved = !fold.cut_found ? resolved_query_cut{resolved_cut_kind::Unresolved}
-                        : fold.total_record_count == 0
-                            ? resolved_query_cut{resolved_cut_kind::Empty}
-                            : resolved_query_cut{resolved_cut_kind::ManifestFrameUid, fold.last_manifest_frame_uid};
-  result.proof.cut = {definition.basis.selected_cut, resolved, true};
-  result.proof.policy_versions = definition.basis.policy;
-  result.proof.time_basis = {definition.basis.valid_time, definition.basis.system_time, definition.basis.causal_time};
-  result.proof.execution = std::move(execution);
-
-  auto known_record_count = static_cast<uint64_t>(fold.total_record_count);
-  const auto unknown_record_count = std::min(known_record_count, static_cast<uint64_t>(fold.unknown_record_count));
-  known_record_count -= unknown_record_count;
-  const auto unfolded_record_count = std::min(known_record_count, static_cast<uint64_t>(fold.unfolded_record_count));
-  known_record_count -= unfolded_record_count;
-  auto declaration_outcome =
-      declaration_admission_evidence(definition.basis, static_cast<uint64_t>(fold.total_record_count));
-  const auto declarations_admitted = declaration_outcome.outcome == admission_outcome::Admitted;
-  if (declarations_admitted) {
-    declaration_outcome.record_count = known_record_count;
-  } else {
-    result.proof.unverifiable_inputs.push_back(
-        unverifiable_declaration_basis{declaration_outcome.outcome, declaration_outcome.reason});
-    result.proof.determinism = "unverifiable";
-  }
-  result.proof.admission_outcomes.push_back(declaration_outcome);
-
-  if (!fold.cut_found) {
-    result.proof.missing_inputs.push_back(missing_manifest_cut{definition.basis.selected_cut.manifest_frame_uid});
-    result.proof.determinism = "unverifiable";
-  }
-  if (fold.unknown_record_count != 0) {
-    result.proof.unverifiable_inputs.push_back(unverifiable_record_count{
-        unverifiable_record_kind::ManifestUnknown, static_cast<uint64_t>(fold.unknown_record_count)});
-    result.proof.determinism = "unverifiable";
-    result.proof.admission_outcomes.push_back(
-        {admission_outcome::Unverifiable, definition.basis.fact_surfaces.front().id,
-         static_cast<uint64_t>(fold.unknown_record_count), "unknown manifest records are not admitted"});
-  }
-  if (fold.unfolded_record_count != 0) {
-    result.proof.unverifiable_inputs.push_back(unverifiable_record_count{
-        unverifiable_record_kind::ManifestUnfolded, static_cast<uint64_t>(fold.unfolded_record_count)});
-    result.proof.determinism = "unverifiable";
-    result.proof.admission_outcomes.push_back(
-        {admission_outcome::Unverifiable, definition.basis.fact_surfaces.front().id,
-         static_cast<uint64_t>(fold.unfolded_record_count), "unfolded manifest records are not admitted"});
-  }
-
-  result.proof.canonical_state =
-      declarations_admitted && fold.cut_found && fold.unknown_record_count == 0 && fold.unfolded_record_count == 0;
-
-  std::vector<nlohmann::json> pattern_input_rows;
-  bool pattern_input_truncated = false;
-  if (fold.cut_found && declarations_admitted) {
-    for (const auto &[episode_id, view] : fold.episodes) {
-      if (definition.basis.episode_id != 0 && episode_id != definition.basis.episode_id) {
-        continue;
-      }
-      if (definition.has_temporal_pattern && pattern_input_rows.size() >= 1000) {
-        pattern_input_truncated = true;
-        break;
-      }
-      auto row = yy_storage::episode_summary_json(view);
-      const auto content_root = yy_storage::episode_content_root_json(view, fold.unknown_record_count);
-      row["content_root_status"] = content_root.at("status");
-      if (!row.contains("content_root")) {
-        row["content_root"] = nullptr;
-      }
-      if (definition.has_temporal_pattern) {
-        pattern_input_rows.push_back(row);
-      } else {
-        result.rows.push_back(make_dynamic_row(result.row_schema, row));
-      }
-      const auto nullable = [](const nlohmann::json &value) {
-        return nullable_value{true, value.is_null() ? std::optional<query_value>{}
-                                                    : std::optional<query_value>{query_value_from_json(value)}};
-      };
-      result.proof.episode_content_roots.push_back(
-          episode_content_root{episode_id, content_root.at("status").get<std::string>(),
-                               nullable(content_root.at("recorded")), nullable(content_root.at("computed"))});
-      if (!definition.has_temporal_pattern && definition.limit != 0 && result.rows.size() >= definition.limit) {
-        break;
-      }
-    }
-  }
-  if (definition.has_temporal_pattern) {
-    if (pattern_input_truncated) {
-      result.proof.missing_inputs.push_back(
-          missing_temporal_input_limit{1000, static_cast<uint64_t>(fold.episodes.size())});
-    }
-    result.rows = evaluate_temporal_pattern(plan, pattern_input_rows, result.proof);
-    result.proof.execution.has_temporal_pattern = true;
-    result.proof.execution.pattern = definition.pattern;
-    result.proof.execution.pattern_input_rows = pattern_input_rows.size();
-    if (!result.proof.missing_inputs.empty() || !result.proof.unverifiable_inputs.empty()) {
-      result.proof.determinism = "unverifiable";
-      result.proof.canonical_state = false;
-    }
-  }
-  if (definition.basis.episode_id != 0 && result.rows.empty() && fold.cut_found) {
-    result.proof.missing_inputs.push_back(missing_episode{definition.basis.episode_id});
-  }
-
-  result.result_hash = json_hash({{"result_schema", result_schema_json(result.row_schema)},
-                                  {"rows", dynamic_rows_json(result.row_schema, result.rows)}});
-  return result;
-}
-
-query_result run_episode_authority_scan(const std::string &runtime_dir, const logical_plan &plan) {
-  const auto &definition = plan.definition;
-  yy_storage::episode_manifest_store store(runtime_dir);
-  const auto fold = definition.basis.selected_cut.kind == cut_kind::Head
-                        ? store.fold_typed_records()
-                        : store.fold_typed_records_until(definition.basis.selected_cut.manifest_frame_uid);
-  return run_episode_fold(plan, fold, query_execution{"episode-authority-scan/v1", "journal"});
-}
-
-query_result run_fact_state_authority_scan(const std::string &runtime_dir, const logical_plan &plan) {
-  const auto &definition = plan.definition;
-  if (definition.object != "fact-state") {
-    throw std::invalid_argument("fact-state authority scan requires object=fact-state");
-  }
-  const auto cut_system_time =
-      definition.basis.selected_cut.kind == cut_kind::SystemTime ? definition.basis.selected_cut.system_time : 0;
-  const auto state = facts::query_fact_state(runtime_dir, cut_system_time);
-  const auto resolved_cut = int64_value(state.at("cut").at("system_time"), "state.cut.system_time");
-  const std::set<std::string> selected_subjects(definition.subject_keys.begin(), definition.subject_keys.end());
-  std::set<std::string> selected_surfaces;
-  for (const auto &surface : definition.basis.fact_surfaces) {
-    selected_surfaces.insert(surface.id);
-  }
-  const auto selected = [&](const nlohmann::json &row) {
-    return optional_text(row, "contract_world_id") == definition.basis.contract_world.id &&
-           selected_surfaces.contains(optional_text(row, "fact_surface_id")) &&
-           (selected_subjects.empty() || selected_subjects.contains(optional_text(row, "subject_key")));
-  };
-
-  query_result result;
-  result.definition = definition;
-  result.plan = plan;
-  result.row_schema = plan.row_schema;
-  result.proof.query_definition_hash = plan.query_definition_hash;
-  result.proof.logical_plan_hash = plan.logical_plan_hash;
-  result.proof.contract_world_declaration = definition.basis.contract_world;
-  result.proof.fact_surface_declarations = definition.basis.fact_surfaces;
-  result.proof.cut = {definition.basis.selected_cut,
-                      resolved_query_cut{definition.basis.selected_cut.kind == cut_kind::SystemTime
-                                             ? resolved_cut_kind::SystemTime
-                                             : resolved_cut_kind::Head,
-                                         0, resolved_cut},
-                      true};
-  result.proof.policy_versions = definition.basis.policy;
-  result.proof.time_basis = {definition.basis.valid_time, definition.basis.system_time, definition.basis.causal_time};
-  result.proof.execution = query_execution{"fact-authority-scan/v1", "journal"};
-
-  uint64_t selected_history_count = 0;
-  std::map<std::string, uint64_t> outcome_counts;
-  for (const auto &row : state.at("observation_history")) {
-    if (!selected(row)) {
-      continue;
-    }
-    ++selected_history_count;
-    ++outcome_counts[optional_text(row, "outcome", "unverifiable")];
-  }
-  result.proof.authority =
-      fact_authority{"yijinjing-journal", facts::DOMAIN_FACT_EVENT_SCHEMA_V1,
-                     uint64_value(state.at("proof").at("record_count"), "proof.record_count"), selected_history_count};
-
-  const auto declaration_effective = [resolved_cut](const nlohmann::json &declaration) {
-    const auto from = int64_value(declaration.at("effective_from"), "declaration.effective_from");
-    const auto until = int64_value(declaration.at("effective_until"), "declaration.effective_until");
-    return resolved_cut >= from && (until == 0 || resolved_cut < until);
-  };
-  const auto reference_matches = [&](const declaration_reference &reference, const nlohmann::json &catalog) {
-    uint64_t exact = 0;
-    uint64_t identity = 0;
-    for (const auto &entry : catalog) {
-      if (optional_text(entry, "id") != reference.id || optional_text(entry, "version") != reference.version ||
-          !declaration_effective(entry)) {
-        continue;
-      }
-      ++identity;
-      if (optional_text(entry, "root") == reference.root) {
-        ++exact;
-      }
-    }
-    return std::pair{exact, identity};
-  };
-  bool declarations_admitted = true;
-  const auto &catalog = state.at("catalog");
-  const auto [world_exact, world_identity] =
-      reference_matches(definition.basis.contract_world, catalog.at("contract_worlds"));
-  if (world_exact != 1) {
-    declarations_admitted = false;
-    result.proof.unverifiable_inputs.push_back(unverifiable_contract_world{
-        definition.basis.contract_world.id,
-        world_identity == 0 ? "unregistered-or-ineffective" : "root-mismatch-or-ambiguous"});
-  }
-  for (const auto &surface : definition.basis.fact_surfaces) {
-    const auto [exact, identity] = reference_matches(surface, catalog.at("fact_surfaces"));
-    const auto row_count = static_cast<uint64_t>(
-        std::count_if(state.at("canonical_facts").begin(), state.at("canonical_facts").end(), [&](const auto &row) {
-          return selected(row) && optional_text(row, "fact_surface_id") == surface.id;
-        }));
-    if (exact == 1 && world_exact == 1) {
-      result.proof.admission_outcomes.push_back(
-          {admission_outcome::Admitted, surface.id, row_count, "facts satisfy the pinned effective declaration"});
-    } else {
-      declarations_admitted = false;
-      result.proof.admission_outcomes.push_back(
-          {identity == 0 ? admission_outcome::UnregisteredSurface : admission_outcome::Unverifiable, surface.id,
-           row_count,
-           identity == 0 ? "fact surface is unregistered or ineffective"
-                         : "fact surface declaration root is mismatched or ambiguous"});
-    }
-  }
-  const auto append_outcome = [&](const char *name, admission_outcome outcome) {
-    if (outcome_counts[name] != 0) {
-      result.proof.admission_outcomes.push_back(
-          {outcome, "", outcome_counts[name], "selected observation admission outcome"});
-    }
-  };
-  append_outcome("unregistered-surface", admission_outcome::UnregisteredSurface);
-  append_outcome("incompatible-schema", admission_outcome::IncompatibleSchema);
-  append_outcome("ambiguous-authority", admission_outcome::AmbiguousAuthority);
-  append_outcome("unverifiable", admission_outcome::Unverifiable);
-
-  for (const auto &conflict : state.at("conflicts")) {
-    if (selected_subjects.empty() || selected_subjects.contains(optional_text(conflict, "subject_key"))) {
-      result.proof.conflicts.push_back(query_conflict{optional_text(conflict, "subject_key"),
-                                                      conflict.at("observation_ids").get<std::vector<std::string>>(),
-                                                      conflict.at("source_ids").get<std::vector<std::string>>()});
-    }
-  }
-
-  yy_storage::episode_manifest_store episodes(runtime_dir);
-  std::set<uint64_t> rooted_episodes;
-  uint64_t matching_rows = 0;
-  for (auto row : state.at("canonical_facts")) {
-    if (!selected(row)) {
-      continue;
-    }
-    ++matching_rows;
-    if (result.rows.size() >= definition.limit) {
-      continue;
-    }
-    const auto episode_id = uint64_value(row.at("episode_id"), "fact-state.episode_id");
-    row["episode_id"] = std::to_string(episode_id);
-    row["system_time"] = std::to_string(int64_value(row.at("system_time"), "fact-state.system_time"));
-    result.rows.push_back(make_dynamic_row(result.row_schema, row));
-    if (!rooted_episodes.insert(episode_id).second) {
-      continue;
-    }
-    const auto inspected = episodes.inspect_typed(episode_id);
-    if (inspected.content_root.status == yy_storage::episode_content_root_status::Verified &&
-        inspected.content_root.computed.has_value()) {
-      const auto &root = *inspected.content_root.computed;
-      result.proof.episode_content_roots.push_back(
-          episode_content_root{episode_id, "verified", {}, {true, root.algorithm + ":" + root.value}});
-    } else {
-      result.proof.unverifiable_inputs.push_back(unverifiable_fact_episode_root{episode_id});
-    }
-  }
-  if (matching_rows > result.rows.size()) {
-    result.proof.missing_inputs.push_back(missing_fact_state_result_limit{matching_rows, definition.limit});
-  }
-  const auto bad_outcomes = outcome_counts["unregistered-surface"] + outcome_counts["incompatible-schema"] +
-                            outcome_counts["ambiguous-authority"] + outcome_counts["unverifiable"];
-  result.proof.canonical_state = declarations_admitted && bad_outcomes == 0 &&
-                                 result.proof.unverifiable_inputs.empty() && result.proof.missing_inputs.empty();
-  result.proof.determinism = result.proof.canonical_state ? "deterministic" : "unverifiable";
-  result.result_hash = json_hash({{"result_schema", result_schema_json(result.row_schema)},
-                                  {"rows", dynamic_rows_json(result.row_schema, result.rows)}});
-  return result;
-}
-
-query_result run_episode_sqlite_projection(const std::string &runtime_dir, const logical_plan &plan) {
-  const auto &definition = plan.definition;
-  storage_service_api::episode_manifest_projection projection(runtime_dir);
-  const auto verification = projection.verify_typed();
-  if (!verification.projection_present || !verification.ok) {
-    throw std::runtime_error("Episode SQLite query projection is absent or stale; rebuild it before execution");
-  }
-  const auto fold = definition.basis.selected_cut.kind == cut_kind::Head
-                        ? projection.fold_typed_records()
-                        : projection.fold_typed_records_until(definition.basis.selected_cut.manifest_frame_uid);
-  query_execution execution{"episode-sqlite-projection/v1", "sqlite-projection"};
-  execution.has_projection = true;
-  execution.projection_verified = true;
-  execution.projection_status = verification.status;
-  execution.projection_schema = storage_service_api::EPISODE_MANIFEST_PROJECTION_SCHEMA_V1;
-  return run_episode_fold(plan, fold, std::move(execution));
 }
 
 } // namespace kungfu::runtime::query

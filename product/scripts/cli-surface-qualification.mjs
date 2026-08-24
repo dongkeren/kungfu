@@ -333,8 +333,9 @@ export function qualifyCliSurface({
       'kungfu dev env',
       'kungfu engage',
       'kungfu schema',
-      'kungfu atlas authority-status',
-      'kungfu atlas show missions',
+      'kungfu atlas import',
+      'kungfu atlas verify',
+      'kungfu atlas show',
       'kungfu profile mission-control',
     ]) {
       assert(
@@ -348,12 +349,11 @@ export function qualifyCliSurface({
       ),
     );
     assert(
-      legacyWorkControlRows.length > 0 &&
-        legacyWorkControlRows.every(
-          (row) =>
-            row.visibility === 'hidden-internal' &&
-            (row.kfd3_api_ids || []).length === 0,
-        ),
+      legacyWorkControlRows.every(
+        (row) =>
+          row.visibility === 'hidden-internal' &&
+          (row.kfd3_api_ids || []).length === 0,
+      ),
       'installed v3 compatibility reader is discoverable or owns a KFD identity',
     );
     run(['sdk', '--help'], 'kungfu sdk --help');

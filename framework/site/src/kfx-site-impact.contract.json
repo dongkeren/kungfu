@@ -147,6 +147,21 @@
       "disposition": "proof-eligible"
     },
     {
+      "id": "product-kfx-distribution-tests",
+      "selectors": [
+        {
+          "kind": "exact",
+          "value": "product/scripts/dist-kfx.test.mjs"
+        }
+      ],
+      "facets": [
+        "package-facets",
+        "agent-first-authoring",
+        "qualification-status"
+      ],
+      "disposition": "proof-eligible"
+    },
+    {
       "id": "kfx-test-fixtures",
       "selectors": [
         {
@@ -159,6 +174,37 @@
         },
         { "kind": "contains", "value": "/tests/kfx" },
         { "kind": "contains", "value": "/tests/fixtures/kfx" }
+      ],
+      "facets": [
+        "architecture",
+        "registry-admission-lifecycle",
+        "capabilities",
+        "qualification-status"
+      ],
+      "disposition": "proof-eligible"
+    },
+    {
+      "id": "python-kfx-authoring-tests",
+      "selectors": [
+        {
+          "kind": "exact",
+          "value": "framework/core/tests/python/test_kfx_authoring.py"
+        }
+      ],
+      "facets": [
+        "agent-first-authoring",
+        "sdk-cli",
+        "qualification-status"
+      ],
+      "disposition": "proof-eligible"
+    },
+    {
+      "id": "root-kfx-test-fixtures",
+      "selectors": [
+        {
+          "kind": "prefix",
+          "value": "tests/fixtures/kfx"
+        }
       ],
       "facets": [
         "architecture",

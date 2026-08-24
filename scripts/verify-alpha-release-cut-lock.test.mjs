@@ -51,7 +51,7 @@ test('Alpha.2 r17 lock verifies the exact Release Cut and fixed runtimes', () =>
   );
 });
 
-test('Alpha.2 r17 keeps the Alpha workflow shell and runtime on one channel', () => {
+test('Alpha.2 r17 keeps its historical channel lock while builds execute one immutable revision', () => {
   assert.equal(LOCK.buildchain.build.ref, 'v3-alpha');
   assert.equal(
     LOCK.buildchain.build.resolvedSha,
@@ -80,27 +80,38 @@ test('Alpha.2 r17 keeps the Alpha workflow shell and runtime on one channel', ()
   );
   assert.match(
     build,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@v3-alpha/u,
+    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@675b4f2a51af7e5f2aac58011c7ede0313b2b105/u,
   );
   assert.match(
     build,
-    /buildchain-ref: \$\{\{ inputs\.buildchain-ref \|\| 'v3-alpha' \}\}/u,
+    /buildchain-ref: 675b4f2a51af7e5f2aac58011c7ede0313b2b105/u,
   );
+  assert.match(build, /buildchain-contract-expected-channel: alpha/u);
+  assert.match(build, /buildchain-contract-expected-major: v3/u);
+  assert.doesNotMatch(build, /inputs\.buildchain-ref/u);
   assert.match(
     promotion,
     /buildchain-ref: \$\{\{ startsWith\(inputs\.target-ref \|\| github\.event\.pull_request\.base\.ref, 'alpha\/'\) && 'v3-alpha' \|\| 'v3' \}\}/u,
   );
-  assert.doesNotMatch(build, /\.github\/workflows\/\.build\.yml@[0-9a-f]{40}/u);
+  assert.doesNotMatch(
+    build,
+    /\.github\/workflows\/\.build\.yml@(?:v3|v3-alpha)\s*$/mu,
+  );
 });
 
-test('candidate patrol verifies the frozen cut without settling from moving dev', () => {
+test('candidate patrol verifies portable authority without Git topology', () => {
   const patrol = fs.readFileSync(
     path.join(ROOT, '.github/workflows/dev-alpha-candidate-patrol.yml'),
     'utf8',
   );
-  assert.match(patrol, /name: Verify frozen Alpha Release Cut source lock/u);
-  assert.match(patrol, /lock=\.buildchain\/alpha-release-cut-lock\.json/u);
-  assert.match(patrol, /git show -s --format=%P/u);
+  assert.match(patrol, /name: Verify durable provenance Fact authority/u);
+  assert.match(patrol, /\.\/shifu check:durable-provenance-authority/u);
+  assert.doesNotMatch(
+    patrol,
+    /lock=\.buildchain\/alpha-release-cut-lock\.json/u,
+  );
+  assert.doesNotMatch(patrol, /git show -s --format=%P/u);
+  assert.doesNotMatch(patrol, /candidate-provenance:/u);
   assert.match(
     patrol,
     /needs\.release-cut-lock\.outputs\.candidate-settlement-authorized == 'true'/u,

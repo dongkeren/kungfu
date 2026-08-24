@@ -83,12 +83,34 @@ export function validateWorkflowSources(root, contract, overrides = {}) {
     path.join(root, 'docs/qualification/gates/release-admission-policy.json'),
   );
   const recoveryRuntimeRef = releaseAdmission.buildchain.runtimes.alpha.ref;
-  const productAdmission = extractWorkflowJob(
-    build,
-    'finalize-upgrade-publication-admission',
-  );
   const rehearsal = extractWorkflowJob(validation, 'promotion-rehearsal');
   const attestation = contract.buildchain.artifact_attestation;
+  const buildShellRef = contract.buildchain.build_channel_ref;
+  const buildShellMajor = contract.buildchain.build_major;
+  const buildShellSha = contract.buildchain.build_workflow_shell_resolved_sha;
+  const buildRuntimeSha = contract.buildchain.build_runtime_resolved_sha;
+
+  if (
+    buildShellRef !== 'v3-alpha' ||
+    buildShellMajor !== 'v3' ||
+    buildShellRef !== `${buildShellMajor}-alpha` ||
+    contract.buildchain.workflow_shell_ref !== buildShellRef
+  )
+    findings.push(
+      finding(
+        'release-candidate build workflow shell channel or major drifted',
+      ),
+    );
+  if (
+    !/^[0-9a-f]{40}$/u.test(buildShellSha || '') ||
+    !/^[0-9a-f]{40}$/u.test(buildRuntimeSha || '') ||
+    buildShellSha !== buildRuntimeSha
+  )
+    findings.push(
+      finding(
+        'release-candidate build workflow shell or runtime revision is not one immutable source',
+      ),
+    );
 
   for (const [label, job] of [
     ['primary promotion', promote],
@@ -142,40 +164,39 @@ export function validateWorkflowSources(root, contract, overrides = {}) {
     );
   }
 
-  requirePattern(
-    build,
-    new RegExp(
-      `uses: kungfu-systems/buildchain/\\.github/workflows/\\.build\\.yml@${escapeRegExp(contract.buildchain.workflow_shell_ref)}`,
+  const candidateBuildShellCalls = [
+    ...build.matchAll(
+      /^\s+uses:\s+kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@(\S+)\s*$/gmu,
     ),
-    findings,
-    'release-candidate build must consume the v3-alpha floating workflow contract',
-  );
-  forbidPattern(
-    build,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@[0-9a-f]{40}/u,
-    findings,
-    'release-candidate build must not pin the workflow shell to an exact Buildchain SHA',
-  );
-  forbidPattern(
-    build,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/\.build\.yml@v3(?:\s|$)/u,
-    findings,
-    'Alpha release-candidate build must not consume the stable v3 workflow contract',
-  );
+  ];
+  if (
+    candidateBuildShellCalls.length !== 1 ||
+    candidateBuildShellCalls[0][1] !== buildShellSha
+  )
+    findings.push(
+      finding(
+        'release-candidate build must contain exactly one immutable channel-bound native-finalization workflow call',
+      ),
+    );
   requirePattern(
     build,
-    new RegExp(
-      `buildchain-ref: \\$\\{\\{ inputs\\.buildchain-ref \\|\\| '${contract.buildchain.workflow_shell_ref}' \\}\\}`,
-    ),
+    new RegExp(`^\\s+buildchain-ref: ${buildRuntimeSha}\\s*$`, 'mu'),
     findings,
-    'Alpha candidate builds must default to the v3-alpha runtime while retaining the trusted manual pass-through',
+    'Alpha candidate builds must execute the same immutable reviewed workflow and runtime revision',
   );
-  requirePattern(
-    build,
-    /workflow_dispatch:[\s\S]*?inputs:[\s\S]*?buildchain-ref:[\s\S]*?required: false[\s\S]*?default: ""/u,
-    findings,
-    'manual Buildchain runtime validation must remain an optional empty-default workflow_dispatch input',
-  );
+  const candidateBuildchainRefLines =
+    build.match(/^\s+buildchain-ref:\s*.+$/gmu) || [];
+  if (
+    candidateBuildchainRefLines.length !== 1 ||
+    candidateBuildchainRefLines[0].trim() !==
+      `buildchain-ref: ${buildRuntimeSha}` ||
+    build.includes('inputs.buildchain-ref')
+  )
+    findings.push(
+      finding(
+        'privileged candidate builds must not expose a movable Buildchain runtime override',
+      ),
+    );
   requirePattern(
     build,
     /^\s+publish-source-ref: \$\{\{ fromJSON\(inputs\.macos-overflow-request-json \|\| '\{\}'\)\.releaseCutSourceRef \|\| '' \}\}$/m,
@@ -224,29 +245,11 @@ export function validateWorkflowSources(root, contract, overrides = {}) {
     findings,
     'candidate build must remain a Buildchain release candidate',
   );
-  requirePattern(
-    productAdmission,
-    /needs: build/,
+  forbidPattern(
+    build,
+    /finalize-upgrade-publication-admission|upgrade-publication-admission\.mjs/,
     findings,
-    'product admission finalization must consume the complete candidate matrix',
-  );
-  requirePattern(
-    productAdmission,
-    /scripts\/upgrade-publication-admission\.mjs write/,
-    findings,
-    'candidate finalization must mint the product admission receipt before publication',
-  );
-  requirePattern(
-    productAdmission,
-    /product-upgrade-publication-admission\.json[\s\S]*product-upgrade-publication-capsule\.json/,
-    findings,
-    'candidate finalization must seal the receipt and capsule together',
-  );
-  requirePattern(
-    productAdmission,
-    /name: kungfu-product-upgrade-publication-admission-\$\{\{ needs\.build\.outputs\.publish-source-sha \}\}/,
-    findings,
-    'candidate finalization must retain the exact source-bound capsule artifact',
+    'candidate build must not add a product-specific upgrade publication admission stage',
   );
   requirePattern(
     build,
@@ -617,23 +620,11 @@ export function validatePromotionContract(
     findings.push(finding('custom publish evidence adapter does not exist'));
   } else {
     const publishAdapter = fs.readFileSync(publishAdapterPath, 'utf8');
-    requirePattern(
-      publishAdapter,
-      /verifyUpgradePublicationAdmission\(\{/,
-      findings,
-      'custom publish evidence must validate the sealed product admission receipt',
-    );
     forbidPattern(
       publishAdapter,
-      /verifyUpgradePublicationPayloads/,
+      /verifyUpgradePublication(?:Admission|Payloads)|upgrade_qualification\s*:/,
       findings,
-      'custom publish evidence must not repeat Kungfu product qualification',
-    );
-    requirePattern(
-      publishAdapter,
-      /upgrade_qualification:\s*\{/,
-      findings,
-      'custom publish evidence must bind one-command campaign roots into the release passport',
+      'custom publish evidence must not add a product-specific upgrade admission authority',
     );
     requirePattern(
       publishAdapter,
@@ -684,15 +675,15 @@ export function validatePromotionContract(
   const publicationCommit = fs.readFileSync(publicationCommitPath, 'utf8');
   requirePattern(
     publicationCommit,
-    /verifyUpgradePublicationAdmission\(\{/,
+    /publicationManifestSet\(\{/,
     findings,
-    'Alpha publication commit must validate the sealed product admission receipt',
+    'Alpha publication commit must consume the sealed candidate manifest set',
   );
   forbidPattern(
     publicationCommit,
-    /verifyUpgradePublicationPayloads/,
+    /verifyUpgradePublication(?:Admission|Payloads)/,
     findings,
-    'Alpha publication commit must not repeat Kungfu product qualification',
+    'Alpha publication commit must not add a product-specific upgrade admission authority',
   );
   const workflows = validateWorkflowSources(root, contract);
   const locks = validateBuildchainLocks(root, contract);

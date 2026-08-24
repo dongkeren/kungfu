@@ -22,7 +22,7 @@ test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs',
   const reusableRef = workflow.match(
     /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@([0-9a-f]{40})/u,
   )?.[1];
-  assert.equal(reusableRef, 'fefb02fbb874bf4bc86dc3fd4a707a9468e14718');
+  assert.equal(reusableRef, '4dabecd7056e168f7345d460e3729465a932db9c');
   assert.match(workflow, new RegExp(`buildchain-ref: ${reusableRef}`, 'u'));
   assert.match(workflow, /workflow_run:[\s\S]*Core affected native/u);
   assert.match(
@@ -185,10 +185,16 @@ test('Dev auto-merge waits for PR checks and lands through the native queue', ()
   assert.match(workflow, /queue-admission-context: Queue admission lease/u);
   assert.match(workflow, /merge-method: rebase/u);
   assert.match(workflow, /landing-mode: queue/u);
-  assert.match(
-    workflow,
-    /dry-run: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.dry-run \}\}/u,
+  const qualification = workflow.slice(
+    workflow.indexOf('  admission:\n'),
+    workflow.indexOf('  native-check-bridge:\n'),
   );
+  const landing = workflow.slice(workflow.indexOf('  landing:\n'));
+  assert.match(qualification, /defer-landing: true/u);
+  assert.match(qualification, /dry-run: false/u);
+  assert.match(landing, /delivery-warrant-mode: required/u);
+  assert.match(landing, /defer-landing: false/u);
+  assert.match(landing, /dry-run: false/u);
   assert.match(
     workflow,
     /github-token: \$\{\{ secrets\.KUNGFU_GITHUB_TOKEN \}\}/u,
@@ -196,22 +202,102 @@ test('Dev auto-merge waits for PR checks and lands through the native queue', ()
   assert.doesNotMatch(workflow, /gh pr merge|npm publish|git tag/iu);
 });
 
-test('Dev delivery reuses only an exact verified semantic native proof', () => {
+test('Qualified native proof re-runs the exact failed source jobs before landing', () => {
+  const bridge = workflow.slice(
+    workflow.indexOf('  native-check-bridge:\n'),
+    workflow.indexOf('  landing:\n'),
+  );
+  const landing = workflow.slice(workflow.indexOf('  landing:\n'));
+
+  assert.match(bridge, /needs\.admission\.result == 'success'/u);
+  assert.match(bridge, /actions: write/u);
+  assert.match(bridge, /checks: read/u);
+  assert.doesNotMatch(bridge, /checks: write/u);
+  assert.match(
+    bridge,
+    /pattern: buildchain-dev-delivery-warrant-\*-\$\{\{ needs\.resolve-target\.outputs\.expected-pr-number \}\}/u,
+  );
+  assert.match(
+    bridge,
+    /\.after\.stateRoot == \.observation\.stateRoot[\s\S]*\.warrant == \.observation\.activeWarrant[\s\S]*\.warrant\.sourceWorkflowRunId == \$sourceRun[\s\S]*\.warrant\.phase == "qualified"[\s\S]*\.warrant\.nativeProofRoot/u,
+  );
+  assert.match(
+    bridge,
+    /\.head\.repo\.full_name == \$repository[\s\S]*\.head\.sha == \$head[\s\S]*\.base\.ref == \$branch[\s\S]*\.state == "open"/u,
+  );
+  assert.match(
+    bridge,
+    /check_name=affected-native%20%2F%20linux&filter=latest&per_page=100/u,
+  );
+  assert.match(
+    bridge,
+    /select\(\.name == "affected-native \/ linux"\)[\s\S]*select\(\.head_sha == \$head\)[\s\S]*select\(\.app\.id == 15368\)[\s\S]*select\(\.details_url \| startswith\(\$sourceRunUrl\)\)[\s\S]*select\(length == 1\)/u,
+  );
+  assert.match(
+    bridge,
+    /\.conclusion == "failure" or \.conclusion == "success"[\s\S]*prior_attempt="\$\(jq -er '\.run_attempt'[\s\S]*prior_check_conclusion="\$\(jq -er '\.conclusion'/u,
+  );
+  assert.match(
+    bridge,
+    /gh api --method POST[\s\S]*actions\/runs\/\$SOURCE_RUN_ID\/rerun-failed-jobs[\s\S]*expected_attempt="\$\(\(prior_attempt \+ 1\)\)"/u,
+  );
+  assert.match(
+    bridge,
+    /if \[ "\$prior_attempt" != "1" \]; then[\s\S]*qualified Warrant source bridge permits exactly one retry from the initial source attempt[\s\S]*exit 1[\s\S]*gh api --method POST/u,
+  );
+  assert.doesNotMatch(
+    bridge,
+    /gh api --method POST[\s\S]*if \[ "\$prior_attempt" != "1" \]; then/u,
+  );
+  assert.doesNotMatch(bridge, /check-runs\/\$[A-Za-z_]/u);
+  assert.match(
+    bridge,
+    /for _ in \$\(seq 1 100\)[\s\S]*observed_attempt" -gt "\$expected_attempt[\s\S]*source workflow advanced beyond the single authorized retry[\s\S]*source workflow retry did not complete within the bounded wait/u,
+  );
+  assert.match(
+    bridge,
+    /\.run_attempt == \$expectedAttempt[\s\S]*\.status == "completed"[\s\S]*\.conclusion == "success"/u,
+  );
+  assert.match(
+    bridge,
+    /actions\/runs\/\$SOURCE_RUN_ID\/jobs\?filter=latest&per_page=100[\s\S]*Provisional Delivery Warrant admission \/ linux[\s\S]*affected-native \/ linux/u,
+  );
+  assert.match(
+    bridge,
+    /schema:"kungfu\.dev-delivery-native-check-rerun\/v1"[\s\S]*sourceWorkflowRunId:\$sourceWorkflowRunId[\s\S]*sourceWorkflowRunPriorAttempt:\$sourceWorkflowRunPriorAttempt[\s\S]*sourceWorkflowRunAttempt:\$sourceWorkflowRunAttempt[\s\S]*rerunTriggered:\$rerunTriggered[\s\S]*producerWorkflowRunId:\$producerWorkflowRunId[\s\S]*producerRunAttempt:\$producerRunAttempt[\s\S]*generatedAt:\$generatedAt[\s\S]*sourceCheckRunPrior:\{id:\$priorCheckRunId,conclusion:\$priorCheckConclusion\}[\s\S]*appId:\$checkRun\[0\]\.app\.id/u,
+  );
+  assert.match(
+    bridge,
+    /receipt_root="sha256:\$\(sha256sum "\$receipt\.body\.json"/u,
+  );
+  assert.match(
+    landing,
+    /- native-check-bridge[\s\S]*needs\.native-check-bridge\.result == 'success'/u,
+  );
+  assert.match(
+    landing,
+    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@4dabecd7056e168f7345d460e3729465a932db9c/u,
+  );
+  assert.match(landing, /queue-admission-context: Queue admission lease/u);
+  assert.match(landing, /landing-mode: queue[\s\S]*dry-run: false/u);
+});
+
+test('Dev delivery fails closed to fenced native execution without a v3 receipt', () => {
   assert.match(
     workflow,
     /Resolve optional exact native proof artifact[\s\S]*core-dev-delivery-source-proof-\$EXPECTED_HEAD[\s\S]*actions\/runs\/\$SOURCE_RUN_ID\/artifacts/u,
   );
   assert.match(
     workflow,
-    /Materialize optional reusable semantic native proof[\s\S]*dev-delivery-proof\.mjs verify-source[\s\S]*sourceIdentityRoot == \$input\[0\]\.sourceIdentityRoot[\s\S]*toolchainRoot == \$input\[0\]\.toolchainRoot[\s\S]*affectedPaths == \$input\[0\]\.affectedPaths/u,
+    /Materialize optional reusable semantic native proof[\s\S]*Source qualification is not native-execution authority[\s\S]*dev-delivery-proof\.mjs verify-source[\s\S]*sourceIdentityRoot == \$input\[0\]\.sourceIdentityRoot[\s\S]*toolchainRoot == \$input\[0\]\.toolchainRoot[\s\S]*affectedPaths == \$input\[0\]\.affectedPaths/u,
   );
   assert.match(
     workflow,
-    /dev-delivery-proof\.mjs native[\s\S]*--qualified-base[\s\S]*--shard-evidence-roots-json[\s\S]*dev-delivery-proof\.mjs verify-native[\s\S]*native-proof-json<<BUILDCHAIN_NATIVE_PROOF_EOF/u,
+    /Native Qualification Proof v3 must bind the exact environment before[\s\S]*native-proof-json=/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     workflow,
-    /Older retained artifacts predate Native Qualification Proof projection[\s\S]*native-proof-json=/u,
+    /dev-delivery-proof\.mjs native[\s\S]*--environment-root/u,
   );
 });
 
@@ -222,7 +308,7 @@ test('Dev behind admission produces and forwards an exact Project Cut replay pro
   );
   assert.match(
     workflow,
-    /Check out exact Buildchain delivery runtime[\s\S]*ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /Check out exact Buildchain delivery runtime[\s\S]*ref: 4dabecd7056e168f7345d460e3729465a932db9c/u,
   );
   assert.match(
     workflow,
@@ -475,6 +561,43 @@ test('hosted native jobs remain fail-closed behind the exact active Warrant', ()
   );
 });
 
+test('non-native source-only candidates do not acquire or require a Delivery Warrant', () => {
+  const sourceWorkflow = fs.readFileSync(
+    '.github/workflows/affected-native-pr.yml',
+    'utf8',
+  );
+  const warrantStart = sourceWorkflow.indexOf('  warrant_admission:\n');
+  const warrantEnd = sourceWorkflow.indexOf(
+    '\n  affected_native_shards:\n',
+    warrantStart,
+  );
+  const warrantJob = sourceWorkflow.slice(warrantStart, warrantEnd);
+  assert.match(
+    warrantJob,
+    /needs\.candidate_preflight\.outputs\.native-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.sdk-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.shifu-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.kfd-required == 'true'/u,
+  );
+
+  const aggregateStart = sourceWorkflow.indexOf('  affected_native:\n');
+  const aggregateJob = sourceWorkflow.slice(aggregateStart);
+  assert.match(
+    aggregateJob,
+    /Fail closed without the exact active Warrant[\s\S]*needs\.warrant_admission\.result != 'success'[\s\S]*needs\.candidate_preflight\.outputs\.native-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.sdk-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.shifu-required == 'true'[\s\S]*needs\.candidate_preflight\.outputs\.kfd-required == 'true'/u,
+  );
+});
+
+test('qualified Warrant native proof satisfies the protected native context', () => {
+  const workflow = fs.readFileSync(
+    '.github/workflows/dev-pr-auto-merge.yml',
+    'utf8',
+  );
+  assert.match(workflow, /--status-context 'affected-native \/ linux'/u);
+  assert.doesNotMatch(
+    workflow,
+    /--status-context 'Delivery Warrant native proof \/ linux'/u,
+  );
+  assert.match(workflow, /queue-admission-context: Queue admission lease/u);
+});
+
 test('the completed migration has no bootstrap bypass around Warrant admission', () => {
   const sourceWorkflow = fs.readFileSync(
     '.github/workflows/affected-native-pr.yml',
@@ -483,7 +606,7 @@ test('the completed migration has no bootstrap bypass around Warrant admission',
   assert.match(sourceWorkflow, /Check out exact Buildchain Warrant runtime/u);
   assert.match(
     sourceWorkflow,
-    /ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /ref: 0f4004d0d2b2474c2135a3e88d29d9c85bc37834/u,
   );
   assert.doesNotMatch(
     sourceWorkflow,
@@ -496,14 +619,14 @@ test('native execution uses one exact protected runtime and continuous fence wra
     '.github/actions/native-execution-under-warrant/action.yml',
     'utf8',
   );
-  assert.match(action, /ref: fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u);
+  assert.match(action, /ref: 4dabecd7056e168f7345d460e3729465a932db9c/u);
   assert.match(
     action,
-    /test "\$\(git rev-parse HEAD\)" = fefb02fbb874bf4bc86dc3fd4a707a9468e14718/u,
+    /test "\$\(git rev-parse HEAD\)" = 4dabecd7056e168f7345d460e3729465a932db9c/u,
   );
   assert.match(
     action,
-    /native-execution-under-warrant\.mjs[\s\S]*--heartbeat-seconds 300[\s\S]*--lease-seconds 5400/u,
+    /native-execution-under-warrant\.mjs[\s\S]*--qualified-base[\s\S]*--toolchain-root[\s\S]*--environment-root[\s\S]*--heartbeat-seconds 300[\s\S]*--lease-seconds 5400/u,
   );
 });
 

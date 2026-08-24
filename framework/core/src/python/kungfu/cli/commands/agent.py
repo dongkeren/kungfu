@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import base64
+from functools import partial
 import json
 import os
 import sys
@@ -18,9 +19,9 @@ from kungfu.agent import agent_hub_qualification
 from kungfu.agent import first_value as first_value_protocol
 from kungfu.agent import runtime_profiles
 from kungfu.agent import run_agent
+from kungfu.agent import context_surface
 from kungfu.agent import session_surface
 from kungfu.agent import work_profile
-from kungfu.agent import documentation as documentation_pack
 from kungfu.agent.kfd3 import (
     api_help,
     kfd3_api,
@@ -48,57 +49,10 @@ def agent(ctx):
     pass
 
 
-def _context(ctx):
-    native_raw = os.environ.get("KUNGFU_AGENT_CONTEXT", "").strip()
-    if native_raw:
-        native = json.loads(native_raw)
-        if (
-            not isinstance(native, dict)
-            or native.get("schema") != "kungfu.native-agent-context/v1"
-            or native.get("environment") != "native-interactive"
-        ):
-            raise ValueError("invalid native Agent context envelope")
-        console_raw = os.environ.get("KUNGFU_AGENT_CONSOLE_ENVELOPE", "").strip()
-        if console_raw:
-            envelope = json.loads(console_raw)
-            kungfu_config.validate_value("agentConsoleEnvelope", envelope)
-            work_binding = dict(native.get("workBinding") or {})
-            effective_work_ref = session_surface.effective_work_ref(envelope)
-            work_binding["launchState"] = (
-                "bound" if effective_work_ref is not None else "unbound"
-            )
-            work_binding["workRef"] = effective_work_ref
-            native["workBinding"] = work_binding
-        return native
-    config = resolve_config(runtime_home=ctx.home)
-    index = agent_pack.index()
-    return {
-        "schema": "kungfu.agent-context/v1",
-        "entrypoint": "kungfu agent",
-        "config": config,
-        "runtime": {
-            "home": ctx.home,
-            "runtimeDir": ctx.runtime_dir,
-        },
-        "interfaces": {
-            "config": "kungfu config show --json",
-            "skills": "kungfu skill list --json",
-            "skillCatalog": "kungfu skill catalog --json",
-            "skillRegistry": "kungfu skill inspect --json",
-            "kfx": "kungfu kfx list --json",
-        },
-        "skillRegistry": agent_pack.skill_registry(ctx.home),
-        "docs": documentation_pack.discovery_context(
-            agent_work_lab_commands.find_repo_root()
-        ),
-        "agentPack": {
-            "packRoot": str(agent_pack.pack_root()),
-            "documents": index["documents"],
-            "skills": index["skills"],
-            "commands": agent_pack.commands(),
-            "collaborationInterface": registry_summary(),
-        },
-    }
+_context = partial(
+    context_surface.project_agent_context,
+    repo_root_finder=agent_work_lab_commands.find_repo_root,
+)
 
 
 _json = agent_work_lab_commands.agent_json_output
@@ -981,11 +935,34 @@ def console(ctx):
 def console_current(ctx, as_json):
     raw = os.environ.get("KUNGFU_AGENT_CONSOLE_ENVELOPE", "").strip()
     if not raw:
-        payload: dict[str, Any] = {
-            "schema": "kungfu.agent-console-current/v1",
-            "available": False,
-            "reason": "not-running-inside-kungfu-agent-console",
-        }
+        try:
+            current = session_surface.current_native_console(
+                str(ctx.runtime_dir), adopt=False
+            )
+        except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        if current is None:
+            payload: dict[str, Any] = {
+                "schema": "kungfu.agent-console-current/v1",
+                "available": False,
+                "reason": "not-running-inside-kungfu-agent-console",
+            }
+        else:
+            envelope = current["envelope"]
+            status = current["status"] or {}
+            binding = status.get("binding") or {}
+            effective_work_ref = (
+                binding.get("workRef") if binding.get("kind") == "work" else None
+            )
+            payload = {
+                "schema": "kungfu.agent-console-current/v1",
+                "available": True,
+                "envelope": envelope,
+                "bootstrap": (status.get("attempt") or {}).get("bootstrap"),
+                "workBound": effective_work_ref is not None,
+                "workRef": effective_work_ref,
+                "knownLimits": envelope.get("knownLimits", []),
+            }
     else:
         try:
             envelope = json.loads(raw)
@@ -1023,20 +1000,41 @@ def console_current(ctx, as_json):
 )
 @click.option("--initiative-id", required=True)
 @click.option("--assignment-id", required=True)
+@click.option(
+    "--workspace",
+    "workspace_root",
+    type=click.Path(file_okay=False),
+    help="exact Project workspace that owns the Assignment",
+)
 @click.option("--json", "as_json", is_flag=True, help="machine-readable output")
 @kfd3_api("kungfu.agent.console.bind-work")
 @agent_command_context
-def console_bind_work(ctx, initiative_id, assignment_id, as_json):
+def console_bind_work(ctx, initiative_id, assignment_id, workspace_root, as_json):
     raw = os.environ.get("KUNGFU_AGENT_CONSOLE_ENVELOPE", "").strip()
-    if not raw:
-        raise click.ClickException(
-            "bind-work must run inside a native Kungfu Agent Console"
-        )
     try:
-        envelope = json.loads(raw)
+        current = session_surface.current_native_console(
+            str(ctx.runtime_dir), adopt=not bool(raw)
+        )
+        if current is None:
+            raise ValueError(
+                "bind-work requires an injected native Console or an exact "
+                "current Codex process identity"
+            )
+        envelope = current["envelope"]
         kungfu_config.validate_value("agentConsoleEnvelope", envelope)
         binding = run_agent.bind_current_native_work(
-            str(ctx.runtime_dir), initiative_id, assignment_id
+            str(ctx.runtime_dir),
+            initiative_id,
+            assignment_id,
+            work_workspace_root=workspace_root,
+            **(
+                {}
+                if raw
+                else {
+                    "envelope_override": envelope,
+                    "console_workspace_root": current["workspaceRoot"],
+                }
+            ),
         )
         if binding is None:
             raise ValueError("native Agent Console binding is unavailable")
@@ -1151,11 +1149,6 @@ def session_action(ctx, operation, input_file, endpoint, as_json):
     help="the useful fact is work state, not process capture",
 )
 @click.option(
-    "--needs-atlas-projection",
-    is_flag=True,
-    help="an Atlas-style control-plane repo should be imported for inspection",
-)
-@click.option(
     "--remote-runtime",
     is_flag=True,
     help="evidence crosses a machine or runtime boundary",
@@ -1169,7 +1162,6 @@ def choose_mode(
     needs_supervision,
     has_existing_run,
     needs_structured_work,
-    needs_atlas_projection,
     remote_runtime,
     as_json,
 ):
@@ -1178,7 +1170,6 @@ def choose_mode(
         needs_supervision=needs_supervision,
         has_existing_run=has_existing_run,
         needs_structured_work=needs_structured_work,
-        needs_atlas_projection=needs_atlas_projection,
         remote_runtime=remote_runtime,
     )
     if as_json:
@@ -1305,9 +1296,7 @@ def status(ctx, target, scope, as_json):
 @click.option(
     "--mode",
     required=True,
-    type=click.Choice(
-        ["brief", "report", "atlas-projection", "trace", "managed-run", "remote-sync"]
-    ),
+    type=click.Choice(["brief", "report", "trace", "managed-run", "remote-sync"]),
     help="initial operating mode",
 )
 @click.option(
@@ -1372,9 +1361,7 @@ def mode(ctx):
     "--mode",
     "mode_name",
     required=True,
-    type=click.Choice(
-        ["brief", "report", "atlas-projection", "trace", "managed-run", "remote-sync"]
-    ),
+    type=click.Choice(["brief", "report", "trace", "managed-run", "remote-sync"]),
     help="new mode",
 )
 @click.option("--execute", is_flag=True, help="write the mode switch")

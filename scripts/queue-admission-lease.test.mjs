@@ -13,7 +13,8 @@ import {
 } from './cancel-dequeued-merge-group-runs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const WARRANT_RUNTIME_SHA = 'fefb02fbb874bf4bc86dc3fd4a707a9468e14718';
+const WARRANT_RUNTIME_SHA = '4dabecd7056e168f7345d460e3729465a932db9c';
+const WARRANT_READBACK_RUNTIME_SHA = '0f4004d0d2b2474c2135a3e88d29d9c85bc37834';
 const SOURCE_HEAD = '2'.repeat(40);
 const CONTRACT = JSON.parse(
   fs.readFileSync(
@@ -176,6 +177,13 @@ test('queue admission lease has distinct PR-head and merge-group authorities', (
     /reject wildcard ref targets/u,
   );
   assert.equal(CONTRACT.rulesetActivation.expectedSource, 'any');
+  assert.deepEqual(CONTRACT.rulesetActivation.reviewAuthority, {
+    requireCodeOwnerReview: true,
+    requireLastPushApproval: true,
+    emptyCommitIsReviewablePush: false,
+    reason:
+      'GitHub evaluates the most recent reviewable push. A tree-identical empty commit does not transfer that push boundary or make the prior pusher eligible to approve it.',
+  });
 });
 
 test('merge-group continuation consumes the exact durable Warrant lease', () => {
@@ -208,11 +216,10 @@ test('merge-group continuation consumes the exact durable Warrant lease', () => 
   );
 });
 
-test('all protected delivery Warrant consumers share one exact runtime', () => {
+test('mutating Warrant controllers share one runtime and read-only qualification uses the protected compatibility reader', () => {
   const workflowPaths = [
     '.github/workflows/dev-pr-auto-merge.yml',
     '.github/workflows/dev-delivery-warrant-terminal.yml',
-    '.github/workflows/affected-native-pr.yml',
     CONTRACT.authority.mergeGroup,
   ];
   for (const workflowPath of workflowPaths) {
@@ -223,6 +230,18 @@ test('all protected delivery Warrant consumers share one exact runtime', () => {
       `${workflowPath} must consume Buildchain ${WARRANT_RUNTIME_SHA}`,
     );
   }
+  const qualificationWorkflow = fs.readFileSync(
+    path.join(ROOT, '.github/workflows/affected-native-pr.yml'),
+    'utf8',
+  );
+  assert.match(
+    qualificationWorkflow,
+    new RegExp(WARRANT_READBACK_RUNTIME_SHA, 'u'),
+  );
+  assert.doesNotMatch(
+    qualificationWorkflow,
+    new RegExp(WARRANT_RUNTIME_SHA, 'u'),
+  );
 });
 
 test('trusted dequeue controller revokes the same exact-head context', () => {
@@ -280,7 +299,14 @@ test('queue admission contract authorizes only one explicit required context', (
     queueAdmissionRequiredContexts({
       schema: 'kungfu.dev-queue-admission/v1',
       requiredContext: 'Queue admission lease',
-      rulesetActivation: { required: true },
+      rulesetActivation: {
+        required: true,
+        reviewAuthority: {
+          requireCodeOwnerReview: true,
+          requireLastPushApproval: true,
+          emptyCommitIsReviewablePush: false,
+        },
+      },
     }),
     ['Queue admission lease'],
   );
@@ -293,4 +319,32 @@ test('queue admission contract authorizes only one explicit required context', (
       }),
     /must require ruleset activation/,
   );
+  for (const reviewAuthority of [
+    undefined,
+    {
+      requireCodeOwnerReview: false,
+      requireLastPushApproval: true,
+      emptyCommitIsReviewablePush: false,
+    },
+    {
+      requireCodeOwnerReview: true,
+      requireLastPushApproval: false,
+      emptyCommitIsReviewablePush: false,
+    },
+    {
+      requireCodeOwnerReview: true,
+      requireLastPushApproval: true,
+      emptyCommitIsReviewablePush: true,
+    },
+  ]) {
+    assert.throws(
+      () =>
+        queueAdmissionRequiredContexts({
+          schema: 'kungfu.dev-queue-admission/v1',
+          requiredContext: 'Queue admission lease',
+          rulesetActivation: { required: true, reviewAuthority },
+        }),
+      /must preserve fail-closed reviewable-push authority/,
+    );
+  }
 });

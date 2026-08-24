@@ -27,7 +27,6 @@
       "idempotency",
       "events",
       "errors",
-      "compatibility",
       "localRuntimeProfile",
       "implementationStatus",
       "nonClaims"
@@ -89,9 +88,6 @@
       "errors": {
         "type": "array",
         "minItems": 10
-      },
-      "compatibility": {
-        "type": "object"
       },
       "localRuntimeProfile": {
         "type": "object"
@@ -269,6 +265,7 @@
     ],
     "sameKeySameBody": "Return the original command and receipt roots with disposition=replayed and perform no second mutation.",
     "sameKeyDifferentBody": "Fail with idempotency-conflict and perform no mutation.",
+    "unknownOutcome": "An operator may abandon only the local pending projection under exact command, plan, revision, actor, reason, and evidence roots; the authority outcome remains unknown and the original command identity can never be replayed.",
     "retention": "The realm advertises the bounded replay window through capability discovery."
   },
   "events": {
@@ -336,21 +333,14 @@
       "retryable": false
     },
     {
+      "code": "unknown-outcome",
+      "retryable": false
+    },
+    {
       "code": "internal",
       "retryable": true
     }
   ],
-  "compatibility": {
-    "legacyReaders": [
-      "kungfu.mission-control-v1-v3-read-only",
-      "atlas-gate-projection-read-only",
-      "captured-assignment-request-v1"
-    ],
-    "legacyWriters": "Existing Profile/CLI/GUI writers remain implementation facts until their phase-specific cutover; they are not additional Runtime API authority.",
-    "aliases": "Mission/Go names may translate at client edges while sealed legacy identities and roots remain unchanged.",
-    "deletionGate": "A direct path may be removed only after its Runtime Client successor has exact-root parity evidence and an explicit reviewed deletion decision.",
-    "dualWrite": "forbidden"
-  },
   "localRuntimeProfile": {
     "status": "frozen-r1-implementation-target",
     "realmKind": "local",

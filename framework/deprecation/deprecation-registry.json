@@ -3,7 +3,7 @@
   "schema": "kungfu.deprecation-registry/v1",
   "contract": "framework/deprecation/deprecation-lifecycle.contract.json",
   "discoveryContract": "framework/deprecation/deprecation-discovery.contract.json",
-  "productVersion": "4.0.0-alpha.2",
+  "productVersion": "4.0.0-alpha.3",
   "releaseHistory": [],
   "entries": [
     {
@@ -102,13 +102,13 @@
       "removalEvidence": null,
       "extensionWarrant": {
         "authority": "kungfu.warrant",
-        "warrantRoot": "sha256:abd64bd171c62faad7337c6568efc351401b15cc83ad3829ccc2846014ef1de2",
+        "warrantRoot": "sha256:0a8087ca02cce8145198c4142258638e5299abfdc1f6fad994927a72f7bc009c",
         "entryId": "core.yijinjing.boolean-mmap-adapters",
-        "authorizedBy": "dongkeren",
-        "issuedAt": "2026-08-14",
-        "expiresOn": "2026-08-15",
-        "expiresAfterRelease": "4.0.0-alpha.2",
-        "evidenceRef": "framework/deprecation/deprecation-registry.json"
+        "authorizedBy": "kungfu-release",
+        "issuedAt": "2026-08-16",
+        "expiresOn": "2026-09-15",
+        "expiresAfterRelease": "4.0.0-alpha.3",
+        "evidenceRef": "docs/qualification/deprecation-alpha3-extension-warrants.json"
       },
       "contributedFrom": {
         "authority": "framework/core/architecture/layers.json",
@@ -191,13 +191,13 @@
       "removalEvidence": null,
       "extensionWarrant": {
         "authority": "kungfu.warrant",
-        "warrantRoot": "sha256:36311bf03d529d1eea33f126b795df6a4429112514493caa30f45e8bb9155275",
+        "warrantRoot": "sha256:64933d1b0d309e7d175d26446c255c0050b553d96441708195dfce1c462b4fe1",
         "entryId": "core.yijinjing.journal-open-policy-adapters",
-        "authorizedBy": "dongkeren",
-        "issuedAt": "2026-08-14",
-        "expiresOn": "2026-08-15",
-        "expiresAfterRelease": "4.0.0-alpha.2",
-        "evidenceRef": "framework/deprecation/deprecation-registry.json"
+        "authorizedBy": "kungfu-release",
+        "issuedAt": "2026-08-16",
+        "expiresOn": "2026-09-15",
+        "expiresAfterRelease": "4.0.0-alpha.3",
+        "evidenceRef": "docs/qualification/deprecation-alpha3-extension-warrants.json"
       },
       "contributedFrom": {
         "authority": "git-history",
@@ -280,126 +280,17 @@
       "removalEvidence": null,
       "extensionWarrant": {
         "authority": "kungfu.warrant",
-        "warrantRoot": "sha256:618a5d10841dd540cd9c8067e66e4e2e409943ad9cc66682994b266a68e2e789",
+        "warrantRoot": "sha256:744bb1e4417cb2960546100f6768e49d7ca2320f47ae43107d05ea2953c3a1ac",
         "entryId": "core.yijinjing.page-open-policy-adapters",
-        "authorizedBy": "dongkeren",
-        "issuedAt": "2026-08-14",
-        "expiresOn": "2026-08-15",
-        "expiresAfterRelease": "4.0.0-alpha.2",
-        "evidenceRef": "framework/deprecation/deprecation-registry.json"
+        "authorizedBy": "kungfu-release",
+        "issuedAt": "2026-08-16",
+        "expiresOn": "2026-09-15",
+        "expiresAfterRelease": "4.0.0-alpha.3",
+        "evidenceRef": "docs/qualification/deprecation-alpha3-extension-warrants.json"
       },
       "contributedFrom": {
         "authority": "git-history",
         "entryId": "cb8dfb6be51be65c93c813843396a6349da4f1b7"
-      }
-    },
-    {
-      "id": "cli.prestable-compatibility-aliases",
-      "lifecycle": "settled",
-      "surfaceClass": "public-alpha-preview",
-      "classification": {
-        "authority": "framework/core/src/python/kungfu/cli/surface_contract.registry.json",
-        "authorityType": "cli-surface-registry",
-        "ruleId": "defaults.maturity"
-      },
-      "owner": "product/cli",
-      "surface": {
-        "kind": "cli-alias-set",
-        "path": "framework/core/src/python/kungfu/cli/surface_contract.registry.json",
-        "symbols": [
-          "deprecated developer aliases",
-          "deprecated Mission Control aliases",
-          "kfc executable alias"
-        ]
-      },
-      "replacement": "canonical kungfu dev, kungfu env, kungfu sdk, kungfu profile work-control, and explicit Atlas bridge paths",
-      "migrationGuidance": "docs/development/versioning.md",
-      "deprecatedAt": {
-        "date": "2026-07-20",
-        "productVersion": "4.0.0-alpha.1",
-        "decision": "docs/development/versioning.md"
-      },
-      "knownConsumers": [
-        {
-          "id": "repository-developer-tooling",
-          "status": "migrated",
-          "evidence": "scripts/check-cli-catalog-parity.mjs"
-        },
-        {
-          "id": "agent-command-catalog",
-          "status": "migrated",
-          "evidence": "framework/core/src/python/kungfu/agent/commands.json"
-        },
-        {
-          "id": "installed-product-qualification",
-          "status": "migrated",
-          "evidence": "product/scripts/cli-surface-qualification.mjs"
-        }
-      ],
-      "windows": {
-        "minimumCalendarDays": 0,
-        "minimumQualifiedReleases": 0
-      },
-      "earliestRemovalBoundary": "pre-stable-or-major",
-      "removalConditions": [
-        "current-head-zero-reference",
-        "migration-qualified",
-        "release-note-published",
-        "retained-evidence-preserved"
-      ],
-      "retainedEvidence": [
-        "docs/development/versioning.md",
-        "scripts/check-cli-catalog-parity.test.mjs",
-        "product/scripts/cli-surface-qualification.test.mjs"
-      ],
-      "zeroReferenceAudit": {
-        "checks": [
-          {
-            "kind": "json-array-empty",
-            "path": "framework/core/src/python/kungfu/cli/surface_contract.registry.json",
-            "pointer": "/aliases"
-          },
-          {
-            "kind": "text-absent",
-            "roots": [
-              "framework/core/src/python/kungfu/agent/commands.json"
-            ],
-            "patterns": [
-              "\"name\": \"kungfu engage",
-              "\"name\": \"kungfu schema",
-              "\"name\": \"kfc "
-            ]
-          }
-        ]
-      },
-      "removalEvidence": {
-        "removedAt": {
-          "date": "2026-07-25",
-          "productVersion": "4.0.0-alpha.1"
-        },
-        "gitCommit": "bb93639ab0ce160a7f6321f45c9899ab4c79a714",
-        "migrationQualification": [
-          "scripts/check-cli-catalog-parity.test.mjs",
-          "product/scripts/cli-surface-qualification.test.mjs"
-        ],
-        "releaseNote": "docs/development/versioning.md",
-        "retainedEvidence": [
-          "docs/development/versioning.md"
-        ]
-      },
-      "historicalGrandfather": {
-        "authority": "framework/deprecation/deprecation-lifecycle.contract.json",
-        "recordId": "cli.prestable-compatibility-aliases",
-        "evidenceRefs": [
-          "docs/development/versioning.md",
-          "scripts/check-cli-catalog-parity.test.mjs",
-          "product/scripts/cli-surface-qualification.test.mjs"
-        ]
-      },
-      "extensionWarrant": null,
-      "contributedFrom": {
-        "authority": "historical CLI surface registry and removal gate",
-        "entryId": "pre-stable-cli-alias-set"
       }
     }
   ]

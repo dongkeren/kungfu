@@ -78,3 +78,47 @@ test('strict writers reject ambiguous or extended values', () => {
   profile.bootstrap.adapter = 'codex';
   assert.throws(() => validateRuntimeProfile(profile), /must match provider/u);
 });
+
+test('Agent Console carries only a bounded read-only Skill runtime pointer', () => {
+  const body = {
+    ...fixture.envelopeBody,
+    skillRuntimeAudit: {
+      schema: 'kungfu.skill-runtime-audit-pointer/v1',
+      path: '/runtime/skill-manager/agent-console-attempt.json',
+      runtimeAuditRoot: `sha256:${'1'.repeat(64)}`,
+      registryStateRoot: `sha256:${'2'.repeat(64)}`,
+      historyRoot: `sha256:${'3'.repeat(64)}`,
+      diagnosisRoot: `sha256:${'4'.repeat(64)}`,
+      catalogRoot: `sha256:${'5'.repeat(64)}`,
+      decisionPolicyRoot: `sha256:${'6'.repeat(64)}`,
+      workRefRoot: fixture.workRefRoot,
+      kfxDependencyRoots: [`sha256:${'7'.repeat(64)}`],
+      receiptRoots: [`sha256:${'8'.repeat(64)}`],
+      recoveryRoot: `sha256:${'9'.repeat(64)}`,
+      entrypoints: {
+        catalog: ['kungfu', 'skill', 'catalog', '--json'],
+        advise: ['kungfu', 'agent', 'skill-advisory', '--json'],
+        read: ['kungfu', 'skill', 'read', '<key>', '--json'],
+        audit: ['kungfu', 'skill', 'audit', '--json'],
+        explain: ['kungfu', 'skill', 'explain', '<key>', '--json'],
+        diagnose: ['kungfu', 'skill', 'diagnose', '--json'],
+        kfx: ['kungfu', 'kfx', 'native', 'status', '--json'],
+      },
+      authority: 'read-only-projection',
+    },
+  };
+  const envelope = { ...body, envelopeRoot: semanticRoot(body) };
+
+  assert.deepEqual(validateAgentConsoleEnvelope(envelope), envelope);
+  assert.throws(
+    () =>
+      validateAgentConsoleEnvelope({
+        ...envelope,
+        skillRuntimeAudit: {
+          ...envelope.skillRuntimeAudit,
+          authority: 'agent-writer',
+        },
+      }),
+    /read-only-projection/u,
+  );
+});

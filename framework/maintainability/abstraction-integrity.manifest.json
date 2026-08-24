@@ -87,7 +87,15 @@
       "owner": "core/python-assignment-close-evidence",
       "paths": [
         "framework/core/src/python/kungfu/assignment_close.py",
-        "framework/core/src/python/kungfu/assignment_evidence.py"
+        "framework/core/src/python/kungfu/assignment_evidence.py",
+        "framework/core/src/python/kungfu/cli/commands/assignment_session.py",
+        "framework/core/src/python/kungfu/cli/commands/assignment_review/__init__.py"
+      ]
+    },
+    {
+      "owner": "core/python-assignment-binding-provenance",
+      "paths": [
+        "framework/core/src/python/kungfu/assignment_provenance/__init__.py"
       ]
     },
     {
@@ -147,6 +155,18 @@
       ]
     },
     {
+      "owner": "core/python-agent-advisory-policy",
+      "paths": [
+        "framework/core/src/python/kungfu/agent/advisory.py"
+      ]
+    },
+    {
+      "owner": "core/python-agent-work-lab-evidence",
+      "paths": [
+        "framework/core/src/python/kungfu/agent_work_lab_evidence.py"
+      ]
+    },
+    {
       "owner": "product/agent-first-value-qualification",
       "paths": [
         "scripts/qualify-agent-first-value-codex.mjs"
@@ -193,6 +213,7 @@
     {
       "owner": "core/python-agent-session-run-interface",
       "paths": [
+        "framework/core/src/python/kungfu/agent/context_surface.py",
         "framework/core/src/python/kungfu/agent/provider_output.py",
         "framework/core/src/python/kungfu/agent/run_intent.py",
         "framework/core/src/python/kungfu/agent/work_projection.py"
@@ -209,7 +230,8 @@
     {
       "owner": "core/python-agent-session-contract",
       "paths": [
-        "framework/core/src/python/kungfu/agent/session_contract.py"
+        "framework/core/src/python/kungfu/agent/session_contract.py",
+        "framework/core/src/python/kungfu/agent/session_evidence.py"
       ]
     },
     {
@@ -217,6 +239,13 @@
       "paths": [
         "framework/tui/src/work-window/project-work-session-state.ts",
         "framework/tui/src/work-window/project-work-session-view.tsx"
+      ]
+    },
+    {
+      "owner": "tui/session-workbench",
+      "paths": [
+        "framework/tui/src/session-workbench-state.ts",
+        "framework/tui/src/session-workbench-view.tsx"
       ]
     },
     {
@@ -274,6 +303,18 @@
       ]
     },
     {
+      "owner": "shifu/promotion-catalog",
+      "paths": [
+        "crates/shifu/src/promote_catalog.rs"
+      ]
+    },
+    {
+      "owner": "shifu/promotion-desktop-filesystem",
+      "paths": [
+        "crates/shifu/src/promote_desktop_fs.rs"
+      ]
+    },
+    {
       "owner": "core/python-agent-documentation-cli",
       "paths": [
         "framework/core/src/python/kungfu/cli/commands/agent_docs.py"
@@ -306,6 +347,13 @@
       "owner": "release/publication-authority-consumer",
       "paths": [
         "scripts/assemble-kungfu-publication-gate.mjs"
+      ]
+    },
+    {
+      "owner": "release/github-metadata-policy",
+      "paths": [
+        "scripts/github-release-policy.mjs",
+        "scripts/github-release-policy.test.mjs"
       ]
     },
     {

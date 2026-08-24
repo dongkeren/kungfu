@@ -7,6 +7,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Mapping
 import json
+import os
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -50,17 +51,65 @@ _INTENT_COMMAND_TYPES = {
 }
 
 
-def profile_source() -> Path:
-    """Resolve the packaged Work Control Profile with source compatibility."""
+class ProfileDomain:
+    """Lazy native module whose calls retain the installed Profile source."""
 
-    profiles = Path(orchestration.__file__).resolve().parent / "profiles"
-    extensions = orchestration.source_root() / "extensions"
-    for root in (profiles, extensions):
-        for name in ("work-control", "mission-control"):
-            source = root / name
-            if source.is_dir():
-                return source
-    raise ValueError("Work Control Profile is absent from this Kungfu product")
+    def __init__(self, module_name: str):
+        self.module_name = module_name
+
+    def _domain(self):
+        from kungfu import profile_sdk
+
+        source = profile_sdk.discover_source("kungfu.work-control")["source"]
+        package = profile_sdk.load_member_python_package(
+            source, "work-control-actions", "domain"
+        )
+        return source, getattr(package, self.module_name), package.work_control
+
+    def __getattr__(self, name: str):
+        source, module, binder = self._domain()
+        value = getattr(module, name)
+        if not callable(value):
+            return value
+
+        def bound(*args, **kwargs):
+            return binder._with_profile_source(source, lambda: value(*args, **kwargs))
+
+        bound.__name__ = getattr(value, "__name__", name)
+        bound.__doc__ = getattr(value, "__doc__", None)
+        return bound
+
+    def __dir__(self):
+        _, module, _ = self._domain()
+        return sorted(set(dir(module)))
+
+
+def profile_domain(module_name: str) -> ProfileDomain:
+    """Expose one native Work Control domain without a wrapper-only module."""
+
+    return ProfileDomain(module_name)
+
+
+def profile_source() -> Path:
+    """Resolve Work Control only from explicit installed extension roots."""
+
+    from kungfu import profile_sdk
+
+    roots: list[str | Path] = [
+        Path(value).expanduser()
+        for value in [
+            os.environ.get("KF_BUNDLED_EXTENSION_ROOT", ""),
+            *os.environ.get("KF_EXTENSION_PATH", "").split(os.pathsep),
+        ]
+        if value
+    ]
+    if not roots:
+        raise ValueError(
+            "KF_BUNDLED_EXTENSION_ROOT or KF_EXTENSION_PATH does not name an "
+            "installed Work Control Profile"
+        )
+    discovered = profile_sdk.discover_source("kungfu.work-control", search_roots=roots)
+    return Path(discovered["source"])
 
 
 def create_runtime_host_command(
@@ -288,6 +337,9 @@ class EmbeddedAssignmentRuntimeClient:
     def recovery_execute(self, plan: Mapping[str, Any]) -> dict[str, Any]:
         return self.invoke("recovery.execute", payload=plan)
 
+    def recovery_resolve(self, resolution: Mapping[str, Any]) -> dict[str, Any]:
+        return self.invoke("recovery.execute", payload=resolution)
+
 
 def _workspace_realm(runtime_dir: str | Path) -> tuple[str, str]:
     runtime_path = Path(runtime_dir).expanduser().resolve()
@@ -386,6 +438,44 @@ class LocalAssignmentRuntimeApplication:
                 "Assignment Runtime snapshot omitted the lifecycle projection",
             )
         return _copy_json(lifecycle)
+
+    def recovery_plan(self) -> dict[str, Any]:
+        with self._runtime() as runtime:
+            client = EmbeddedAssignmentRuntimeClient(
+                runtime, client_id=self.client_id, kind=self.kind
+            )
+            return _copy_json(_runtime_result(client.recovery_plan()))
+
+    def resolve_interrupted(
+        self,
+        *,
+        plan: Mapping[str, Any],
+        expected_basis_root: str,
+        authorized_by: str,
+        reason: str,
+        evidence_roots: list[str],
+    ) -> dict[str, Any]:
+        with self._runtime() as runtime:
+            client = EmbeddedAssignmentRuntimeClient(
+                runtime, client_id=self.client_id, kind=self.kind
+            )
+            resolution = dict(plan.get("operatorResolution") or {})
+            if plan.get("basisRoot") != expected_basis_root or not resolution:
+                raise LocalRuntimeError(
+                    "stale-revision", "Recovery plan basis is stale"
+                )
+            payload = {
+                "resolution": resolution["resolution"],
+                "expectedBasisRoot": expected_basis_root,
+                "expectedCommandRoot": resolution["commandRoot"],
+                "expectedRevision": resolution["currentRevision"],
+                "authorizedBy": authorized_by,
+                "reason": reason,
+                "evidenceRoots": sorted(set(evidence_roots)),
+            }
+            payload["idempotencyKey"] = f"idempotency:recovery:{_root(payload)[7:]}"
+            response = client.recovery_resolve(payload)
+            return _copy_json(_runtime_result(response))
 
     def authorize(
         self,

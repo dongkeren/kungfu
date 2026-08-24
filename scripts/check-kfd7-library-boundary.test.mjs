@@ -12,6 +12,7 @@ import {
   assertInstalledBootstrapExports,
   extractKfApiExportSymbols,
 } from './libkungfu-bootstrap-admission.mjs';
+import { sourceMergeGroupBase } from './source-acceptance.mjs';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 const readJson = (path) => JSON.parse(read(path));
@@ -57,7 +58,9 @@ const retiredSymbols = [
 ];
 
 function baseSymbolPolicy() {
+  const mergeGroupBase = sourceMergeGroupBase()?.sha || null;
   const candidates = [
+    mergeGroupBase,
     process.env.GITHUB_BASE_REF
       ? `origin/${process.env.GITHUB_BASE_REF}`
       : null,
@@ -425,7 +428,14 @@ assert.deepEqual(
 
 assert.deepEqual(
   contract.successorAbi.interfaces.map((entry) => entry.id),
-  ['discovery', 'stream', 'ledger-action', 'maintenance', 'runtime-action'],
+  [
+    'discovery',
+    'stream',
+    'ledger-action',
+    'maintenance',
+    'runtime-action',
+    'initiative-assignment',
+  ],
 );
 assert.deepEqual(
   contract.dependencies.map((entry) => entry.statusAtInventory),
