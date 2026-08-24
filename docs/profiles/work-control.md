@@ -23,6 +23,13 @@ a continuation decision remain separate facts. Portfolio reports completion
 only when the accepted decision and applicable Project Cut settlement are both
 present.
 
+Workspaces that contain pre-cutover `atlas-adapter` observations on the v1
+Initiative or Assignment surfaces retain those immutable facts as history. The
+current Profile may read them and append only through `kungfu-user` or
+`kungfu-agent`; this narrow compatibility state neither restores the removed
+adapter nor claims that an authority migration occurred. Any other retired or
+unknown source authority remains a fail-closed migration requirement.
+
 Portfolio keeps three state coordinates separate: the source record's
 `source_status`, the native Assignment `orchestration_phase`, and the derived
 `portfolio_state`. The default active-and-attention view treats compatibility

@@ -196,8 +196,24 @@ def _ensure_profile(runtime_dir, authorized_by):
         receipts.append(
             profile_sdk.authorized_lifecycle_apply(runtime_dir, plan, answer)
         )
-    contract = profile_composition.contract_materialization_plan(source, runtime_dir)
-    if contract["operations"]:
+    try:
+        contract = profile_composition.contract_materialization_plan(
+            source, runtime_dir
+        )
+    except profile_sdk.ProfileSdkError:
+        domain = profile_sdk.load_member_python_package(
+            source, "work-control-actions", "domain"
+        )
+        compatibility = domain.work_control._ensure_contract(str(runtime_dir))
+        receipts.append(
+            {
+                "schema": "kungfu.work.profile-contract-compatibility-receipt/v1",
+                "profileContract": compatibility,
+                "writeOccurred": False,
+            }
+        )
+        contract = None
+    if contract is not None and contract["operations"]:
         answer = profile_sdk.answer_decision(
             contract["decisionCard"], "approve", authorized_by
         )

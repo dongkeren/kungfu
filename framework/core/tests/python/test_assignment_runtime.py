@@ -76,6 +76,80 @@ def test_profile_source_resolves_installed_bundled_root(monkeypatch, tmp_path):
     assert observed == [("kungfu.work-control", [bundled])]
 
 
+def test_work_profile_ensure_uses_profile_owned_retained_history_compatibility(
+    monkeypatch, tmp_path
+):
+    from kungfu.cli.commands import assignment as work_commands
+
+    runtime = tmp_path / "runtime"
+    migration = profile_sdk.ProfileSdkError(
+        "fact-surface-authority-migration-required",
+        "removed source authorities retain admitted facts and require an explicit migration",
+        factSurface="kungfu.initiative-assignment.initiative",
+        admittedSourceAuthorities=["atlas-adapter"],
+    )
+    monkeypatch.setattr(work_commands, "profile_source", lambda: PROFILE_SOURCE)
+    monkeypatch.setattr(
+        profile_sdk,
+        "validate_source",
+        lambda _source, _runtime: {
+            "inspection": {
+                "profile": {"id": "kungfu.work-control"},
+                "profile_suite_root": ROOT_A,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        work_commands.storage_service,
+        "profile_lifecycle",
+        lambda _runtime, operation, **_values: (
+            {
+                "profiles": [
+                    {
+                        "profile_id": "kungfu.work-control",
+                        "profile_suite_root": ROOT_A,
+                        "qualified": True,
+                        "activated": True,
+                        "removed": False,
+                    }
+                ]
+            }
+            if operation == "list"
+            else {}
+        ),
+    )
+    monkeypatch.setattr(
+        work_commands.profile_composition,
+        "contract_materialization_plan",
+        lambda _source, _runtime: (_ for _ in ()).throw(migration),
+    )
+    compatibility = {
+        "schema": "kungfu.work-control.profile-contract/v1",
+        "status": "retained-history-compatible",
+        "retained_source_authorities": ["atlas-adapter"],
+    }
+    domain = types.SimpleNamespace(
+        work_control=types.SimpleNamespace(
+            _ensure_contract=lambda _runtime: compatibility
+        )
+    )
+    monkeypatch.setattr(
+        profile_sdk,
+        "load_member_python_package",
+        lambda _source, _member, _package: domain,
+    )
+
+    receipts = work_commands._ensure_profile(runtime, "test-agent")
+
+    assert receipts == [
+        {
+            "schema": "kungfu.work.profile-contract-compatibility-receipt/v1",
+            "profileContract": compatibility,
+            "writeOccurred": False,
+        }
+    ]
+
+
 def test_profile_source_prefers_bundled_root_before_dev_overrides(
     monkeypatch, tmp_path
 ):
