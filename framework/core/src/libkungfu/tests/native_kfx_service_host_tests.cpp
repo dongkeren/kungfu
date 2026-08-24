@@ -312,6 +312,56 @@ void test_runtime_warrant_contract() {
   require(expired.at("event") == "lease-expired" && expired.at("leaseState").at("state") == "recovered",
           "Core did not fail closed and settle the exact lease-expiry boundary");
 
+  auto issue_five = issue_request;
+  issue_five["leaseNonce"] = "generation-5";
+  issue_five["issuedAt"] = 60;
+  issue_five["expiresAt"] = 100;
+  const auto issued_five = kfx::query_native_kfx_registry("runtime-warrant-issue", issue_five, runtime_dir.string());
+  auto adopt = issue_request;
+  adopt["holder"] = "worker-b";
+  adopt["purpose"] = "restart optional KFX view after host crash";
+  adopt["leaseNonce"] = "generation-6";
+  adopt["issuedAt"] = 71;
+  adopt["expiresAt"] = 110;
+  auto early_adopt = adopt;
+  early_adopt["issuedAt"] = 70;
+  require_refusal("KF_KFX_RUNTIME_WARRANT_ACTIVE", [&] {
+    (void)kfx::query_native_kfx_registry("runtime-warrant-adopt", early_adopt, runtime_dir.string());
+  });
+  auto substituted_adopt = adopt;
+  substituted_adopt["expectedWarrantRoot"] = issued_five.at("runtimeWarrant").at("warrantRoot");
+  require_refusal("KF_KFX_RUNTIME_FENCE_STALE", [&] {
+    (void)kfx::query_native_kfx_registry("runtime-warrant-adopt", substituted_adopt, runtime_dir.string());
+  });
+  const auto adopted = kfx::query_native_kfx_registry("runtime-warrant-adopt", adopt, runtime_dir.string());
+  require(adopted.at("schema") == "kungfu.kfx.runtime-warrant-adoption/v1" &&
+              adopted.at("recovery").at("event") == "heartbeat-expired" &&
+              adopted.at("recovery").at("leaseState").at("state") == "recovered" &&
+              adopted.at("leaseState").at("generation") == 6 &&
+              adopted.at("leaseState").at("fencingToken") != issued_five.at("leaseState").at("fencingToken"),
+          "Core host adoption did not recover a crashed holder and issue a fenced successor generation");
+  auto stale_crashed_holder = transition;
+  stale_crashed_holder["expectedWarrantRoot"] = issued_five.at("runtimeWarrant").at("warrantRoot");
+  stale_crashed_holder["expectedGeneration"] = issued_five.at("leaseState").at("generation");
+  stale_crashed_holder["expectedFencingToken"] = issued_five.at("leaseState").at("fencingToken");
+  stale_crashed_holder["recordedAt"] = 72;
+  require_refusal("KF_KFX_RUNTIME_FENCE_STALE", [&] {
+    (void)kfx::query_native_kfx_registry("runtime-warrant-heartbeat", stale_crashed_holder, runtime_dir.string());
+  });
+  json settle_adopted = {{"packageKey", "optional-view"},
+                         {"host", authorization.at("host")},
+                         {"holder", "worker-b"},
+                         {"expectedWarrantRoot", adopted.at("runtimeWarrant").at("warrantRoot")},
+                         {"expectedGeneration", adopted.at("leaseState").at("generation")},
+                         {"expectedFencingToken", adopted.at("leaseState").at("fencingToken")},
+                         {"recordedAt", 75},
+                         {"outcome", "completed"},
+                         {"residualResponsibilityDisposition", "retained-by-kungfu-core"}};
+  const auto settled_adopted =
+      kfx::query_native_kfx_registry("runtime-warrant-settle", settle_adopted, runtime_dir.string());
+  require(settled_adopted.at("leaseState").at("state") == "settled",
+          "adopted Runtime Warrant did not retain terminal settlement");
+
   const json witness_request = {{"packageKey", "optional-view"}, {"host", authorization.at("host")}};
   const auto witness_a = kfx::query_native_kfx_registry("kfd-10-witness", witness_request, runtime_dir.string());
   const auto witness_b = kfx::query_native_kfx_registry("kfd-10-witness", witness_request, runtime_dir.string());

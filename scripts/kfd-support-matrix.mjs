@@ -381,7 +381,7 @@ function validateMatrix(matrix, { verifyInstalledKfd = true } = {}) {
     kfd10Witness.authoritySeparation?.settlementIsNotWarrant !== true,
     kfd10Witness.authoritySeparation?.recoveryOwnedByCore !== true,
     !Array.isArray(kfd10Witness.sourceRoots),
-    kfd10Witness.sourceRoots?.length !== 7,
+    kfd10Witness.sourceRoots?.length !== 11,
   ].some(Boolean);
   if (malformedKfd10Witness) {
     fail('KFD-10 specialized witness is malformed or claim-widened');
