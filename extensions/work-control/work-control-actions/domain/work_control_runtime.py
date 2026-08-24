@@ -1039,9 +1039,6 @@ def create_assignment(
     _ensure_native_write_allowed(runtime_dir)
     system_time = system_time or time.time_ns()
     _ensure_contract(runtime_dir, system_time)
-    initiative_id = initiative_id
-    assignment_id = assignment_id
-    parent_assignment_id = parent_assignment_id
     explicit_initiative_ref = _validated_work_ref(
         initiative_ref,
         object_kind="initiative",
@@ -1631,6 +1628,7 @@ def assignment_orchestration_status(
     assignment_id: str,
     storage_source_id: str = "kungfu",
     now: str = "",
+    include_work_semantics: bool = True,
 ) -> dict[str, Any]:
     """Fold append-only orchestration facts into one deterministic Assignment phase."""
 
@@ -1678,7 +1676,7 @@ def assignment_orchestration_status(
     )
     if completion_phase:
         phase = completion_phase
-    return {
+    result = {
         "schema": "kungfu.assignment-orchestration.status/v1",
         "initiative_subject": state["initiative_subject"],
         "assignment_subject": assignment_subject,
@@ -1699,6 +1697,28 @@ def assignment_orchestration_status(
         "continuation_decisions": decisions,
         "query_proof_root": state["query_proof_root"],
     }
+    if include_work_semantics:
+        from . import work_semantics
+
+        semantic_records = [
+            row.get("payload", {}).get("record", {})
+            for row in linked
+            if row.get("payload", {}).get("record", {}).get("record_type")
+            in work_semantics.RECORD_TYPES
+        ]
+        semantic_records.sort(
+            key=lambda row: (
+                int(row.get("recorded_at_system_time") or 0),
+                str(row.get("record_root") or ""),
+            )
+        )
+        result["work_semantics"] = work_semantics.project(
+            semantic_records,
+            phase=phase,
+            active_lease=result["active_lease"],
+            query_proof_root=state["query_proof_root"],
+        )
+    return result
 
 
 def advance_assignment_phase(
@@ -2148,6 +2168,29 @@ def claim_completion(
         raise ValueError(f"Assignment not found under Initiative: {assignment_id}")
     if not statement.strip() or not actor.strip():
         raise ValueError("statement and actor are required")
+    from . import work_semantics
+
+    semantics = work_semantics.status(
+        runtime_dir,
+        initiative_id=initiative_id,
+        assignment_id=assignment_id,
+        storage_source_id=storage_source_id,
+    )
+    if semantics["current_input_snapshot"]:
+        if not semantics["completion_eligible"]:
+            raise ValueError(
+                "Work semantics effects must be settled before completion can be claimed"
+            )
+        required_semantic_roots = {
+            semantics["current_input_snapshot"]["record_root"],
+            semantics["managed_runs"][-1]["record_root"],
+            *[row["record_root"] for row in semantics["effect_outcomes"]],
+        }
+        supplied_semantic_roots = set(proof_roots or [])
+        if not required_semantic_roots.issubset(supplied_semantic_roots):
+            raise ValueError(
+                "completion proof_roots must bind the current Work semantics evidence"
+            )
     evidence = [
         _verified_episode(runtime_dir, int(episode_id))
         for episode_id in (evidence_episode_ids or [])

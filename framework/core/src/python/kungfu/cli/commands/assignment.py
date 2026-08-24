@@ -253,13 +253,20 @@ def _prepare_resume_profile(runtime_dir, actor):
 
 
 def _profile_read(runtime_dir, operation, values):
-    if operation != "assignment-status":
-        raise ValueError(f"unsupported Assignment Runtime read: {operation}")
-    return LocalAssignmentRuntimeApplication(
+    application = LocalAssignmentRuntimeApplication(
         runtime_dir,
         client_id="kungfu.work.cli",
         kind="cli",
-    ).status(values.get("initiativeId"), values.get("assignmentId"))
+    )
+    if operation == "assignment-status":
+        return application.status(
+            values.get("initiativeId"), values.get("assignmentId")
+        )
+    if operation == "work-semantics-status":
+        return application.work_semantics_status(
+            values.get("initiativeId"), values.get("assignmentId")
+        )
+    raise ValueError(f"unsupported Assignment Runtime read: {operation}")
 
 
 def _profile_action(runtime_dir, intent_id, values, authorized_by):
@@ -1756,6 +1763,11 @@ def _json_action(name, intent_id):
 claim_completion = _json_action("claim-completion", "claim-completion")
 review = _json_action("review", "review-completion")
 decide = _json_action("decide", "decide-continuation")
+record_input = _json_action("record-input", "work-input-snapshot")
+record_run = _json_action("record-run", "work-managed-run")
+authorize_effect = _json_action("authorize-effect", "work-effect-authorize")
+record_effect_attempt = _json_action("record-effect-attempt", "work-effect-attempt")
+record_effect_outcome = _json_action("record-effect-outcome", "work-effect-outcome")
 
 
 @assignment.command(

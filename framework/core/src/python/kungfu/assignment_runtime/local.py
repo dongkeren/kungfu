@@ -629,7 +629,7 @@ class EmbeddedLocalAssignmentRuntime(AssignmentRuntimeRecoveryMixin):
                 ) from error
             if expires_at.tzinfo is None or expires_at <= datetime.now(UTC):
                 raise LocalRuntimeError("lease-required", "Command lease is expired")
-            if command_type == "assignment.stage":
+            if command_type != "assignment.claim":
                 matches = [
                     row
                     for row in snapshot.get("assignments") or []
