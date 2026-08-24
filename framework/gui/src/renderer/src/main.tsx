@@ -1189,7 +1189,9 @@ function useWorkSearchDocuments(
     };
     refresh();
     subscribers.current.add(refresh);
-    return () => subscribers.current.delete(refresh);
+    return () => {
+      subscribers.current.delete(refresh);
+    };
   }, [runtime.work, subscribers]);
   return documents;
 }
@@ -1734,10 +1736,11 @@ function useShellNavigationState(
     () =>
       window.process.env.KFE_INITIAL_VIEW || profileHomeId(profile, enabled),
   );
-  const [params, setParams] = React.useState<Record<string, string>>(() =>
-    initialFocusedProjectPath
-      ? { projectPath: initialFocusedProjectPath, projectSection: 'files' }
-      : {},
+  const [params, setParams] = React.useState<Record<string, string>>(
+    (): Record<string, string> =>
+      initialFocusedProjectPath
+        ? { projectPath: initialFocusedProjectPath, projectSection: 'files' }
+        : {},
   );
   const lastWorkParamsRef = React.useRef<Record<string, string>>(
     initialFocusedProjectPath
