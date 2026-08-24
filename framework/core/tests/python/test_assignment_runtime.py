@@ -887,6 +887,47 @@ def test_work_semantics_commands_bind_exact_runtime_attempt_and_lease(
     }
 
 
+def test_work_control_authority_binds_attempt_from_active_lease():
+    status = {
+        "phase": "executing",
+        "execution_claims": [
+            {"attempt_id": "attempt-new", "claim_id": "claim-new"},
+            {"attempt_id": "attempt-middle", "claim_id": "claim-middle"},
+            {"attempt_id": "attempt-old", "claim_id": "claim-old"},
+        ],
+        "active_lease": {
+            "attempt_id": "attempt-new",
+            "claim_id": "claim-new",
+            "lease_id": "lease-new",
+        },
+    }
+
+    assert WorkControlAuthority._attempt(status) == {
+        "attemptId": "attempt-new",
+        "claimId": "claim-new",
+        "state": "executing",
+    }
+
+
+def test_work_control_authority_rejects_active_lease_without_exact_attempt():
+    status = {
+        "phase": "executing",
+        "execution_claims": [
+            {"attempt_id": "attempt-old", "claim_id": "claim-old"},
+        ],
+        "active_lease": {
+            "attempt_id": "attempt-new",
+            "claim_id": "claim-new",
+            "lease_id": "lease-new",
+        },
+    }
+
+    with pytest.raises(LocalRuntimeError, match="does not bind exactly one") as error:
+        WorkControlAuthority._attempt(status)
+
+    assert error.value.code == "ambiguous-identity"
+
+
 def test_work_semantics_projection_invalidates_stale_inputs_and_forbids_blind_retry():
     domain_path = PROFILE_SOURCE / "work-control-actions" / "domain"
     package_name = "test_work_semantics_domain"

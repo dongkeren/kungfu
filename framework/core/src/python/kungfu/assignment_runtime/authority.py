@@ -488,12 +488,44 @@ class WorkControlAuthority:
         claims = status.get("execution_claims") or status.get("executionClaims") or []
         if not claims:
             return None
-        claim = dict(claims[-1])
+        active_lease = status.get("active_lease") or status.get("activeLease")
+        if isinstance(active_lease, Mapping):
+            active_attempt_id = str(
+                active_lease.get("attempt_id") or active_lease.get("attemptId") or ""
+            )
+            active_claim_id = str(
+                active_lease.get("claim_id") or active_lease.get("claimId") or ""
+            )
+            matches = [
+                dict(candidate)
+                for candidate in claims
+                if str(candidate.get("attempt_id") or candidate.get("attemptId") or "")
+                == active_attempt_id
+                and (
+                    not active_claim_id
+                    or str(candidate.get("claim_id") or candidate.get("claimId") or "")
+                    == active_claim_id
+                )
+            ]
+            if len(matches) != 1:
+                raise LocalRuntimeError(
+                    "ambiguous-identity",
+                    "Active Work lease does not bind exactly one execution Attempt",
+                )
+            claim = matches[0]
+        else:
+            claim = dict(claims[0])
         phase = str(status.get("phase") or "claimed")
         state = phase if phase in {"claimed", "executing", "settled"} else "claimed"
         return {
-            "attemptId": str(claim.get("attempt_id") or claim.get("claim_id") or ""),
-            "claimId": str(claim.get("claim_id") or ""),
+            "attemptId": str(
+                claim.get("attempt_id")
+                or claim.get("attemptId")
+                or claim.get("claim_id")
+                or claim.get("claimId")
+                or ""
+            ),
+            "claimId": str(claim.get("claim_id") or claim.get("claimId") or ""),
             "state": state,
         }
 
