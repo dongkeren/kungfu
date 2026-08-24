@@ -29,7 +29,8 @@ namespace yy_enums = kungfu::yijinjing::enums;
 bool is_kfx_registry_action(const std::string &action) {
   static const std::string actions =
       "|list|inspect|resolve|plan|status|assess|apply|authorize-host|history|runtime-warrant-issue|"
-      "runtime-warrant-heartbeat|runtime-warrant-revoke|runtime-warrant-settle|runtime-warrant-recover|kfd-10-witness|";
+      "runtime-warrant-adopt|runtime-warrant-heartbeat|runtime-warrant-revoke|runtime-warrant-settle|"
+      "runtime-warrant-recover|kfd-10-witness|";
   return actions.contains("|" + action + "|");
 }
 

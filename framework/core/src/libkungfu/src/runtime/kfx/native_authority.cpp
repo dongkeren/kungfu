@@ -1000,6 +1000,42 @@ json issue_runtime_warrant(const json &descriptor, const json &launch, const jso
           {"receipt", receipt}};
 }
 
+json adopt_runtime_warrant(const json &descriptor, const json &launch, const json &request,
+                           const std::string &runtime_dir) {
+  const auto &authorization = launch.at("authorization");
+  const auto package_key = authorization.at("packageKey").get<std::string>();
+  const auto host = authorization.at("host").get<std::string>();
+  const auto issued_at = runtime_time(request, "issuedAt");
+  for (const auto *field : {"expectedWarrantRoot", "expectedGeneration", "expectedFencingToken"}) {
+    if (request.contains(field))
+      refuse("KF_KFX_RUNTIME_FENCE_STALE",
+             std::string("Runtime Warrant adoption derives recovery fencing in Core; caller supplied ") + field);
+  }
+
+  json recovery = nullptr;
+  const auto current = load_runtime_warrant(runtime_dir, package_key, host);
+  if (current.present && current.state.value("state", "") == "active") {
+    const bool lease_expired = issued_at >= current.state.at("expiresAt").get<int64_t>();
+    const bool heartbeat_expired = issued_at > current.state.at("heartbeatDeadline").get<int64_t>();
+    if (!lease_expired && !heartbeat_expired)
+      refuse("KF_KFX_RUNTIME_WARRANT_ACTIVE",
+             "the package and host already have a live Runtime Warrant; adoption cannot steal its lease");
+    recovery = transition_runtime_warrant("runtime-warrant-recover",
+                                          {{"packageKey", package_key},
+                                           {"host", host},
+                                           {"expectedWarrantRoot", current.warrant.at("warrantRoot")},
+                                           {"expectedGeneration", current.state.at("generation")},
+                                           {"expectedFencingToken", current.state.at("fencingToken")},
+                                           {"recordedAt", issued_at}},
+                                          runtime_dir);
+  }
+
+  auto result = issue_runtime_warrant(descriptor, launch, request, runtime_dir);
+  result["schema"] = "kungfu.kfx.runtime-warrant-adoption/v1";
+  result["recovery"] = recovery;
+  return result;
+}
+
 void require_runtime_fence(const runtime_warrant_view &current, const json &request, bool require_holder) {
   if (!current.present)
     refuse("KF_KFX_RUNTIME_WARRANT_MISSING", "no Runtime Warrant exists for the requested package and host");

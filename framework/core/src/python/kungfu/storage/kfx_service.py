@@ -54,6 +54,7 @@ def kfx_registry(
         "history",
         "authorize-host",
         "runtime-warrant-issue",
+        "runtime-warrant-adopt",
         "runtime-warrant-heartbeat",
         "runtime-warrant-revoke",
         "runtime-warrant-settle",
