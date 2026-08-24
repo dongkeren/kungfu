@@ -1930,6 +1930,67 @@ def test_invalid_completion_evidence_is_rejected_before_pending_write(
         assert authority._read()["effects"] == []
 
 
+def test_rejected_pending_replay_keeps_manual_recovery_reachable(tmp_path):
+    runtime_dir = tmp_path / "rejected-replay" / ".kungfu" / "runtime"
+
+    class RejectingReplayAuthority(FakeAuthority):
+        def apply(self, command):
+            raise LocalRuntimeError("backend-unavailable", "deterministic rejection")
+
+    authority = RejectingReplayAuthority(runtime_dir)
+    runtime = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    snapshot = _handle(
+        runtime, _request("assignment.snapshot", "assignment.snapshot.read")
+    )
+    command = _command(snapshot["revision"])
+    runtime._state["pending"] = {
+        "commandRoot": _root(command),
+        "command": command,
+        "beforeRevision": snapshot["revision"],
+        "requestId": "rejected.pending.replay",
+    }
+    runtime._save_state()
+    runtime.close()
+
+    restarted = EmbeddedLocalAssignmentRuntime(
+        runtime_dir,
+        realm_id=REALM["realmId"],
+        generation=REALM["generation"],
+        authority=authority,
+        contract=ASSIGNMENT_RUNTIME_CONTRACT,
+        request_schema=ENVELOPE_SCHEMA,
+    ).start()
+    try:
+        assert restarted._state["pending"]["commandRoot"] == _root(command)
+        assert restarted._state["diagnostics"][-1] == {
+            "code": "interrupted-write-retry-failed",
+            "message": (
+                "The interrupted command could not be replayed; its authority "
+                "outcome remains unknown"
+            ),
+            "severity": "error",
+            "recovery": ["diagnostics.get", "recovery.plan"],
+            "details": {"causeCode": "backend-unavailable"},
+        }
+        blocked = restarted.handle(
+            _request("assignment.snapshot", "assignment.snapshot.read")
+        )
+        assert blocked["error"]["code"] == "backend-unavailable"
+
+        plan = _handle(restarted, _request("recovery.plan", "assignment.recovery.plan"))
+        assert plan["result"]["status"] == "manual-review-required"
+        assert plan["result"]["operatorResolution"]["commandRoot"] == _root(command)
+    finally:
+        restarted.close()
+
+
 def test_restart_rejects_legacy_invalid_executor_pending_before_authority(tmp_path):
     runtime_dir = tmp_path / "legacy-invalid-executor" / ".kungfu" / "runtime"
     authority = FakeAuthority(runtime_dir)
