@@ -159,6 +159,45 @@ class LocalRuntimeError(RuntimeError):
         self.diagnostics = list(diagnostics or [])
 
 
+def _validate_completion_evidence_row(index: int, row: Any) -> None:
+    if not isinstance(row, Mapping):
+        raise LocalRuntimeError(
+            "invalid-command",
+            "evidenceAvailability rows must be objects",
+            details={"field": "evidenceAvailability", "index": index},
+        )
+    acceptance = str(row.get("acceptance") or "").strip()
+    level = str(row.get("level") or "").strip()
+    state = str(row.get("state") or "").strip()
+    if (
+        not acceptance
+        or level not in {"thin", "full"}
+        or state not in {"available", "unavailable", "missing"}
+    ):
+        raise LocalRuntimeError(
+            "invalid-command",
+            "evidenceAvailability requires acceptance, thin/full level, "
+            "and available/unavailable/missing state",
+            details={"field": "evidenceAvailability", "index": index},
+        )
+
+
+def _validate_completion_evidence_availability(
+    command: Mapping[str, Any], arguments: Mapping[str, Any]
+) -> None:
+    if command.get("type") != "assignment.completion.claim":
+        return
+    evidence_availability = arguments.get("evidenceAvailability", [])
+    if not isinstance(evidence_availability, list):
+        raise LocalRuntimeError(
+            "invalid-command",
+            "evidenceAvailability must be an array",
+            details={"field": "evidenceAvailability"},
+        )
+    for index, row in enumerate(evidence_availability):
+        _validate_completion_evidence_row(index, row)
+
+
 def _validate_command_arguments(command: Mapping[str, Any]) -> None:
     arguments = command.get("arguments")
     if not isinstance(arguments, Mapping):
@@ -169,6 +208,40 @@ def _validate_command_arguments(command: Mapping[str, Any]) -> None:
             "invalid-command",
             "Assessment executor profile must be inline, thread, or process",
             details={"field": "executorProfile"},
+        )
+    _validate_completion_evidence_availability(command, arguments)
+
+
+def _validate_assignment_create_references(
+    command: Mapping[str, Any], snapshot: Mapping[str, Any]
+) -> None:
+    if command.get("type") != "assignment.create":
+        return
+    arguments = command.get("arguments")
+    if not isinstance(arguments, Mapping):
+        return
+    parent_assignment_id = str(arguments.get("parentAssignmentId") or "")
+    if not parent_assignment_id:
+        return
+    if arguments.get("parentAssignmentRef"):
+        raise LocalRuntimeError(
+            "invalid-command",
+            "Pass parentAssignmentId shorthand or parentAssignmentRef, not both",
+            details={"fields": ["parentAssignmentId", "parentAssignmentRef"]},
+        )
+    matches = [
+        row
+        for row in snapshot.get("assignments") or []
+        if row.get("assignmentId") == parent_assignment_id
+    ]
+    if len(matches) != 1:
+        raise LocalRuntimeError(
+            "invalid-command",
+            "Local parent Assignment shorthand must resolve exactly once",
+            details={
+                "field": "parentAssignmentId",
+                "matches": len(matches),
+            },
         )
 
 
