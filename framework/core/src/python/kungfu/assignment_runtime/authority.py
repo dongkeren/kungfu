@@ -267,8 +267,8 @@ def _interrupted_command_rejection(
     diagnostic = {
         "code": "interrupted-command-rejected",
         "message": (
-            "An interrupted command failed deterministic validation before "
-            "authority execution"
+            "An interrupted command failed deterministic validation without "
+            "an admitted authority mutation"
         ),
         "severity": "warning",
         "recovery": [],
@@ -323,6 +323,17 @@ class WorkControlAuthority:
             )
         except profile_sdk.ProfileSdkError as error:
             code = str(error.diagnosis.get("code") or "")
+            cause = error.__cause__
+            if (
+                write
+                and code == "member-adapter-invoke-failed"
+                and isinstance(cause, ValueError)
+            ):
+                raise LocalRuntimeError(
+                    "invalid-command",
+                    str(cause),
+                    details={"operation": operation},
+                ) from error
             if code in {
                 "member-resolution-failed",
                 "profile-member-ambiguous",

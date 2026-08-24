@@ -341,7 +341,13 @@ class EmbeddedLocalAssignmentRuntime(AssignmentRuntimeRecoveryMixin):
             return
         before = dict(pending.get("beforeRevision") or {})
         if revision.get("root") == before.get("root"):
-            authority_result = self.authority.apply(dict(pending["command"]))
+            try:
+                authority_result = self.authority.apply(dict(pending["command"]))
+            except LocalRuntimeError as error:
+                if error.code != "invalid-command":
+                    raise
+                self._reject_pending_before_authority(pending, error)
+                return
             pending = {**dict(pending), "authorityResult": authority_result}
             self._state["pending"] = pending
             self._save_state()
