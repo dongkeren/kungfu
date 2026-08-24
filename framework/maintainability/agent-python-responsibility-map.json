@@ -2,7 +2,7 @@
   "schema": "kungfu.agent-python-responsibility-map/v1",
   "baselineRevision": "431eb6728e1a08ee9879b14afdf315d3d0d78b87",
   "measurement": {
-    "functionRisk": "framework/maintainability/function-risk.mjs extractFunctions baseRisk",
+    "functionRisk": "framework/maintainability/function-risk.mjs extractFunctions baseRisk with ordered same-path duplicate-symbol occurrence identity",
     "physicalLines": "UTF-8 source splitlines",
     "responsibilities": "top-level classes/functions plus distinct kungfu imports"
   },
@@ -251,7 +251,7 @@
             "functionRisk": {
               "functions": 101,
               "baseRisk": 1947,
-              "changeRisk": 2260,
+              "changeRisk": 2195,
               "maximum": 325
             }
           },
@@ -265,7 +265,7 @@
             "functionRisk": {
           "functions": 113,
           "baseRisk": 1894,
-          "changeRisk": 2258,
+          "changeRisk": 2193,
               "maximum": 254
             }
           }

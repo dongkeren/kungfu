@@ -15,6 +15,24 @@ function uniqueBy(items, key) {
   );
 }
 
+function pathOccurrenceIndex(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = `${item.path}\0${item.symbol}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const result = new Map();
+  for (const [key, values] of groups) {
+    values.sort(
+      (left, right) =>
+        left.startLine - right.startLine || left.id.localeCompare(right.id),
+    );
+    values.forEach((item, index) => result.set(item.id, `${key}\0${index}`));
+  }
+  return result;
+}
+
 function referencedNewFunctions(sourceFiles, functions, baselineById) {
   const sourceByPath = new Map(
     sourceFiles.map((file) => [file.path, file.bytes.toString('utf8')]),
@@ -53,8 +71,10 @@ function analyzeTransition(
   policy,
   options = {},
 ) {
+  const currentOccurrences = pathOccurrenceIndex(current);
+  const baselineOccurrences = pathOccurrenceIndex(baseline);
   const exact = new Map(
-    baseline.map((item) => [`${item.path}\0${item.symbol}`, item]),
+    baseline.map((item) => [baselineOccurrences.get(item.id), item]),
   );
   const uniqueOwnerSymbols = uniqueBy(
     baseline.filter(({ owner }) => owner),
@@ -69,7 +89,7 @@ function analyzeTransition(
   const transitions = [];
   const functions = current.map((item) => {
     const previous =
-      exact.get(`${item.path}\0${item.symbol}`) ||
+      exact.get(currentOccurrences.get(item.id)) ||
       (options.movementScope === 'same-owner'
         ? options.movementIdentity === 'body-root'
           ? uniqueOwnerBodies.get(

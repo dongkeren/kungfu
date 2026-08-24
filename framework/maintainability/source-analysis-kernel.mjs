@@ -609,6 +609,87 @@ function pythonFunctions(source, stripped) {
   return results;
 }
 
+function pythonSignatureLine(line, begin, state) {
+  for (let column = begin; column < line.length; column += 1) {
+    const char = line[column];
+    if (char === '(') state.depth += 1;
+    else if (char === ')') {
+      state.depth -= 1;
+      if (state.depth === 0) state.closed = true;
+    } else if (char === ':' && state.closed && state.depth === 0) return true;
+  }
+  return false;
+}
+
+function pythonSignatureEnd(lines, start, openColumn) {
+  const state = { depth: 0, closed: false };
+  for (let index = start; index < lines.length; index += 1)
+    if (
+      pythonSignatureLine(lines[index], index === start ? openColumn : 0, state)
+    )
+      return index;
+  return start;
+}
+
+function pythonDedentLine(line, width) {
+  let removed = 0;
+  let index = 0;
+  while (index < line.length && removed < width) {
+    if (line[index] === ' ') removed += 1;
+    else if (line[index] === '\t') removed += 4;
+    else break;
+    index += 1;
+  }
+  return line.slice(index);
+}
+
+function pythonBodyEnd(lines, signatureEnd, indent) {
+  let end = signatureEnd + 1;
+  while (end < lines.length) {
+    if (!lines[end].trim()) {
+      end += 1;
+      continue;
+    }
+    const nextIndent = (lines[end].match(/^\s*/u)?.[0] || '').replaceAll(
+      '\t',
+      '    ',
+    ).length;
+    if (nextIndent <= indent) break;
+    end += 1;
+  }
+  return end;
+}
+
+function pythonFunctionsV2(source, stripped) {
+  const lines = stripped.split('\n');
+  const original = source.split('\n');
+  const results = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s*)(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/u.exec(
+      lines[index],
+    );
+    if (!match) continue;
+    const indent = match[1].replaceAll('\t', '    ').length;
+    const signatureEnd = pythonSignatureEnd(
+      lines,
+      index,
+      lines[index].indexOf('(', match.index),
+    );
+    const end = pythonBodyEnd(lines, signatureEnd, indent);
+    results.push({
+      symbol: match[2],
+      startLine: index + 1,
+      endLine: Math.max(index + 1, end),
+      body: original.slice(index, end).join('\n'),
+      strippedBody: lines
+        .slice(index, end)
+        .map((line) => pythonDedentLine(line, indent))
+        .join('\n'),
+    });
+  }
+  return results;
+}
+
 function bracedFunctions(source, stripped, family) {
   const starts = lineStarts(stripped);
   const seen = new Set();
@@ -637,14 +718,20 @@ function bracedFunctions(source, stripped, family) {
   );
 }
 
-function extractFunctions(file, layers, ownership) {
+function selectedPythonFunctions(source, stripped, options) {
+  return options.extractorAlgorithm === 'python-multiline-v2'
+    ? pythonFunctionsV2(source, stripped)
+    : pythonFunctions(source, stripped);
+}
+
+function extractFunctions(file, layers, ownership, options = {}) {
   const family = languageFamily(file.path);
   if (!family) return [];
   const source = file.bytes.toString('utf8');
   const stripped = stripStringsAndComments(source, family);
   const extracted =
     family === 'python'
-      ? pythonFunctions(source, stripped)
+      ? selectedPythonFunctions(source, stripped, options)
       : bracedFunctions(source, stripped, family);
   return extracted.map((item) => {
     const metrics = metricsFor(item.strippedBody, family);
@@ -671,7 +758,7 @@ function extractFunctions(file, layers, ownership) {
   });
 }
 
-function functionSnapshot(files, policy, layers, ownership) {
+function functionSnapshot(files, policy, layers, ownership, options = {}) {
   const all = files
     .filter(({ path: pathname }) => languageFamily(pathname))
     .map((file) => ({
@@ -686,7 +773,7 @@ function functionSnapshot(files, policy, layers, ownership) {
     policy.includedClasses.includes(file.class),
   );
   const functions = included
-    .flatMap((file) => extractFunctions(file, layers, ownership))
+    .flatMap((file) => extractFunctions(file, layers, ownership, options))
     .sort((left, right) => left.id.localeCompare(right.id));
   const fileFacts = all.map(({ bytes: _bytes, ...fact }) => fact);
   return { sourceRoot: digest(fileFacts), files: fileFacts, functions };

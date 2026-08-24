@@ -367,6 +367,25 @@ test('required matching never carries risk across an owner boundary', () => {
   assert.equal(result.functions[0].previousId, null);
 });
 
+test('same-path duplicate symbols retain their ordered occurrence identity', () => {
+  const baseline = [
+    metric({ id: 'first', symbol: 'close', startLine: 10, baseRisk: 40 }),
+    metric({ id: 'second', symbol: 'close', startLine: 40, baseRisk: 4 }),
+  ];
+  const current = baseline.map((item, index) => ({
+    ...item,
+    id: `current-${item.id}`,
+    startLine: item.startLine + 2 + index,
+  }));
+  const transition = analyzeTransition(current, baseline, [], [], policy, {
+    movementScope: 'same-owner',
+  });
+  assert.deepEqual(
+    transition.functions.map(({ previousId }) => previousId),
+    ['first', 'second'],
+  );
+});
+
 test('advisory movement requires the same owner and exact function body', () => {
   const previous = metric({ owner: 'owner/shared' });
   const unrelated = metric({
@@ -755,4 +774,62 @@ test('C++ view uses its exact protected-head baseline and excludes other languag
   assert.ok(
     report.retiredFunctions.every(({ language }) => language === 'c-cpp'),
   );
+});
+
+test('python multiline v2 follows the closing signature into the indented body', () => {
+  const file = {
+    path: 'framework/a.py',
+    bytes: Buffer.from(
+      [
+        'def work(',
+        '    first,',
+        '    second,',
+        '):',
+        '    if first:',
+        '        return second',
+        '    return None',
+        '',
+        '@decorated',
+        'def next_work():',
+        '    return 1',
+        '',
+      ].join('\n'),
+    ),
+  };
+  const legacy = extractKernelFunctions(file, layers, ownership);
+  const v2 = extractKernelFunctions(file, layers, ownership, {
+    extractorAlgorithm: 'python-multiline-v2',
+  });
+  assert.equal(legacy[0].endLine, 3);
+  assert.equal(v2[0].endLine, 8);
+  assert.equal(v2[0].cyclomatic, 2);
+  assert.equal(v2[0].cognitive, 1);
+  assert.equal(v2[1].symbol, 'next_work');
+  assert.equal(v2[1].startLine, 10);
+});
+
+test('python multiline v2 normalizes class indentation for stable moved bodies', () => {
+  const topLevel = {
+    path: 'framework/top.py',
+    bytes: Buffer.from(
+      'def work(value):\n    if value:\n        return value\n    return None\n',
+    ),
+  };
+  const classMethod = {
+    path: 'framework/class.py',
+    bytes: Buffer.from(
+      'class Owner:\n    def work(value):\n        if value:\n            return value\n        return None\n',
+    ),
+  };
+  const options = { extractorAlgorithm: 'python-multiline-v2' };
+  const first = extractKernelFunctions(topLevel, layers, ownership, options)[0];
+  const second = extractKernelFunctions(
+    classMethod,
+    layers,
+    ownership,
+    options,
+  )[0];
+  assert.equal(second.bodyRoot, first.bodyRoot);
+  assert.equal(second.baseRisk, first.baseRisk);
+  assert.equal(second.cognitive, first.cognitive);
 });
