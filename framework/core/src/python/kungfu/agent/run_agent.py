@@ -31,6 +31,7 @@ from kungfu.agent.native_launch import (
     NativeLaunchCoordinator,
     apply_platform_tls_trust,
     encode_wrapper_prompt as _encode_windows_wrapper_prompt,
+    managed_console_scope as _managed_console_scope,
     managed_workspace_id as _managed_workspace_id,
     native_environment as _native_environment,
     native_provider_adapter,
@@ -891,7 +892,12 @@ def execute(
         elif work != continuation_value["workRef"]:
             raise ValueError("WorkRef does not match the continuation envelope")
     provider = str(selected["provider"])
-    cwd = _cwd(selected, workspace_root=workspace_root, home=home)
+    cwd, runtime_dir = _managed_console_scope(
+        _cwd(selected, workspace_root=workspace_root, home=home),
+        home,
+        work,
+        runtime_dir,
+    )
     argv = launch_argv(
         selected,
         prompt,

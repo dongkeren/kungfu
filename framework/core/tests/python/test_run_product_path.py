@@ -15,6 +15,7 @@ from kungfu.agent import native_launch
 from kungfu.agent import run_agent
 from kungfu.cli.commands import assignment, assignment_review, kfc, run
 from kungfu.workspace import (
+    ensure_workspace_data_home,
     inspect_workspace,
     resolve_workspace_target,
     select_workspace,
@@ -1858,6 +1859,13 @@ def test_prompt_only_agent_console_uses_exact_project_workspace_identity(
 ):
     project = tmp_path / "project"
     project.mkdir()
+    project_candidate = resolve_workspace_target(
+        "capture-only", str(project), cwd=str(project)
+    )
+    ensure_workspace_data_home(project_candidate.identity, "workspace-identity-fixture")
+    project_target = resolve_workspace_target(
+        "read-only", str(project), cwd=str(project)
+    )
     launched = []
     monkeypatch.setattr(
         run_agent,
@@ -1877,13 +1885,6 @@ def test_prompt_only_agent_console_uses_exact_project_workspace_identity(
         "verify_profile",
         lambda _profile: {"ok": True, "version": "arbitrary-version"},
     )
-    monkeypatch.setattr(
-        native_launch,
-        "inspect_workspace",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            workspace_kind="project", workspace_id="project:exact"
-        ),
-    )
 
     def run_process(*_args, **kwargs):
         launched.append(kwargs)
@@ -1900,19 +1901,27 @@ def test_prompt_only_agent_console_uses_exact_project_workspace_identity(
     environment = launched[0]["env"]
     envelope = json.loads(environment["KUNGFU_AGENT_CONSOLE_ENVELOPE"])
     assert environment["KUNGFU_WORKSPACE_ROOT"] == str(project)
-    assert envelope["workspaceId"] == "project:exact"
-    assert envelope["consoleId"].startswith("assistant:project:exact:agent-")
+    assert environment["KUNGFU_AGENT_RUNTIME_DIR"] == str(project_target.runtime_dir)
+    assert envelope["workspaceId"] == project_target.identity.workspace_id
+    assert envelope["consoleId"].startswith(
+        f"assistant:{project_target.identity.workspace_id}:agent-"
+    )
     assert envelope["workRef"] is None
 
+    unqualified = tmp_path / "unqualified"
+    unqualified.mkdir()
     monkeypatch.setattr(
         native_launch, "inspect_workspace", lambda *_args, **_kwargs: None
     )
     run_agent.execute(
         prompt="inspect unqualified directory",
         runtime_dir=str(tmp_path / "fallback-runtime"),
-        workspace_root=str(project),
+        workspace_root=str(unqualified),
         process_runner=run_process,
     )
     fallback_envelope = json.loads(launched[1]["env"]["KUNGFU_AGENT_CONSOLE_ENVELOPE"])
-    assert fallback_envelope["workspaceId"] == str(project)
-    assert fallback_envelope["consoleId"].startswith(f"assistant:{project}:agent-")
+    assert launched[1]["env"]["KUNGFU_AGENT_RUNTIME_DIR"] == str(
+        tmp_path / "fallback-runtime"
+    )
+    assert fallback_envelope["workspaceId"] == str(unqualified)
+    assert fallback_envelope["consoleId"].startswith(f"assistant:{unqualified}:agent-")

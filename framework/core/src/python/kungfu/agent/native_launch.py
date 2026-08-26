@@ -101,6 +101,33 @@ def managed_workspace_id(work: Mapping[str, Any] | None, workspace_root: str) ->
     )
 
 
+def managed_runtime_dir(
+    work: Mapping[str, Any] | None, workspace_root: str, fallback_runtime_dir: str
+) -> str:
+    """Use the stable Project runtime for a Project-scoped managed Console."""
+
+    workspace_identity = inspect_workspace(workspace_root, cwd=workspace_root)
+    if (
+        workspace_identity is None
+        or workspace_identity.workspace_kind != "project"
+        or workspace_identity.identity_state != "qualified"
+        or (
+            work is not None
+            and str(work.get("workspaceId") or "") != workspace_identity.workspace_id
+        )
+    ):
+        return fallback_runtime_dir
+    target = resolve_workspace_target("read-only", workspace_root, cwd=workspace_root)
+    return str(target.runtime_dir)
+
+
+def managed_console_scope(cwd, home, work, fallback_runtime_dir):
+    """Pair a managed Console cwd with its qualified Project runtime."""
+
+    exact_root = str(cwd or home or os.path.expanduser("~"))
+    return cwd, managed_runtime_dir(work, exact_root, fallback_runtime_dir)
+
+
 def resolve_native_launch_target(ctx, workspace_root=None, *, cwd=None):
     """Resolve native provider cwd without requiring durable Project Work."""
 
