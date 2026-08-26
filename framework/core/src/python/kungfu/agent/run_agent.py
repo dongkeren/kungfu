@@ -31,6 +31,7 @@ from kungfu.agent.native_launch import (
     NativeLaunchCoordinator,
     apply_platform_tls_trust,
     encode_wrapper_prompt as _encode_windows_wrapper_prompt,
+    managed_workspace_id as _managed_workspace_id,
     native_environment as _native_environment,
     native_provider_adapter,
     provider_interactive_argv as interactive_launch_argv,
@@ -913,9 +914,8 @@ def execute(
         .expanduser()
         .resolve()
     )
-    workspace_id = str(
-        work.get("workspaceId") if work is not None else cwd or runtime_home
-    )
+    workspace_root = str(cwd or runtime_home)
+    workspace_id = _managed_workspace_id(work, workspace_root)
     managed_session_ref = (
         _session_ref(work, run_id)
         if work is not None
@@ -936,7 +936,7 @@ def execute(
         runtime_dir=runtime_dir,
         config_home=effective_config_home,
         runtime_home=runtime_home,
-        workspace_root=str(cwd or runtime_home),
+        workspace_root=workspace_root,
         work_ref=work,
         work_selection={"workspaceId": workspace_id},
         profile=selected,
