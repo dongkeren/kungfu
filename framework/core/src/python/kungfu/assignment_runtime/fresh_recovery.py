@@ -613,6 +613,7 @@ def _apply_from_ports(
                 initiative_id,
                 assignment_id,
                 work_workspace_root=workspace_root,
+                work_profile_source=recovery_profile_source,
                 expected_binding=expected,
             )
             or {}

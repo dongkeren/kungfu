@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 import uuid
 
+from kungfu import profile_sdk
 from kungfu.agent.work_projection import WorkProjectionPort
 from kungfu.agent import resources as agent_resources
 from kungfu.agent import runtime_profiles
@@ -42,6 +43,17 @@ _DARWIN_DEFAULT_SSL_CERT_FILE = Path("/etc/ssl/cert.pem")
 COMMAND_WRAPPER_SUFFIXES = _COMMAND_WRAPPER_SUFFIXES
 encode_wrapper_prompt = _encode_wrapper_prompt
 resolve_command_wrapper = _resolve_command_wrapper
+
+
+def work_profile_inspection(
+    source: str | Path | None,
+    fallback: Callable[[], str | Path],
+    runtime_dir: str | Path,
+) -> Mapping[str, Any]:
+    """Validate an explicit retained Work profile or the ordinary bound source."""
+
+    resolved = Path(source).expanduser().resolve() if source is not None else fallback()
+    return profile_sdk.validate_source(resolved, runtime_dir)["inspection"]
 
 
 def provider_interactive_argv(profile: Mapping[str, Any]) -> list[str]:

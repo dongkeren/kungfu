@@ -38,6 +38,7 @@ from kungfu.agent.native_launch import (
     provider_interactive_argv as interactive_launch_argv,
     provider_runtime_health as _provider_runtime_health,
     resolve_command_wrapper as _resolve_windows_command_wrapper,
+    work_profile_inspection as _work_profile_inspection,
 )
 from kungfu.agent.provider_bootstrap import refresh_native_skill_runtime_audit
 from kungfu.agent.managed_run import ManagedRunCoordinator
@@ -72,6 +73,7 @@ def bind_current_native_work(
     assignment_id: str,
     *,
     work_workspace_root: str | None = None,
+    work_profile_source: str | Path | None = None,
     envelope_override: Mapping[str, Any] | None = None,
     console_workspace_root: str | None = None,
     expected_binding: Mapping[str, Any] | None = None,
@@ -89,7 +91,6 @@ def bind_current_native_work(
             dict(envelope_override or {})
         )
     )
-    from kungfu import profile_sdk
     from kungfu.cli.commands import assignment as work_commands
 
     workspace_root = (
@@ -148,9 +149,9 @@ def bind_current_native_work(
             binding_scope = "explicit-external-project"
 
     status = work_commands._status(work_runtime_dir, initiative_id, assignment_id)
-    work_control = profile_sdk.validate_source(
-        work_commands.profile_source(), work_runtime_dir
-    )["inspection"]
+    work_control = _work_profile_inspection(
+        work_profile_source, work_commands.profile_source, work_runtime_dir
+    )
     work_ref = {
         "schema": "kungfu.work-ref/v1",
         "workspaceId": work_workspace_id,

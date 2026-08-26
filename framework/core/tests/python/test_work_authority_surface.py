@@ -973,6 +973,78 @@ def test_fresh_recovery_prepare_does_not_require_newer_profile_work_hooks(
     assert receipt["profileContractMutation"] == "not-permitted"
 
 
+def test_fresh_recovery_apply_passes_explicit_profile_source_to_binder(
+    tmp_path, monkeypatch
+):
+    status, binding, plan = _fresh_recovery_fixture()
+    workspace_root = tmp_path / "project"
+    workspace_root.mkdir()
+    profile_source = tmp_path / "retained-work-control"
+    profile_source.mkdir()
+    plan["workspace"]["root"] = str(workspace_root)
+    plan["generatedAt"] = "2099-01-01T00:00:00Z"
+    plan["expiresAt"] = "2099-01-01T00:10:00Z"
+    plan["planRoot"] = assignment_fresh_recovery._root(
+        {key: value for key, value in plan.items() if key != "planRoot"}
+    )
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps(plan), encoding="utf-8")
+    observed = {}
+
+    monkeypatch.setattr(
+        assignment_fresh_recovery,
+        "_verify_recovery_profile_source",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        assignment_fresh_recovery,
+        "_retained_status",
+        lambda *_args: json.loads(json.dumps(status)),
+    )
+    monkeypatch.setattr(
+        assignment_fresh_recovery,
+        "_current_session",
+        lambda _runtime_dir: dict(binding["session"]),
+    )
+
+    def bind_current_native_work(*_args, **kwargs):
+        observed.update(kwargs)
+        return {
+            "workRef": dict(plan["workRef"]),
+            "receipt": {"receiptRoot": f"sha256:{'8' * 64}"},
+        }
+
+    monkeypatch.setattr(
+        assignment_fresh_recovery.run_agent,
+        "bind_current_native_work",
+        bind_current_native_work,
+    )
+    identity = SimpleNamespace(
+        workspace_id=plan["workspace"]["id"],
+        identity_root=plan["workspace"]["identityRoot"],
+    )
+    receipt = assignment_fresh_recovery._apply_from_ports(
+        ctx=SimpleNamespace(runtime_dir=tmp_path / "console-runtime"),
+        plan_file=plan_file,
+        expected_plan_root=plan["planRoot"],
+        authorized_by="maintainer:test",
+        recovery_profile_source=profile_source,
+        runtime=lambda *_args: (identity, workspace_root / ".kungfu/runtime", {}),
+        status=lambda *_args: status,
+        prepare_resume_profile=lambda *_args: {
+            "status": "ready",
+            "profileSuiteRoot": plan["workRef"]["profileRoot"],
+        },
+    )
+
+    assert receipt["ok"] is True
+    assert observed["work_profile_source"] == profile_source
+    assert observed["expected_binding"] == {
+        "workRef": plan["workRef"],
+        "session": binding["session"],
+    }
+
+
 def test_fresh_recovery_failure_keeps_public_executable_next_actions(
     tmp_path, monkeypatch
 ):
