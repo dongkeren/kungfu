@@ -32,6 +32,7 @@ from kungfu.agent.provider_bootstrap import (
 from kungfu.skill import build_skill_context
 from kungfu.workspace import (
     WorkspaceTargetRequired,
+    inspect_workspace,
     load_workspace_registry,
     resolve_workspace_target,
 )
@@ -84,6 +85,20 @@ def unbound_work_selection(workspace_id):
         "selectionAuthority": "kungfu-work-cli",
         "entrypoint": "kungfu work status",
     }
+
+
+def managed_workspace_id(work: Mapping[str, Any] | None, workspace_root: str) -> str:
+    """Use exact Project identity for an unbound managed Agent Console."""
+
+    if work is not None:
+        return str(work["workspaceId"])
+    workspace_identity = inspect_workspace(workspace_root, cwd=workspace_root)
+    return str(
+        workspace_identity.workspace_id
+        if workspace_identity is not None
+        and workspace_identity.workspace_kind == "project"
+        else workspace_root
+    )
 
 
 def resolve_native_launch_target(ctx, workspace_root=None, *, cwd=None):

@@ -1851,3 +1851,68 @@ def test_direct_provider_starts_native_work_before_process_launch(
     assert managed_env["KUNGFU_SKILL_AUDIT_FILE"].endswith("-events.jsonl")
     assert Path(managed_env["KUNGFU_SKILL_RUNTIME_AUDIT_FILE"]).is_file()
     assert Path(managed_env["KUNGFU_SKILL_RUNTIME_AUDIT_FINAL_FILE"]).is_file()
+
+
+def test_prompt_only_agent_console_uses_exact_project_workspace_identity(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    project.mkdir()
+    launched = []
+    monkeypatch.setattr(
+        run_agent,
+        "select_profile",
+        lambda *_args, **_kwargs: (
+            {
+                "id": "opencode.test",
+                "provider": "opencode",
+                "cwdPolicy": "workspace-root",
+                "launch": {"executable": "/usr/bin/opencode", "argv": []},
+            },
+            {},
+        ),
+    )
+    monkeypatch.setattr(
+        run_agent.runtime_profiles,
+        "verify_profile",
+        lambda _profile: {"ok": True, "version": "arbitrary-version"},
+    )
+    monkeypatch.setattr(
+        native_launch,
+        "inspect_workspace",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            workspace_kind="project", workspace_id="project:exact"
+        ),
+    )
+
+    def run_process(*_args, **kwargs):
+        launched.append(kwargs)
+        return run_agent.ProcessResult(0, '{"type":"text"}\n', "", False, False)
+
+    result = run_agent.execute(
+        prompt="inspect project",
+        runtime_dir=str(tmp_path / "runtime"),
+        workspace_root=str(project),
+        process_runner=run_process,
+    )
+
+    assert result["launch"]["exitCode"] == 0
+    environment = launched[0]["env"]
+    envelope = json.loads(environment["KUNGFU_AGENT_CONSOLE_ENVELOPE"])
+    assert environment["KUNGFU_WORKSPACE_ROOT"] == str(project)
+    assert envelope["workspaceId"] == "project:exact"
+    assert envelope["consoleId"].startswith("assistant:project:exact:agent-")
+    assert envelope["workRef"] is None
+
+    monkeypatch.setattr(
+        native_launch, "inspect_workspace", lambda *_args, **_kwargs: None
+    )
+    run_agent.execute(
+        prompt="inspect unqualified directory",
+        runtime_dir=str(tmp_path / "fallback-runtime"),
+        workspace_root=str(project),
+        process_runner=run_process,
+    )
+    fallback_envelope = json.loads(launched[1]["env"]["KUNGFU_AGENT_CONSOLE_ENVELOPE"])
+    assert fallback_envelope["workspaceId"] == str(project)
+    assert fallback_envelope["consoleId"].startswith(f"assistant:{project}:agent-")
