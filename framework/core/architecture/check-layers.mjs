@@ -125,6 +125,7 @@ function reportWhen(condition, problems, message) {
   if (condition) problems.push(message);
 }
 
+// Keep validation passes as named, independently measurable units.
 function each(items, visit) {
   let index = 0;
   for (const item of items) {
