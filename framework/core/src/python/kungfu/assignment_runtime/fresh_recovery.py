@@ -550,6 +550,28 @@ def _verify_recovery_profile_source(
         raise ValueError("fresh recovery Profile source differs from the plan")
 
 
+def _current_binding_context(runtime_dir: str) -> tuple[JsonObject, JsonObject]:
+    current = session_surface.current_native_console(runtime_dir)
+    if current is None:
+        raise ValueError("fresh recovery requires a current native Agent Console")
+    source = str(current["source"])
+    envelope = dict(current["envelope"])
+    session = {
+        "workConsoleId": str(envelope["consoleId"]),
+        "sessionAttemptId": str(envelope["attemptId"]),
+    }
+    if source not in {"injected-native-console", "ambient-provider-session"}:
+        raise ValueError("fresh recovery requires an exact native Console source")
+    options = {
+        "injected-native-console": {},
+        "ambient-provider-session": {
+            "envelope_override": envelope,
+            "console_workspace_root": str(current["workspaceRoot"]),
+        },
+    }
+    return session, options[source]
+
+
 def _plan_from_ports(
     *,
     ctx,
@@ -633,24 +655,7 @@ def _apply_from_ports(
     ) or identity.identity_root != workspace.get("identityRoot"):
         raise ValueError("fresh recovery workspace identity changed")
     _verify_recovery_profile_source(plan, recovery_profile_source, runtime_dir)
-    current = session_surface.current_native_console(str(ctx.runtime_dir))
-    if current is None:
-        raise ValueError("fresh recovery requires a current native Agent Console")
-    current_source = str(current.get("source") or "")
-    envelope = dict(current.get("envelope") or {})
-    current_session = {
-        "workConsoleId": str(envelope.get("consoleId") or ""),
-        "sessionAttemptId": str(envelope.get("attemptId") or ""),
-    }
-    if current_source == "injected-native-console":
-        bind_options: JsonObject = {}
-    elif current_source == "ambient-provider-session":
-        bind_options = {
-            "envelope_override": envelope,
-            "console_workspace_root": str(current.get("workspaceRoot") or ""),
-        }
-    else:
-        raise ValueError("fresh recovery requires an exact native Console source")
+    current_session, bind_options = _current_binding_context(str(ctx.runtime_dir))
     receipt = apply_plan(
         plan,
         expected_plan_root=expected_plan_root,
