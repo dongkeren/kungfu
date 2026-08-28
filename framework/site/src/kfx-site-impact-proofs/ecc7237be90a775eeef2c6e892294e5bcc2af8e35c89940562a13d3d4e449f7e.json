@@ -1,0 +1,37 @@
+{
+  "contract": "kungfu.kfx-site-impact-proof/v1",
+  "baseRevision": "a5086fcdc01a0c0520dcb6c6031a43bc7c56846f",
+  "changeRoot": "sha256:bbf9cedc87886df5a768d65fa091bc356447480acc0e1cbede5a6d9b353ae978",
+  "changes": [
+    {
+      "baseContentRoot": "sha256:016c67c42618df951be534502108fdbde6b6ee35538094287d7dc10d754bb638",
+      "contentRoot": "sha256:588642db6fd8cccb15ebd0fe003be0715634cd168a34b165ea71566953f6c976",
+      "path": "extensions/system/kfx-manager/src/view/index.tsx",
+      "status": "modified"
+    },
+    {
+      "baseContentRoot": "sha256:a0fa463f1b4c9f303f22407446a0537616f9a5c63c815e892bedcdd3a70f8784",
+      "contentRoot": "sha256:676a68fd92a4cf29fd37c274272bb24f9f5613b0624ecaf95f1ce7e94c9ed6e1",
+      "path": "extensions/system/settings/src/view/index.tsx",
+      "status": "modified"
+    },
+    {
+      "baseContentRoot": "sha256:c46e24bb31a915f29676bfa588e8adf04085104bc7ae0fbb47367e3817cf2c87",
+      "contentRoot": "sha256:129a5adf4870a0d04e2b9d36f3991cf9ceacd5ade7d29a64f33dc087228165cf",
+      "path": "extensions/system/skill-manager/src/view/index.tsx",
+      "status": "modified"
+    }
+  ],
+  "affectedFacets": [
+    "capabilities",
+    "package-facets",
+    "profiles-suites"
+  ],
+  "rationale": "This refactor only decomposes existing KFX manager, settings, and skill manager view composition; it preserves rendered controls, runtime calls, public contracts, and Site reader journeys.",
+  "attestation": {
+    "publicBehaviorUnchanged": true,
+    "publicContractUnchanged": true,
+    "readerJourneyUnchanged": true
+  },
+  "proofRoot": "sha256:ecc7237be90a775eeef2c6e892294e5bcc2af8e35c89940562a13d3d4e449f7e"
+}
