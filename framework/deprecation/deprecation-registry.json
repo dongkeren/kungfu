@@ -104,7 +104,7 @@
           "date": "2026-08-28",
           "productVersion": "4.0.0-alpha.4"
         },
-        "gitCommit": "2e1083fed3992197bb9990697cd40a853ca21e1e",
+        "gitCommit": "2e1083fed39fe2e077c3e0f1d42d10a1fff13c96",
         "migrationQualification": [
           "framework/core/src/libyijinjing/tests/mmap_tests.cpp",
           "framework/core/src/libyijinjing/tests/mmap_qualification.cpp"
@@ -198,7 +198,7 @@
           "date": "2026-08-28",
           "productVersion": "4.0.0-alpha.4"
         },
-        "gitCommit": "2e1083fed3992197bb9990697cd40a853ca21e1e",
+        "gitCommit": "2e1083fed39fe2e077c3e0f1d42d10a1fff13c96",
         "migrationQualification": [
           "framework/core/src/libyijinjing/tests/mmap_tests.cpp",
           "framework/core/src/libyijinjing/tests/mmap_qualification.cpp"
@@ -292,7 +292,7 @@
           "date": "2026-08-28",
           "productVersion": "4.0.0-alpha.4"
         },
-        "gitCommit": "2e1083fed3992197bb9990697cd40a853ca21e1e",
+        "gitCommit": "2e1083fed39fe2e077c3e0f1d42d10a1fff13c96",
         "migrationQualification": [
           "framework/core/src/libyijinjing/tests/mmap_tests.cpp",
           "framework/core/src/libyijinjing/tests/mmap_qualification.cpp"
