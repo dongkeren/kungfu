@@ -23,8 +23,8 @@ test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs',
   const reusableRef = workflow.match(
     /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@([0-9a-f]{40})/u,
   )?.[1];
-  assert.equal(reusableRef, 'a7b5144bc1b0a50ef2637dfab23588b3f10ba8ab');
-  assert.match(workflow, new RegExp(`buildchain-ref: ${reusableRef}`, 'u'));
+  assert.equal(reusableRef, protectedWarrantRuntimeRef);
+  assert.match(workflow, /buildchain-ref: v4/u);
   assert.match(workflow, /workflow_run:[\s\S]*Core affected native/u);
   assert.match(
     workflow,
@@ -637,6 +637,22 @@ test('every protected Warrant consumer uses one Buildchain runtime authority', (
 
   assert.ok(refs.length > 0, 'expected protected Warrant runtime checkouts');
   assert.deepEqual([...new Set(refs)], [protectedWarrantRuntimeRef]);
+});
+
+test('protected delivery calls pin their workflow while resolving the v4 runtime selector', () => {
+  const workflow = fs.readFileSync(
+    '.github/workflows/dev-pr-auto-merge.yml',
+    'utf8',
+  );
+  const protectedCall = new RegExp(
+    `uses: kungfu-systems/buildchain/\\.github/workflows/dev-pr-auto-merge\\.yml@${protectedWarrantRuntimeRef}\\n[\\s\\S]*?with:\\n[ \\t]+buildchain-ref: v4`,
+    'gu',
+  );
+  assert.equal([...workflow.matchAll(protectedCall)].length, 2);
+  assert.doesNotMatch(
+    workflow,
+    new RegExp(`buildchain-ref: ${protectedWarrantRuntimeRef}`, 'u'),
+  );
 });
 
 test('native execution uses one exact protected runtime and continuous fence wrapper', () => {
