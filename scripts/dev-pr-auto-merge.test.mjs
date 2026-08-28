@@ -214,6 +214,8 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   assert.match(bridge, /actions: write/u);
   assert.match(bridge, /checks: read/u);
   assert.doesNotMatch(bridge, /checks: write/u);
+  assert.match(bridge, /GH_TOKEN: \$\{\{ secrets\.KUNGFU_GITHUB_TOKEN \}\}/u);
+  assert.doesNotMatch(bridge, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
   assert.match(
     bridge,
     /pattern: buildchain-dev-delivery-warrant-\*-\$\{\{ needs\.resolve-target\.outputs\.expected-pr-number \}\}/u,
