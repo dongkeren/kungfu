@@ -1,11 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import click
 import pytest
 
 from kungfu.cli.commands import kfx
+
+
+def test_kfx_cli_responsibility_modules_are_bounded():
+    facade = Path(kfx.__file__).resolve()
+    budgets = {
+        facade: 1000,
+        facade.parents[2] / "kfx_cli_support.py": 80,
+    }
+    for source, maximum in budgets.items():
+        assert len(source.read_text(encoding="utf-8").splitlines()) <= maximum
 
 
 def test_authority_file_rejects_lifecycle_and_caller_verdict_fields(tmp_path):
