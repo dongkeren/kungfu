@@ -31,7 +31,7 @@ test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs',
   const runtimeSelectors = [
     ...workflow.matchAll(/^\s+buildchain-ref:\s+(\S+)\s*$/gmu),
   ].map((match) => match[1]);
-  assert.deepEqual(runtimeSelectors, ['v4', 'v4']);
+  assert.deepEqual(runtimeSelectors, ['v4-alpha', 'v4-alpha']);
   assert.match(workflow, /workflow_run:[\s\S]*Core affected native/u);
   assert.match(
     workflow,
