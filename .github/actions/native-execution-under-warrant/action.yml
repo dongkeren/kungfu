@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: Run native execution under Delivery Warrant
-description: Observe, heartbeat, and continuously fence one native command with the exact protected Buildchain runtime.
+description: Anonymously observe and continuously fence one native command with the exact protected Buildchain runtime.
 
 inputs:
   command:
@@ -53,11 +53,10 @@ runs:
           # shifu-entry-contract: allow exact pinned Buildchain dependency bootstrap before its CLI is runnable
           corepack pnpm install --frozen-lockfile --ignore-scripts
         fi
-    - name: Execute only under the live fenced Warrant
+    - name: Execute only under the anonymously observed live fenced Warrant
       shell: bash
       env:
         BUILDCHAIN_CREDENTIAL_ANCESTRY_BOUNDARY: github-actions-runner-worker/v1
-        GITHUB_TOKEN: ${{ github.token }}
         KUNGFU_NATIVE_COMMAND: ${{ inputs.command }}
       run: >-
         node framework/dev-delivery/native-execution-under-warrant.mjs

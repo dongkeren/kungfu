@@ -626,6 +626,14 @@ test('native execution uses one exact protected runtime and continuous fence wra
     action,
     /BUILDCHAIN_CREDENTIAL_ANCESTRY_BOUNDARY: github-actions-runner-worker\/v1/u,
   );
+  assert.doesNotMatch(action, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/u);
+  assert.match(action, /anonymously observed live fenced Warrant/u);
+  const nativeWrapper = fs.readFileSync(
+    'framework/dev-delivery/native-execution-under-warrant.mjs',
+    'utf8',
+  );
+  assert.match(nativeWrapper, /'credential\.helper='/u);
+  assert.match(nativeWrapper, /GIT_TERMINAL_PROMPT: '0'/u);
 });
 
 test('steady-state Warrant dogfood remains a full-native canary with explicit safety invariants', () => {
