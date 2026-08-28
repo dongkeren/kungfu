@@ -220,6 +220,11 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   const landing = workflow.slice(workflow.indexOf('  landing:\n'));
 
   assert.match(bridge, /needs\.admission\.result == 'success'/u);
+  assert.match(
+    bridge,
+    /warrant="\$evidence\/dev-delivery\/warrant\.json"[\s\S]*test -f "\$warrant"/u,
+  );
+  assert.doesNotMatch(bridge, /warrant="\$evidence\/warrant\.json"/u);
   assert.match(bridge, /actions: write/u);
   assert.match(bridge, /checks: read/u);
   assert.doesNotMatch(bridge, /checks: write/u);
