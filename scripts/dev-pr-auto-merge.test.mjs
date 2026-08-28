@@ -219,6 +219,11 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   );
   assert.match(
     bridge,
+    /warrant="\$evidence\/dev-delivery\/warrant\.json"[\s\S]*test -f "\$warrant"/u,
+  );
+  assert.doesNotMatch(bridge, /warrant="\$evidence\/warrant\.json"/u);
+  assert.match(
+    bridge,
     /\.after\.stateRoot == \.observation\.stateRoot[\s\S]*\.warrant == \.observation\.activeWarrant[\s\S]*\.warrant\.sourceWorkflowRunId == \$sourceRun[\s\S]*\.warrant\.phase == "qualified"[\s\S]*\.warrant\.nativeProofRoot/u,
   );
   assert.match(
