@@ -17,6 +17,7 @@ const workflow = fs.readFileSync(
 );
 const steadyStateDogfoodFixturePath =
   'framework/core/tests/fixtures/dev-delivery-warrant-steady-state.json';
+const protectedWarrantRuntimeRef = 'a7b5144bc1b0a50ef2637dfab23588b3f10ba8ab';
 
 test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs', () => {
   const reusableRef = workflow.match(
@@ -610,12 +611,32 @@ test('the completed migration has no bootstrap bypass around Warrant admission',
   assert.match(sourceWorkflow, /Check out exact Buildchain Warrant runtime/u);
   assert.match(
     sourceWorkflow,
-    /ref: 0f4004d0d2b2474c2135a3e88d29d9c85bc37834/u,
+    new RegExp(`ref: ${protectedWarrantRuntimeRef}`, 'u'),
   );
   assert.doesNotMatch(
     sourceWorkflow,
     /migration\.outputs\.bootstrap|bounded two-phase migration bootstrap/u,
   );
+});
+
+test('every protected Warrant consumer uses one Buildchain runtime authority', () => {
+  const consumerPaths = [
+    '.github/actions/native-execution-under-warrant/action.yml',
+    '.github/workflows/affected-native-pr.yml',
+    '.github/workflows/dev-delivery-warrant-terminal.yml',
+    '.github/workflows/dev-pr-auto-merge.yml',
+    '.github/workflows/queue-admission-lease.yml',
+  ];
+  const checkoutPattern =
+    /repository: kungfu-systems\/buildchain\n(?:[ \t]*#.*\n)*[ \t]*ref: ([0-9a-f]{40})/gu;
+  const refs = consumerPaths
+    .flatMap((consumerPath) => [
+      ...fs.readFileSync(consumerPath, 'utf8').matchAll(checkoutPattern),
+    ])
+    .map((match) => match[1]);
+
+  assert.ok(refs.length > 0, 'expected protected Warrant runtime checkouts');
+  assert.deepEqual([...new Set(refs)], [protectedWarrantRuntimeRef]);
 });
 
 test('native execution uses one exact protected runtime and continuous fence wrapper', () => {
