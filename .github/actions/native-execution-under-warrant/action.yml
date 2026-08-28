@@ -56,6 +56,7 @@ runs:
     - name: Execute only under the live fenced Warrant
       shell: bash
       env:
+        BUILDCHAIN_CREDENTIAL_ANCESTRY_BOUNDARY: github-actions-runner-worker/v1
         GITHUB_TOKEN: ${{ github.token }}
         KUNGFU_NATIVE_COMMAND: ${{ inputs.command }}
       run: >-

@@ -671,6 +671,10 @@ test('native execution uses one exact protected runtime and continuous fence wra
     action,
     /native-execution-under-warrant\.mjs[\s\S]*--qualified-base[\s\S]*--toolchain-root[\s\S]*--environment-root[\s\S]*--heartbeat-seconds 300[\s\S]*--lease-seconds 5400/u,
   );
+  assert.match(
+    action,
+    /BUILDCHAIN_CREDENTIAL_ANCESTRY_BOUNDARY: github-actions-runner-worker\/v1/u,
+  );
 });
 
 test('steady-state Warrant dogfood remains a full-native canary with explicit safety invariants', () => {
