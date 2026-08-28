@@ -229,6 +229,11 @@ test('mutating Warrant controllers share one runtime and read-only qualification
       new RegExp(WARRANT_RUNTIME_SHA, 'u'),
       `${workflowPath} must consume Buildchain ${WARRANT_RUNTIME_SHA}`,
     );
+    assert.doesNotMatch(
+      workflow,
+      /buildchain-ref: train\//u,
+      `${workflowPath} must not mutate Warrant authority through a floating runtime ref`,
+    );
   }
   const qualificationWorkflow = fs.readFileSync(
     path.join(ROOT, '.github/workflows/affected-native-pr.yml'),

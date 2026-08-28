@@ -251,6 +251,11 @@ test('terminal consumer executes only protected event and Buildchain authority',
     workflow,
     /dev-delivery-warrant-cancel\.yml@ddac1876650f2faba5a9e1a2e5f55e7d836ac46b/u,
   );
+  assert.deepEqual(workflow.match(/^\s+buildchain-ref: .+$/gmu), [
+    '      buildchain-ref: ddac1876650f2faba5a9e1a2e5f55e7d836ac46b',
+    '      buildchain-ref: ddac1876650f2faba5a9e1a2e5f55e7d836ac46b',
+  ]);
+  assert.doesNotMatch(workflow, /buildchain-ref: train\//u);
   assert.doesNotMatch(workflow, /github\.event\.pull_request\.head\.ref/u);
   assert.doesNotMatch(workflow, /checkout[^\n]*pull_request\.head/u);
 });
