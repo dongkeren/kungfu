@@ -452,6 +452,10 @@ export function resolveQualificationSourceIdentity({
     throw new Error(
       'Buildchain source revision does not match the checked-out tree',
     );
+  if (configuredRevision && !configuredTree && !configuredRevisionTree)
+    throw new Error(
+      'Buildchain source revision requires an exact tree-equivalence proof',
+    );
   return {
     revision: configuredRevision || checkoutRevision,
     tree: checkoutTree,
