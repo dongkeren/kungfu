@@ -6,10 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import {
-  GitHubNativeStatusClient,
-  runNativeUnderWarrant,
-} from '../framework/dev-delivery/native-under-warrant.mjs';
+import { runNativeUnderWarrant } from '../framework/dev-delivery/native-under-warrant.mjs';
 
 const workflow = fs.readFileSync(
   '.github/workflows/dev-pr-auto-merge.yml',
@@ -158,10 +155,17 @@ test('Dev auto-merge waits for PR checks and lands through the native queue', ()
   assert.match(requiredChecks || '', /Candidate source acceptance \/ check/u);
   assert.doesNotMatch(requiredChecks || '', /affected-native \/ linux/u);
   assert.doesNotMatch(requiredChecks || '', /Queue admission lease/u);
-  assert.match(
-    workflow,
-    /native-command: >-[\s\S]*dev-delivery:native-under-warrant[\s\S]*--status-context 'affected-native \/ linux'/u,
+  const nativeCommands = Array.from(
+    workflow.matchAll(
+      /native-command: >-\n([\s\S]*?)\n {6}native-heartbeat-seconds:/gu,
+    ),
+    (match) => match[1],
   );
+  assert.equal(nativeCommands.length, 2);
+  for (const command of nativeCommands) {
+    assert.match(command, /dev-delivery:native-under-warrant/u);
+    assert.doesNotMatch(command, /GITHUB_TOKEN|GH_TOKEN|status-context/u);
+  }
   assert.match(
     workflow,
     /delivery-contract:[\s\S]*KUNGFU_FNM_DIST_MIRROR: \$\{\{ vars\.KUNGFU_FNM_DIST_MIRROR \}\}[\s\S]*KUNGFU_FNM_SHA256: \$\{\{ vars\.KUNGFU_FNM_SHA256 \}\}/u,
@@ -351,31 +355,17 @@ test('Dev behind admission produces and forwards an exact Project Cut replay pro
 function nativeFixture(runStep = () => {}) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-warrant-native-'));
   const head = '1'.repeat(40);
-  const statuses = [];
   return {
     cwd,
-    statuses,
     options: {
       cwd,
       repository: 'kungfu-systems/kungfu',
       targetBranch: 'dev/v4/v4.0',
       pullRequestNumber: 42,
       expectedHead: head,
-      statusContext: 'affected-native / linux',
       output: 'evidence/native.json',
     },
     dependencies: {
-      client: {
-        async requirePullRequest(number, actualHead, branch) {
-          assert.deepEqual(
-            [number, actualHead, branch],
-            [42, head, 'dev/v4/v4.0'],
-          );
-        },
-        async status(_head, value) {
-          statuses.push(value);
-        },
-      },
       git(_cwd, args) {
         const command = args.join(' ');
         if (command === 'rev-parse HEAD') return head;
@@ -410,10 +400,7 @@ test('two-phase native adapter runs both partitions and seals exact-head success
     value.dependencies,
   );
   assert.match(receipt.receiptRoot, /^sha256:[0-9a-f]{64}$/u);
-  assert.deepEqual(
-    value.statuses.map(({ state }) => state),
-    ['pending', 'success'],
-  );
+  assert.equal(receipt.sourceHead, value.options.expectedHead);
   assert.deepEqual(
     commands
       .filter(({ name }) => name.includes('partition'))
@@ -453,7 +440,7 @@ test('two-phase native adapter bootstraps Conan for SDK Warrant builds', async (
   assert.equal(sdkBuild.environment.KUNGFU_BUILDCHAIN_SOURCE_BUILD, '1');
 });
 
-test('two-phase native adapter fails closed and replaces pending with failure', async (t) => {
+test('two-phase native adapter fails closed without provider mutation', async (t) => {
   const value = nativeFixture((_cwd, name) => {
     if (name.includes('partition 0')) throw new Error('native shard failed');
   });
@@ -462,79 +449,30 @@ test('two-phase native adapter fails closed and replaces pending with failure', 
     runNativeUnderWarrant(value.options, value.dependencies),
     /native shard failed/u,
   );
-  assert.deepEqual(
-    value.statuses.map(({ state }) => state),
-    ['pending', 'failure'],
+});
+
+test('native adapter has no GitHub credential or provider mutation path', () => {
+  const source = fs.readFileSync(
+    'framework/dev-delivery/native-under-warrant.mjs',
+    'utf8',
+  );
+  assert.doesNotMatch(
+    source,
+    /GITHUB_TOKEN|GH_TOKEN|api\.github\.com|\/pulls\/|\/statuses\//u,
   );
 });
 
-test('native status client retries bounded transient GitHub failures', async () => {
-  const attempts = [];
-  const delays = [];
-  const client = new GitHubNativeStatusClient({
-    repository: 'kungfu-systems/kungfu',
-    token: 'test-token',
-    retryAttempts: 3,
-    retryDelayMs: 10,
-    sleepImpl: async (milliseconds) => delays.push(milliseconds),
-    fetchImpl: async () => {
-      attempts.push('fetch');
-      if (attempts.length < 3) throw new TypeError('fetch failed');
-      return {
-        ok: true,
-        status: 200,
-        async text() {
-          return '{"ok":true}';
-        },
-      };
-    },
-  });
-
-  assert.deepEqual(await client.request('/repos/test'), { ok: true });
-  assert.equal(attempts.length, 3);
-  assert.deepEqual(delays, [10, 20]);
-});
-
-test('native status client fails closed after bounded retry exhaustion', async () => {
-  let attempts = 0;
-  const client = new GitHubNativeStatusClient({
-    repository: 'kungfu-systems/kungfu',
-    token: 'test-token',
-    retryAttempts: 2,
-    retryDelayMs: 0,
-    sleepImpl: async () => {},
-    fetchImpl: async () => {
-      attempts += 1;
-      throw new TypeError('fetch failed');
-    },
-  });
-
-  await assert.rejects(client.request('/repos/test'), /fetch failed/u);
-  assert.equal(attempts, 2);
-});
-
-test('native status client does not retry authoritative client errors', async () => {
-  let attempts = 0;
-  const client = new GitHubNativeStatusClient({
-    repository: 'kungfu-systems/kungfu',
-    token: 'test-token',
-    retryAttempts: 3,
-    retryDelayMs: 0,
-    sleepImpl: async () => {},
-    fetchImpl: async () => {
-      attempts += 1;
-      return {
-        ok: false,
-        status: 422,
-        async text() {
-          return '{"message":"source head rejected"}';
-        },
-      };
-    },
-  });
-
-  await assert.rejects(client.request('/repos/test'), /source head rejected/u);
-  assert.equal(attempts, 1);
+test('native adapter rejects a checkout that differs from the exact source head', async (t) => {
+  const value = nativeFixture();
+  value.dependencies.git = (_cwd, args) => {
+    if (args.join(' ') === 'rev-parse HEAD') return '9'.repeat(40);
+    throw new Error(`unexpected git call: ${args.join(' ')}`);
+  };
+  t.after(() => fs.rmSync(value.cwd, { recursive: true, force: true }));
+  await assert.rejects(
+    runNativeUnderWarrant(value.options, value.dependencies),
+    /not rooted at the exact PR head/u,
+  );
 });
 
 test('hosted native jobs remain fail-closed behind the exact active Warrant', () => {
@@ -597,15 +535,18 @@ test('non-native source-only candidates do not acquire or require a Delivery War
   );
 });
 
-test('qualified Warrant native proof satisfies the protected native context', () => {
+test('qualified Warrant provider satisfies the protected native context', () => {
   const workflow = fs.readFileSync(
     '.github/workflows/dev-pr-auto-merge.yml',
     'utf8',
   );
-  assert.match(workflow, /--status-context 'affected-native \/ linux'/u);
+  assert.match(
+    workflow,
+    /Requalify source CheckRun under Warrant[\s\S]*check_name=affected-native%20%2F%20linux/u,
+  );
   assert.doesNotMatch(
     workflow,
-    /--status-context 'Delivery Warrant native proof \/ linux'/u,
+    /native-command: >-\n(?:(?!native-heartbeat-seconds)[\s\S])*--status-context/u,
   );
   assert.match(workflow, /queue-admission-context: Queue admission lease/u);
 });
