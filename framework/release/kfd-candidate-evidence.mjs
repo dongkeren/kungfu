@@ -391,6 +391,54 @@ function assertPlatform(platform) {
   }
 }
 
+function validateSealedSourceGate({
+  sourceGate,
+  sourceDir,
+  platform,
+  identity,
+}) {
+  const { gateRoot, ...gateBody } = sourceGate;
+  if (gateRoot !== rooted(gateBody)) {
+    throw new Error('KFD source gate digest mismatch');
+  }
+  if (sourceGate.status !== 'passed') {
+    throw new Error('KFD source gate is not passed');
+  }
+  if (sourceGate.platform !== platform) {
+    throw new Error(
+      `KFD source gate platform mismatch: expected ${platform}, got ${sourceGate.platform || '<empty>'}`,
+    );
+  }
+  if (
+    sourceGate.candidate?.sourceSha !== identity.sourceSha ||
+    sourceGate.candidate?.sourceTree !== identity.sourceTree
+  ) {
+    throw new Error('KFD source gate candidate/source root mismatch');
+  }
+  if (sourceGate.evidenceRoot !== rooted(sourceGate.generatedEvidence || [])) {
+    throw new Error('KFD source evidence root mismatch');
+  }
+  const sourceRoot = path.resolve(sourceDir);
+  for (const row of sourceGate.generatedEvidence || []) {
+    const evidencePath = path.resolve(sourceRoot, String(row.path || ''));
+    if (
+      evidencePath === sourceRoot ||
+      !evidencePath.startsWith(`${sourceRoot}${path.sep}`) ||
+      !fs.existsSync(evidencePath)
+    ) {
+      throw new Error(
+        `missing sealed KFD source evidence: ${row.path || '<empty>'}`,
+      );
+    }
+    if (
+      fs.statSync(evidencePath).size !== row.bytes ||
+      `sha256:${sha256File(evidencePath)}` !== row.sha256
+    ) {
+      throw new Error(`tampered sealed KFD source evidence: ${row.path}`);
+    }
+  }
+}
+
 export function prepareKfdArtifactWitness({
   root = process.cwd(),
   platform = process.env.BUILDCHAIN_PLATFORM_ID || '',
@@ -411,20 +459,12 @@ export function prepareKfdArtifactWitness({
   if (!fs.existsSync(sourceGatePath))
     throw new Error('missing sealed KFD source gate');
   const sourceGate = readJson(sourceGatePath);
-  if (sourceGate.status !== 'passed') {
-    throw new Error('KFD source gate is not passed');
-  }
-  if (sourceGate.platform !== platform) {
-    throw new Error(
-      `KFD source gate platform mismatch: expected ${platform}, got ${sourceGate.platform || '<empty>'}`,
-    );
-  }
-  if (
-    sourceGate.candidate?.sourceSha !== identity.sourceSha ||
-    sourceGate.candidate?.sourceTree !== identity.sourceTree
-  ) {
-    throw new Error('KFD source gate candidate/source root mismatch');
-  }
+  validateSealedSourceGate({
+    sourceGate,
+    sourceDir: path.join(runtimeDir, 'source'),
+    platform,
+    identity,
+  });
   const artifact = releaseArtifactRoot(root);
   const baseWitness = buildArtifactWitness();
   const platformPrebuildPath = path.join(
@@ -474,6 +514,16 @@ export function finalizeKfdCandidateEvidence({
   if (!fs.existsSync(witnessPath))
     throw new Error(`missing KFD artifact witness: ${platform}`);
   const witness = readJson(witnessPath);
+  validateSealedSourceGate({
+    sourceGate,
+    sourceDir: path.join(output, 'source'),
+    platform,
+    identity,
+  });
+  const { bindingRoot, ...bindingBody } = witness.candidateBinding || {};
+  if (bindingRoot !== rooted(bindingBody)) {
+    throw new Error('KFD artifact witness binding digest mismatch');
+  }
   const artifact = releaseArtifactRoot(root);
   if (witness.candidateBinding?.artifactRoot !== artifact.root) {
     throw new Error(
