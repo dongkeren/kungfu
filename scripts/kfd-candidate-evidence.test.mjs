@@ -111,21 +111,29 @@ function artifactFixture(platform = 'linux-x64') {
     'runtime',
     'kfd-candidate-evidence',
   );
-  writeJson(path.join(runtime, 'source-gate.json'), {
+  const prebuildRelative = `kfd-3/collaboration-interface.${platform}.prebuild.json`;
+  const prebuildPath = path.join(runtime, 'source', prebuildRelative);
+  writeJson(prebuildPath, { id: `kungfu-collaboration-interface-${platform}` });
+  const generatedEvidence = [
+    {
+      path: prebuildRelative,
+      bytes: fs.statSync(prebuildPath).size,
+      sha256: `sha256:${awaitHash(prebuildPath)}`,
+    },
+  ];
+  const gateBody = {
+    schema: 'kungfu.kfd-candidate-source-gate/v1',
     status: 'passed',
+    phase: 'source-sealed',
     platform,
     candidate: { sourceSha, sourceTree },
-    gateRoot: 'sha256:source-gate',
+    generatedEvidence,
+    evidenceRoot: kfdEvidenceRoot(generatedEvidence),
+  };
+  writeJson(path.join(runtime, 'source-gate.json'), {
+    ...gateBody,
+    gateRoot: kfdEvidenceRoot(gateBody),
   });
-  writeJson(
-    path.join(
-      runtime,
-      'source',
-      'kfd-3',
-      `collaboration-interface.${platform}.prebuild.json`,
-    ),
-    { id: `kungfu-collaboration-interface-${platform}` },
-  );
   fs.mkdirSync(path.join(root, 'product', 'release'), { recursive: true });
   fs.writeFileSync(
     path.join(root, 'product', 'release', 'artifact.bin'),
@@ -320,10 +328,79 @@ test('rejects a source gate sealed for another platform', () => {
   );
   const gate = JSON.parse(fs.readFileSync(sourceGate, 'utf8'));
   gate.platform = 'linux-arm64';
+  const gateBody = Object.fromEntries(
+    Object.entries(gate).filter(([key]) => key !== 'gateRoot'),
+  );
+  gate.gateRoot = kfdEvidenceRoot(gateBody);
   writeJson(sourceGate, gate);
   assert.throws(
     () => prepareKfdArtifactWitness(fixture),
     /KFD source gate platform mismatch: expected linux-x64, got linux-arm64/u,
+  );
+});
+
+test('rejects source evidence tampered after the prebuild gate', () => {
+  const fixture = artifactFixture();
+  const sourceEvidence = path.join(
+    fixture.root,
+    '.buildchain',
+    'runtime',
+    'kfd-candidate-evidence',
+    'source',
+    'kfd-3',
+    `collaboration-interface.${fixture.platform}.prebuild.json`,
+  );
+  fs.appendFileSync(sourceEvidence, 'tampered\n');
+  assert.throws(
+    () => prepareKfdArtifactWitness(fixture),
+    /tampered sealed KFD source evidence/u,
+  );
+});
+
+test('rejects a source gate whose sealed digest no longer matches', () => {
+  const fixture = artifactFixture();
+  const sourceGate = path.join(
+    fixture.root,
+    '.buildchain',
+    'runtime',
+    'kfd-candidate-evidence',
+    'source-gate.json',
+  );
+  const gate = JSON.parse(fs.readFileSync(sourceGate, 'utf8'));
+  gate.phase = 'tampered-after-prebuild';
+  writeJson(sourceGate, gate);
+  assert.throws(
+    () => prepareKfdArtifactWitness(fixture),
+    /KFD source gate digest mismatch/u,
+  );
+});
+
+test('rejects an artifact witness binding tampered before final sealing', () => {
+  const fixture = artifactFixture();
+  prepareKfdArtifactWitness({
+    ...fixture,
+    buildArtifactWitness: () => ({
+      id: 'kungfu-collaboration-interface',
+      standard: 'kfd-3',
+      witnessKind: 'artifact',
+      exposedSurfaces: [],
+    }),
+  });
+  const witnessPath = path.join(
+    fixture.root,
+    'product',
+    'release',
+    'qualification',
+    'kfd',
+    'artifacts',
+    `${fixture.platform}.json`,
+  );
+  const witness = JSON.parse(fs.readFileSync(witnessPath, 'utf8'));
+  witness.candidateBinding.sourceGateRoot = `sha256:${'f'.repeat(64)}`;
+  writeJson(witnessPath, witness);
+  assert.throws(
+    () => finalizeKfdCandidateEvidence(fixture),
+    /KFD artifact witness (binding digest|candidate\/source root) mismatch/u,
   );
 });
 
