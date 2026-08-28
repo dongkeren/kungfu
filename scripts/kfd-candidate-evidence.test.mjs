@@ -193,7 +193,6 @@ test('binds a rematerialized checkout only through the exact declared source tre
     /candidate source tree mismatch/u,
   );
 });
-
 test('accepts a complete sealed four-platform KFD payload set', () => {
   const root = fixture();
   assert.deepEqual(
@@ -403,7 +402,6 @@ test('rejects an artifact witness binding tampered before final sealing', () => 
     /KFD artifact witness (binding digest|candidate\/source root) mismatch/u,
   );
 });
-
 test('rejects a missing KFD evidence file', () => {
   const root = fixture();
   fs.rmSync(
