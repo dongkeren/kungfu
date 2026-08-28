@@ -21,8 +21,8 @@ test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs',
   )?.[1];
   assert.equal(reusableRef, 'cfdf71eb2297e67b1f606672f714c24adf50c160');
   assert.deepEqual(workflow.match(/^\s+buildchain-ref: .+$/gmu), [
-    '      buildchain-ref: ddac1876650f2faba5a9e1a2e5f55e7d836ac46b',
-    '      buildchain-ref: ddac1876650f2faba5a9e1a2e5f55e7d836ac46b',
+    '      buildchain-ref: v4',
+    '      buildchain-ref: v4',
   ]);
   assert.doesNotMatch(workflow, /buildchain-ref: train\//u);
   assert.match(workflow, /workflow_run:[\s\S]*Core affected native/u);

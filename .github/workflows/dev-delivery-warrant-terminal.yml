@@ -208,7 +208,7 @@ jobs:
     if: needs.prepare.outputs.active == 'true' || needs.prepare.outputs.retry-terminal == 'true'
     uses: kungfu-systems/buildchain/.github/workflows/dev-delivery-warrant-close.yml@ddac1876650f2faba5a9e1a2e5f55e7d836ac46b
     with:
-      buildchain-ref: ddac1876650f2faba5a9e1a2e5f55e7d836ac46b
+      buildchain-ref: v4
       target-branch: ${{ github.event.pull_request.base.ref }}
       expected-pr-number: ${{ github.event.pull_request.number }}
       expected-head-sha: ${{ needs.prepare.outputs.active-source-head-sha }}
@@ -228,7 +228,7 @@ jobs:
     if: needs.prepare.outputs.queued == 'true'
     uses: kungfu-systems/buildchain/.github/workflows/dev-delivery-warrant-cancel.yml@ddac1876650f2faba5a9e1a2e5f55e7d836ac46b
     with:
-      buildchain-ref: ddac1876650f2faba5a9e1a2e5f55e7d836ac46b
+      buildchain-ref: v4
       target-branch: ${{ github.event.pull_request.base.ref }}
       expected-pr-number: ${{ github.event.pull_request.number }}
       expected-candidate-id: ${{ needs.prepare.outputs.queued-candidate-id }}
