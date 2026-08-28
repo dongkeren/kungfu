@@ -19,11 +19,19 @@ const steadyStateDogfoodFixturePath =
   'framework/core/tests/fixtures/dev-delivery-warrant-steady-state.json';
 
 test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs', () => {
-  const reusableRef = workflow.match(
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@([0-9a-f]{40})/u,
-  )?.[1];
-  assert.equal(reusableRef, '2416a1eacbc87e902eceea467af72a95f24a51f0');
-  assert.match(workflow, new RegExp(`buildchain-ref: ${reusableRef}`, 'u'));
+  const reusableRefs = [
+    ...workflow.matchAll(
+      /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@([0-9a-f]{40})/gu,
+    ),
+  ].map((match) => match[1]);
+  assert.deepEqual(reusableRefs, [
+    '2416a1eacbc87e902eceea467af72a95f24a51f0',
+    '2416a1eacbc87e902eceea467af72a95f24a51f0',
+  ]);
+  const runtimeSelectors = [
+    ...workflow.matchAll(/^\s+buildchain-ref:\s+(\S+)\s*$/gmu),
+  ].map((match) => match[1]);
+  assert.deepEqual(runtimeSelectors, ['v4', 'v4']);
   assert.match(workflow, /workflow_run:[\s\S]*Core affected native/u);
   assert.match(
     workflow,
