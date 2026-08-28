@@ -633,6 +633,24 @@ def _apply_from_ports(
     ) or identity.identity_root != workspace.get("identityRoot"):
         raise ValueError("fresh recovery workspace identity changed")
     _verify_recovery_profile_source(plan, recovery_profile_source, runtime_dir)
+    current = session_surface.current_native_console(str(ctx.runtime_dir))
+    if current is None:
+        raise ValueError("fresh recovery requires a current native Agent Console")
+    current_source = str(current.get("source") or "")
+    envelope = dict(current.get("envelope") or {})
+    current_session = {
+        "workConsoleId": str(envelope.get("consoleId") or ""),
+        "sessionAttemptId": str(envelope.get("attemptId") or ""),
+    }
+    if current_source == "injected-native-console":
+        bind_options: JsonObject = {}
+    elif current_source == "ambient-provider-session":
+        bind_options = {
+            "envelope_override": envelope,
+            "console_workspace_root": str(current.get("workspaceRoot") or ""),
+        }
+    else:
+        raise ValueError("fresh recovery requires an exact native Console source")
     receipt = apply_plan(
         plan,
         expected_plan_root=expected_plan_root,
@@ -640,7 +658,7 @@ def _apply_from_ports(
         status_reader=lambda: _retained_status(
             runtime_dir, initiative_id, assignment_id
         ),
-        session_reader=lambda: _current_session(str(ctx.runtime_dir)),
+        session_reader=lambda: dict(current_session),
         prepare_profile=lambda actor: prepare_resume_profile(
             runtime_dir, actor, recovery_profile_source
         ),
@@ -652,6 +670,7 @@ def _apply_from_ports(
                 work_workspace_root=workspace_root,
                 work_profile_source=recovery_profile_source,
                 expected_binding=expected,
+                **bind_options,
             )
             or {}
         ),
