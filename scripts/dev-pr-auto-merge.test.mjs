@@ -22,7 +22,7 @@ test('Dev auto-merge admits only explicitly ready reviewed same-repository PRs',
   const reusableRef = workflow.match(
     /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@([0-9a-f]{40})/u,
   )?.[1];
-  assert.equal(reusableRef, 'ddac1876650f2faba5a9e1a2e5f55e7d836ac46b');
+  assert.equal(reusableRef, 'cfdf71eb2297e67b1f606672f714c24adf50c160');
   assert.match(
     workflow,
     /buildchain-ref: train\/v4\/v4\.0\/warrant-readiness-fence/u,
@@ -283,7 +283,7 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   );
   assert.match(
     landing,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@ddac1876650f2faba5a9e1a2e5f55e7d836ac46b/u,
+    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@cfdf71eb2297e67b1f606672f714c24adf50c160/u,
   );
   assert.match(landing, /queue-admission-context: Queue admission lease/u);
   assert.match(landing, /landing-mode: queue[\s\S]*dry-run: false/u);

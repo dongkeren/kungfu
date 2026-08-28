@@ -543,7 +543,7 @@ jobs:
       contents: write
       pull-requests: write
       statuses: write
-    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@ddac1876650f2faba5a9e1a2e5f55e7d836ac46b
+    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@cfdf71eb2297e67b1f606672f714c24adf50c160
     with:
       buildchain-ref: train/v4/v4.0/warrant-readiness-fence
       target-branch: ${{ needs.resolve-target.outputs.target-branch }}
@@ -882,7 +882,7 @@ jobs:
       contents: write
       pull-requests: write
       statuses: write
-    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@ddac1876650f2faba5a9e1a2e5f55e7d836ac46b
+    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@cfdf71eb2297e67b1f606672f714c24adf50c160
     with:
       buildchain-ref: train/v4/v4.0/warrant-readiness-fence
       target-branch: ${{ needs.resolve-target.outputs.target-branch }}
