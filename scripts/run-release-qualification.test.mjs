@@ -78,6 +78,19 @@ test('qualification source identity rejects an available revision with another t
   );
 });
 
+test('qualification source identity rejects an unavailable revision without a tree proof', () => {
+  assert.throws(
+    () =>
+      resolveQualificationSourceIdentity({
+        env: { BUILDCHAIN_SOURCE_SHA: 'b'.repeat(40) },
+        checkoutRevision: 'a'.repeat(40),
+        checkoutTree: 'c'.repeat(40),
+        configuredRevisionTree: null,
+      }),
+    /requires an exact tree-equivalence proof/u,
+  );
+});
+
 function corePlatformReleaseFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kungfu-core-release-'));
   const packageName = '@kungfu-tech/core-linux-arm64';
