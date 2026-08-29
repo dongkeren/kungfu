@@ -670,6 +670,49 @@ fn retained_rollback_uses_installed_state_after_source_slot_removal() {
 }
 
 #[test]
+fn app_rollback_resolves_the_target_updater_after_desktop_swap() {
+    let root = shifu_core::host::unique_temp_dir("retained-app-updater").unwrap();
+    let installed = root.join("Kungfu Episodes.app");
+    let rollback = root.join(".Kungfu Episodes.app.previous-cut");
+    let installed_updater = installed.join("Contents/Resources/kungfu/kungfu");
+    let rollback_updater = rollback.join("Contents/Resources/kungfu/kungfu");
+    fs::create_dir_all(installed_updater.parent().unwrap()).unwrap();
+    fs::create_dir_all(rollback_updater.parent().unwrap()).unwrap();
+    fs::write(&installed_updater, b"previous updater").unwrap();
+    fs::write(&rollback_updater, b"current updater").unwrap();
+    let previous_digest = artifact_sha256(&installed_updater).unwrap();
+    let receipt = format!(
+        "KUNGFU_INSTALLED_KIND='app'\n\
+         KUNGFU_INSTALLED_NATIVE_UPDATER='{}'\n\
+         KUNGFU_INSTALLED_NATIVE_UPDATER_DIGEST='{}'\n",
+        rollback_updater.display(),
+        previous_digest,
+    );
+    let pending = PendingTransaction {
+        state: "native-rollback-pending".into(),
+        action: "rollback-retained".into(),
+        artifact_id: "previous".into(),
+        target_release_cut_root: format!("sha256:{}", "a".repeat(64)),
+        cut_transition_root: format!("sha256:{}", "b".repeat(64)),
+        native_receipt_root: String::new(),
+        previous_build_id: "current".into(),
+        previous_sha: "2".repeat(40),
+        previous_release_cut_root: format!("sha256:{}", "c".repeat(64)),
+        installed_path: installed.display().to_string(),
+        desktop_backup_path: rollback.display().to_string(),
+        force: false,
+        launch: false,
+    };
+
+    assert!(exact_receipt_updater(&receipt).is_err());
+    assert_eq!(
+        exact_retained_rollback_updater(&receipt, &pending).unwrap(),
+        installed_updater,
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn product_manifest_io_error_is_not_corruption() {
     let root = shifu_core::host::unique_temp_dir("promote-manifest-read-error").unwrap();
     let mut entry = qualified_app(&root);

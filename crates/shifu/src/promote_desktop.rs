@@ -736,13 +736,30 @@ pub(super) fn resume_pending_transaction(entries: &[BuildEntry], check: bool) {
 pub(super) fn exact_receipt_updater(receipt: &str) -> Result<PathBuf, String> {
     let updater = PathBuf::from(receipt_value(receipt, "KUNGFU_INSTALLED_NATIVE_UPDATER"));
     let expected = receipt_value(receipt, "KUNGFU_INSTALLED_NATIVE_UPDATER_DIGEST");
+    exact_updater_at(updater, &expected)
+}
+
+fn exact_updater_at(updater: PathBuf, expected: &str) -> Result<PathBuf, String> {
     if !updater.is_file()
         || expected.len() != 64
-        || artifact_sha256(&updater).ok().as_deref() != Some(expected.as_str())
+        || artifact_sha256(&updater).ok().as_deref() != Some(expected)
     {
         return Err("installed Product native updater differs from its exact receipt".to_string());
     }
     Ok(updater)
+}
+
+pub(super) fn exact_retained_rollback_updater(
+    target_receipt: &str,
+    pending: &PendingTransaction,
+) -> Result<PathBuf, String> {
+    if receipt_value(target_receipt, "KUNGFU_INSTALLED_KIND") == "app" {
+        let updater =
+            PathBuf::from(&pending.installed_path).join("Contents/Resources/kungfu/kungfu");
+        let expected = receipt_value(target_receipt, "KUNGFU_INSTALLED_NATIVE_UPDATER_DIGEST");
+        return exact_updater_at(updater, &expected);
+    }
+    exact_receipt_updater(target_receipt)
 }
 
 pub(super) fn resume_retained_rollback(pending: &mut PendingTransaction) -> ! {
@@ -792,7 +809,8 @@ pub(super) fn resume_retained_rollback(pending: &mut PendingTransaction) -> ! {
             util::die(&format!("cannot retain desktop rollback state: {error}"))
         });
     }
-    let updater = exact_receipt_updater(&target_receipt).unwrap_or_else(|error| util::die(&error));
+    let updater = exact_retained_rollback_updater(&target_receipt, pending)
+        .unwrap_or_else(|error| util::die(&error));
     if pending.state == "native-rollback-pending" {
         let selected =
             native_update::selected_release_cut(&updater).unwrap_or_else(|error| util::die(&error));
