@@ -12,6 +12,7 @@ import { digest } from '../../scripts/affected-native-proof.mjs';
 
 const SHA = /^[0-9a-f]{40}$/u;
 const ROOT = /^sha256:[0-9a-f]{64}$/u;
+const PUBLIC_WARRANT_QUEUE_MAX_BUFFER = 16 * 1024 * 1024;
 
 function flag(args, name, fallback = '') {
   const index = args.indexOf(`--${name}`);
@@ -101,14 +102,15 @@ function publicRepositoryUrl(repository) {
   return `https://github.com/${repository}.git`;
 }
 
-function fetchPublicWarrantQueue({
+export function fetchPublicWarrantQueue({
   observerRoot,
   repository,
   branch,
   stateRef,
+  execGit = execFileSync,
 }) {
   const localRef = 'refs/kungfu/dev-delivery-warrant';
-  execFileSync(
+  execGit(
     'git',
     [
       '-c',
@@ -124,20 +126,26 @@ function fetchPublicWarrantQueue({
     ],
     {
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      maxBuffer: PUBLIC_WARRANT_QUEUE_MAX_BUFFER,
       stdio: ['ignore', 'ignore', 'pipe'],
     },
   );
-  const stateCommit = execFileSync(
+  const stateCommit = execGit(
     'git',
     ['--git-dir', observerRoot, 'rev-parse', localRef],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    {
+      encoding: 'utf8',
+      maxBuffer: PUBLIC_WARRANT_QUEUE_MAX_BUFFER,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
   ).trim();
   const queue = JSON.parse(
-    execFileSync(
+    execGit(
       'git',
       ['--git-dir', observerRoot, 'show', `${localRef}:queue.json`],
       {
         encoding: 'utf8',
+        maxBuffer: PUBLIC_WARRANT_QUEUE_MAX_BUFFER,
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     ),

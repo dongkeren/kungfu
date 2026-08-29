@@ -3,7 +3,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { runNativeExecutionUnderWarrant } from '../framework/dev-delivery/native-execution-under-warrant.mjs';
+import {
+  fetchPublicWarrantQueue,
+  runNativeExecutionUnderWarrant,
+} from '../framework/dev-delivery/native-execution-under-warrant.mjs';
 
 const HEAD = '1'.repeat(40);
 const TOKEN = `sha256:${'2'.repeat(64)}`;
@@ -88,6 +91,30 @@ function fixture(initial = observation()) {
     },
   };
 }
+
+test('public Warrant queue reads retain a bounded buffer above one MiB', () => {
+  const queue = JSON.stringify({ padding: 'x'.repeat(1024 * 1024) });
+  const calls = [];
+  const values = ['', `${HEAD}\n`, queue];
+  const fetched = fetchPublicWarrantQueue({
+    observerRoot: '/tmp/kungfu-public-warrant-observer',
+    repository: 'kungfu-systems/kungfu',
+    branch: 'dev/v4/v4.0',
+    stateRef: 'buildchain/dev-delivery-warrant/dev-v4-v4.0',
+    execGit: (file, args, options) => {
+      calls.push({ file, args, options });
+      return values.shift();
+    },
+  });
+
+  assert.equal(fetched.stateCommit, HEAD);
+  assert.equal(fetched.queue.padding.length, 1024 * 1024);
+  assert.equal(calls.length, 3);
+  for (const call of calls) {
+    assert.equal(call.file, 'git');
+    assert.ok(call.options.maxBuffer >= Buffer.byteLength(queue));
+  }
+});
 
 test('exact credentialless observations continuously fence native execution', async () => {
   const value = fixture();
