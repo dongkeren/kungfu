@@ -262,7 +262,7 @@
           },
           {
             "path": "framework/core/tests/python/test_assignment_orchestration.py",
-            "sha256": "sha256:8078c1a1df495816eeefc1be4ceea98212353acf6aa77e9dadbbc91858cabc69"
+            "sha256": "sha256:7614250d1546c53f4ea6ad7d9c83ffcf3d5c28d8c6129cecfde7eefa6ca83626"
           },
           {
             "path": "docs/architecture/primitive-management-plane.md",
