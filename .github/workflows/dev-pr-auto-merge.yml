@@ -145,7 +145,8 @@ permissions:
 
 concurrency:
   # Keep an exact targeted recovery outside the controller slot. Automatic
-  # events may replace one another, but cannot cancel a provider for one PR.
+  # review, workflow-run, wake, and cadence events may replace one another,
+  # but they must not cancel a native provider already proving a specific PR.
   group: dev-pr-auto-merge-${{ github.repository }}-${{ github.event.repository.default_branch }}-${{ github.event_name == 'workflow_dispatch' && inputs.expected-pr-number != 0 && format('target-{0}', inputs.expected-pr-number) || 'controller' }}
   cancel-in-progress: false
 
@@ -339,7 +340,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: kungfu-systems/buildchain
-          ref: cd8318d57b0506493114afcc63b9aacef741d3c4
+          ref: 1cb2581c6cb5bd677d32bd242f89b778d23c7018
           path: .buildchain/dev-delivery-runtime
           fetch-depth: 1
           persist-credentials: false
@@ -640,9 +641,9 @@ jobs:
       contents: write
       pull-requests: write
       statuses: write
-    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@cd8318d57b0506493114afcc63b9aacef741d3c4
+    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@1cb2581c6cb5bd677d32bd242f89b778d23c7018
     with:
-      buildchain-ref: cd8318d57b0506493114afcc63b9aacef741d3c4
+      buildchain-ref: train/v4/v4.0/dev-delivery-legacy-queued-native-isolation
       target-branch: ${{ needs.resolve-target.outputs.target-branch }}
       expected-pr-number: ${{ fromJSON(needs.resolve-target.outputs.expected-pr-number || '0') }}
       expected-head-sha: ${{ needs.resolve-target.outputs.expected-head-sha }}
@@ -672,7 +673,6 @@ jobs:
         --target-branch ${{ needs.resolve-target.outputs.target-branch }}
         --pull-request ${{ needs.resolve-target.outputs.expected-pr-number }}
         --expected-head ${{ needs.resolve-target.outputs.expected-head-sha }}
-        --status-context 'affected-native / linux'
         --output ../dev-delivery/kungfu-native-receipt.json
       native-heartbeat-seconds: 300
       delivery-class: ${{ needs.delivery-contract.outputs.delivery-class || 'native-proof-required' }}
@@ -730,7 +730,7 @@ jobs:
         id: publish
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.KUNGFU_GITHUB_TOKEN }}
           EXPECTED_PR: ${{ needs.resolve-target.outputs.expected-pr-number }}
           EXPECTED_HEAD: ${{ needs.resolve-target.outputs.expected-head-sha }}
           SOURCE_RUN_ID: ${{ needs.resolve-target.outputs.source-workflow-run-id }}
@@ -739,7 +739,7 @@ jobs:
         run: |
           set -euo pipefail
           evidence=.buildchain/native-check-bridge/warrant
-          warrant="$evidence/warrant.json"
+          warrant="$evidence/dev-delivery/warrant.json"
           test -f "$warrant"
 
           live_pr="$evidence/live-pr.json"
@@ -979,9 +979,9 @@ jobs:
       contents: write
       pull-requests: write
       statuses: write
-    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@cd8318d57b0506493114afcc63b9aacef741d3c4
+    uses: kungfu-systems/buildchain/.github/workflows/dev-pr-auto-merge.yml@1cb2581c6cb5bd677d32bd242f89b778d23c7018
     with:
-      buildchain-ref: cd8318d57b0506493114afcc63b9aacef741d3c4
+      buildchain-ref: train/v4/v4.0/dev-delivery-legacy-queued-native-isolation
       target-branch: ${{ needs.resolve-target.outputs.target-branch }}
       expected-pr-number: ${{ fromJSON(needs.resolve-target.outputs.expected-pr-number) }}
       expected-head-sha: ${{ needs.resolve-target.outputs.expected-head-sha }}
@@ -1011,7 +1011,6 @@ jobs:
         --target-branch ${{ needs.resolve-target.outputs.target-branch }}
         --pull-request ${{ needs.resolve-target.outputs.expected-pr-number }}
         --expected-head ${{ needs.resolve-target.outputs.expected-head-sha }}
-        --status-context 'affected-native / linux'
         --output ../dev-delivery/kungfu-native-receipt.json
       native-heartbeat-seconds: 300
       delivery-class: ${{ needs.delivery-contract.outputs.delivery-class || 'native-proof-required' }}

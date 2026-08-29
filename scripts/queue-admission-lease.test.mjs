@@ -13,12 +13,7 @@ import {
 } from './cancel-dequeued-merge-group-runs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const LEGACY_WARRANT_RUNTIME_SHA = '8493bf140a7f567e76aff3119f3d39ff026afc84';
-const WARRANT_RUNTIME_SHA = 'cd8318d57b0506493114afcc63b9aacef741d3c4';
-const QUEUE_WARRANT_READBACK_RUNTIME_SHA =
-  '98a4e38bd8423569e500dbbcad3667842171ab8f';
-const SOURCE_QUALIFICATION_READBACK_RUNTIME_SHA =
-  '98a4e38bd8423569e500dbbcad3667842171ab8f';
+const WARRANT_RUNTIME_SHA = '1cb2581c6cb5bd677d32bd242f89b778d23c7018';
 const SOURCE_HEAD = '2'.repeat(40);
 const CONTRACT = JSON.parse(
   fs.readFileSync(
@@ -143,14 +138,6 @@ test('queue admission lease has distinct PR-head and merge-group authorities', (
     `kungfu-systems/buildchain@${WARRANT_RUNTIME_SHA}`,
   );
   assert.equal(
-    CONTRACT.authority.sourceQualificationReadback,
-    `kungfu-systems/buildchain@${SOURCE_QUALIFICATION_READBACK_RUNTIME_SHA}`,
-  );
-  assert.equal(
-    CONTRACT.authority.mergeGroupReadback,
-    `kungfu-systems/buildchain@${QUEUE_WARRANT_READBACK_RUNTIME_SHA}`,
-  );
-  assert.equal(
     CONTRACT.authority.stateRefPattern,
     'buildchain/dev-delivery-warrant/dev-vN-vN.N',
   );
@@ -221,18 +208,19 @@ test('merge-group continuation consumes the exact durable Warrant lease', () => 
   assert.match(workflow, /buildchain\.mjs" dev warrant observe/u);
   assert.match(workflow, /--branch "\$protected_base"/u);
   assert.match(workflow, /affected-native-proof\.mjs queue-lease-verify/u);
-  assert.match(workflow, new RegExp(QUEUE_WARRANT_READBACK_RUNTIME_SHA, 'u'));
-  assert.doesNotMatch(workflow, new RegExp(WARRANT_RUNTIME_SHA, 'u'));
+  assert.match(workflow, new RegExp(WARRANT_RUNTIME_SHA, 'u'));
   assert.match(
     workflow,
     /name: Install pinned Buildchain Warrant runtime[\s\S]*working-directory: \.buildchain\/dev-delivery-runtime[\s\S]*corepack pnpm install --frozen-lockfile --ignore-scripts[\s\S]*name: Consume the exact Buildchain Warrant lease/u,
   );
 });
 
-test('mutating Warrant controllers share one runtime and read-only consumers use protected compatibility readers', () => {
+test('all Warrant controllers and qualification share one protected runtime', () => {
   const workflowPaths = [
     '.github/workflows/dev-pr-auto-merge.yml',
     '.github/workflows/dev-delivery-warrant-terminal.yml',
+    '.github/workflows/affected-native-pr.yml',
+    CONTRACT.authority.mergeGroup,
   ];
   for (const workflowPath of workflowPaths) {
     const workflow = fs.readFileSync(path.join(ROOT, workflowPath), 'utf8');
@@ -241,37 +229,7 @@ test('mutating Warrant controllers share one runtime and read-only consumers use
       new RegExp(WARRANT_RUNTIME_SHA, 'u'),
       `${workflowPath} must consume Buildchain ${WARRANT_RUNTIME_SHA}`,
     );
-    assert.doesNotMatch(
-      workflow,
-      new RegExp(LEGACY_WARRANT_RUNTIME_SHA, 'u'),
-      `${workflowPath} must not revive the pre-v4-metadata runtime`,
-    );
   }
-  const qualificationWorkflow = fs.readFileSync(
-    path.join(ROOT, '.github/workflows/affected-native-pr.yml'),
-    'utf8',
-  );
-  assert.match(
-    qualificationWorkflow,
-    new RegExp(SOURCE_QUALIFICATION_READBACK_RUNTIME_SHA, 'u'),
-  );
-  assert.doesNotMatch(
-    qualificationWorkflow,
-    new RegExp(WARRANT_RUNTIME_SHA, 'u'),
-  );
-  const queueWorkflow = fs.readFileSync(
-    path.join(ROOT, CONTRACT.authority.mergeGroup),
-    'utf8',
-  );
-  assert.match(
-    queueWorkflow,
-    new RegExp(QUEUE_WARRANT_READBACK_RUNTIME_SHA, 'u'),
-  );
-  assert.doesNotMatch(queueWorkflow, new RegExp(WARRANT_RUNTIME_SHA, 'u'));
-  assert.doesNotMatch(
-    queueWorkflow,
-    new RegExp(LEGACY_WARRANT_RUNTIME_SHA, 'u'),
-  );
 });
 
 test('trusted dequeue controller revokes the same exact-head context', () => {
