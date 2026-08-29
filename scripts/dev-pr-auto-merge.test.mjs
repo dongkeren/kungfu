@@ -14,9 +14,9 @@ const workflow = fs.readFileSync(
 );
 const steadyStateDogfoodFixturePath =
   'framework/core/tests/fixtures/dev-delivery-warrant-steady-state.json';
-const protectedWarrantRuntimeRef = '1cb2581c6cb5bd677d32bd242f89b778d23c7018';
+const protectedWarrantRuntimeRef = '99c745f28408ebe496da34499331ef1ac6b2d612';
 const protectedWarrantRuntimeSelector =
-  'train/v4/v4.0/dev-delivery-legacy-queued-native-isolation';
+  'train/v4/v4.0/dev-delivery-legacy-queued-native-isolation-final';
 const staleProtectedWarrantRuntimeSelector =
   'train/v4/v4.0/release-topology-convergence';
 
@@ -345,7 +345,7 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   );
   assert.match(
     landing,
-    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@1cb2581c6cb5bd677d32bd242f89b778d23c7018/u,
+    /uses: kungfu-systems\/buildchain\/\.github\/workflows\/dev-pr-auto-merge\.yml@99c745f28408ebe496da34499331ef1ac6b2d612/u,
   );
   assert.match(landing, /queue-admission-context: Queue admission lease/u);
   assert.match(landing, /landing-mode: queue[\s\S]*dry-run: false/u);
@@ -377,7 +377,7 @@ test('Dev behind admission produces and forwards an exact Project Cut replay pro
   );
   assert.match(
     workflow,
-    /Check out exact Buildchain delivery runtime[\s\S]*ref: 1cb2581c6cb5bd677d32bd242f89b778d23c7018/u,
+    /Check out exact Buildchain delivery runtime[\s\S]*ref: 99c745f28408ebe496da34499331ef1ac6b2d612/u,
   );
   assert.match(
     workflow,
@@ -675,10 +675,10 @@ test('native execution uses one exact protected runtime and continuous fence wra
     '.github/workflows/affected-native-pr.yml',
     'utf8',
   );
-  assert.match(action, /ref: 1cb2581c6cb5bd677d32bd242f89b778d23c7018/u);
+  assert.match(action, /ref: 99c745f28408ebe496da34499331ef1ac6b2d612/u);
   assert.match(
     action,
-    /test "\$\(git rev-parse HEAD\)" = 1cb2581c6cb5bd677d32bd242f89b778d23c7018/u,
+    /test "\$\(git rev-parse HEAD\)" = 99c745f28408ebe496da34499331ef1ac6b2d612/u,
   );
   assert.match(
     action,
