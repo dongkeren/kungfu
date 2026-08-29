@@ -311,44 +311,30 @@ def invoke_for_project(
     fallback_runtime_dir,
     endpoint=None,
     cwd=None,
-    project_runtime_dir=None,
+    environ=None,
 ):
     """Invoke the project surface and revive its detached host when needed."""
 
-    if project_runtime_dir is not None and endpoint is not None:
-        raise ValueError("pass either project_runtime_dir or endpoint, not both")
-    runtime_dir = (
-        str(Path(project_runtime_dir).expanduser().resolve())
-        if project_runtime_dir is not None
-        else None
-    )
-    environment_endpoint = (
-        None
-        if runtime_dir is not None
-        else os.environ.get("KUNGFU_AGENT_SESSION_ENDPOINT")
-    )
+    environment_endpoint = (environ or os.environ).get("KUNGFU_AGENT_SESSION_ENDPOINT")
     endpoint_is_explicit = endpoint is not None or environment_endpoint is not None
-    resolved_endpoint = (
-        endpoint_for_runtime(runtime_dir)
-        if runtime_dir is not None
-        else endpoint or environment_endpoint
-    )
+    resolved_endpoint = endpoint or environment_endpoint
+    runtime_dir = fallback_runtime_dir
     if not resolved_endpoint:
         try:
             runtime_dir = str(
                 resolve_workspace_target(
-                    "read-only", cwd=cwd or os.getcwd()
+                    "read-only", cwd=cwd or os.getcwd(), env=environ
                 ).runtime_dir
             )
         except WorkspaceTargetRequired:
-            runtime_dir = str(fallback_runtime_dir)
+            pass
         resolved_endpoint = endpoint_for_runtime(runtime_dir)
     try:
         return invoke(request, endpoint=resolved_endpoint)
     except OSError:
         if endpoint_is_explicit:
             raise
-        resolved_endpoint = ensure(runtime_dir or str(fallback_runtime_dir))
+        resolved_endpoint = ensure(runtime_dir)
         return invoke(request, endpoint=resolved_endpoint)
 
 
