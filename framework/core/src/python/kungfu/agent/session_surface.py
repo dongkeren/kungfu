@@ -305,13 +305,34 @@ def endpoint_for_runtime(runtime_dir):
     return str(socket_root / f"{scope}.sock")
 
 
-def invoke_for_project(request, *, fallback_runtime_dir, endpoint=None, cwd=None):
+def invoke_for_project(
+    request,
+    *,
+    fallback_runtime_dir,
+    endpoint=None,
+    cwd=None,
+    project_runtime_dir=None,
+):
     """Invoke the project surface and revive its detached host when needed."""
 
-    environment_endpoint = os.environ.get("KUNGFU_AGENT_SESSION_ENDPOINT")
+    if project_runtime_dir is not None and endpoint is not None:
+        raise ValueError("pass either project_runtime_dir or endpoint, not both")
+    runtime_dir = (
+        str(Path(project_runtime_dir).expanduser().resolve())
+        if project_runtime_dir is not None
+        else None
+    )
+    environment_endpoint = (
+        None
+        if runtime_dir is not None
+        else os.environ.get("KUNGFU_AGENT_SESSION_ENDPOINT")
+    )
     endpoint_is_explicit = endpoint is not None or environment_endpoint is not None
-    resolved_endpoint = endpoint or environment_endpoint
-    runtime_dir = None
+    resolved_endpoint = (
+        endpoint_for_runtime(runtime_dir)
+        if runtime_dir is not None
+        else endpoint or environment_endpoint
+    )
     if not resolved_endpoint:
         try:
             runtime_dir = str(

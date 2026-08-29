@@ -177,6 +177,7 @@ def bind_current_native_work(
             request,
             fallback_runtime_dir=project_runtime_dir,
             cwd=workspace_root,
+            project_runtime_dir=project_runtime_dir,
         )
 
     plan = invoke_session(
