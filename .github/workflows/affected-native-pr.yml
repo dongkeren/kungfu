@@ -797,6 +797,8 @@ jobs:
           output: product/qualification/affected-native/warrant-execution-${{ matrix.partition }}.json
           command: |
             set -euo pipefail
+            export CC='gcc-14'
+            export CXX='g++-14'
             export GITHUB_BASE_SHA='${{ steps.revisions.outputs.base_sha }}'
             export GITHUB_HEAD_SHA='${{ steps.revisions.outputs.head_sha }}'
             export KUNGFU_AFFECTED_NATIVE_PLAN=product/qualification/affected-native/plan.json
@@ -807,7 +809,8 @@ jobs:
                 if [ -x "$candidate" ]; then cmake_js_bin="$candidate"; break; fi
               done
               test -n "$cmake_js_bin"
-              export PATH="$GITHUB_WORKSPACE/$(dirname "$cmake_js_bin"):$PATH"
+              repo_root="$(pwd -P)"
+              export PATH="$repo_root/$(dirname "$cmake_js_bin"):$PATH"
               cmake-js --version
               ./shifu build:core:sdk
               ./shifu pack:sdk
