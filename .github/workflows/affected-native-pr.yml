@@ -799,6 +799,7 @@ jobs:
             set -euo pipefail
             export CC='gcc-14'
             export CXX='g++-14'
+            export KUNGFU_BUILDCHAIN_SOURCE_BUILD='1'
             export GITHUB_BASE_SHA='${{ steps.revisions.outputs.base_sha }}'
             export GITHUB_HEAD_SHA='${{ steps.revisions.outputs.head_sha }}'
             export KUNGFU_AFFECTED_NATIVE_PLAN=product/qualification/affected-native/plan.json
