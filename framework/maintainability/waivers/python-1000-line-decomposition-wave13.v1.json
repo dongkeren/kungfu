@@ -1,10 +1,11 @@
 {
   "schema": "kungfu.code-complexity-budget-waiver/v3",
-  "issue_root": "sha256:cb37783d46dc4e6d29f50562fa978dd492545ed1a9df89305f485bcfffdab4eb",
+  "issue_root": "sha256:5ef86470bf6224842e70dc03caaba9113d81d968be798c758346844b9567a920",
   "issue_kind": "new-helper-proliferation",
   "paths_or_scope": [
     "framework/core/src/python/kungfu/agent_work_lab_demo.py",
     "framework/core/src/python/kungfu/agent_work_lab_template.py",
+    "framework/core/src/python/kungfu/agent/_action_loop_support.py",
     "framework/core/src/python/kungfu/agent/_action_loop_transport.py",
     "framework/core/src/python/kungfu/agent/_run_agent/runtime.py",
     "framework/core/src/python/kungfu/cli/commands/_agent/base.py",
@@ -45,12 +46,20 @@
       "contentRoot": "sha256:defda8c879baf32ae27f41bc446dd12603319a38b573105323b567129f081a1f"
     },
     {
+      "path": "framework/core/src/python/kungfu/agent/_action_loop_support.py",
+      "class": "first-party-handwritten-implementation",
+      "language": "python",
+      "owner": "core/package",
+      "lines": 61,
+      "contentRoot": "sha256:2f48d8bfd65f9eba350b161fa328ee9cf9ccc4e327750b04633d6b0757b4efc3"
+    },
+    {
       "path": "framework/core/src/python/kungfu/agent/_action_loop_transport.py",
       "class": "first-party-handwritten-implementation",
       "language": "python",
       "owner": "core/package",
-      "lines": 68,
-      "contentRoot": "sha256:2c544793569b0a90456c569b9582840c1cda5b278362898f115d5fca1e6e982c"
+      "lines": 53,
+      "contentRoot": "sha256:aca56d518a88ea12530d048e4eb3aac84291ca89a5dd90d509b9394653cad778"
     },
     {
       "path": "framework/core/src/python/kungfu/agent/_run_agent/runtime.py",
@@ -146,7 +155,7 @@
       "language": "python",
       "owner": "core/package",
       "lines": 136,
-      "contentRoot": "sha256:9c54d5cfc02420320e50c1195b4a807d43734f0230b0fd23c41d56ef1c8ddd98"
+      "contentRoot": "sha256:2c659d480c1d0f351cfe60c13ccb60223d20d6eaf2f3cc69f63423d4894bd54f"
     },
     {
       "path": "framework/core/src/python/kungfu/cli/commands/_workspace/presentation.py",
@@ -181,7 +190,7 @@
       "contentRoot": "sha256:9bd200ba083e3ebb64a14b29c6b21d8b7b0dac4f11390359c5c2de0bcfb7e09d"
     }
   ],
-  "allowed_delta": 5108,
+  "allowed_delta": 5154,
   "owner": "core/package",
   "responsibility_boundary": "Wave 13 separates KFX CLI parsing and output support from KFX domain orchestration while preserving the public KFX API and all earlier decomposition owners.",
   "cohesion_rationale": "KFX CLI support is one cohesive presentation and argument boundary and the minimum extraction that reduces kfx.py below 1000 lines; the exact scope renews the complete protected core/package helper issue root.",
