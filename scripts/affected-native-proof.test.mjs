@@ -1168,7 +1168,7 @@ test('workflow keeps one context while PR proof replaces duplicate queue builds'
   );
   assert.match(
     workflow,
-    /export CC='gcc-14'[\s\S]*export CXX='g\+\+-14'[\s\S]*cmake_js_bin[\s\S]*repo_root="\$\(pwd -P\)"[\s\S]*export PATH="\$repo_root\/\$\(dirname "\$cmake_js_bin"\):\$PATH"[\s\S]*\.\/shifu build:core:sdk[\s\S]*\.\/shifu pack:sdk[\s\S]*\.\/shifu layers:qualify:sdk/u,
+    /export CC='gcc-14'[\s\S]*export CXX='g\+\+-14'[\s\S]*uv run --frozen conan profile detect --force[\s\S]*cmake_js_bin[\s\S]*repo_root="\$\(pwd -P\)"[\s\S]*export PATH="\$repo_root\/\$\(dirname "\$cmake_js_bin"\):\$PATH"[\s\S]*\.\/shifu build:core:sdk[\s\S]*\.\/shifu pack:sdk[\s\S]*\.\/shifu layers:qualify:sdk/u,
   );
   assert.match(
     workflow,
