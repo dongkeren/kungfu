@@ -67,9 +67,19 @@ test('all supported entrypoints route to one semantic authority and projection',
 
 test('managed and native Agent activity shares the Core projection contract', () => {
   const runner = read('framework/core/src/python/kungfu/agent/run_agent.py');
+  const runtime = read(
+    'framework/core/src/python/kungfu/agent/_run_agent/runtime.py',
+  );
   const resources = read('framework/core/src/python/kungfu/agent/resources.py');
-  assert.match(runner, /def agent_activity_history_projection\(/u);
-  assert.match(runner, /agent_resources\.agent_activity_history_projection\(/u);
+  assert.match(
+    runner,
+    /agent_activity_history_projection as agent_activity_history_projection/u,
+  );
+  assert.match(runtime, /def agent_activity_history_projection\(/u);
+  assert.match(
+    runtime,
+    /agent_resources\.agent_activity_history_projection\(/u,
+  );
   assert.match(
     resources,
     /"schema": "kungfu\.work-agent-history\.projection\/v1"/u,

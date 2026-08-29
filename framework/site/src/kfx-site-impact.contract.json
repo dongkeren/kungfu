@@ -247,6 +247,21 @@
       "disposition": "proof-eligible"
     },
     {
+      "id": "python-kfx-mutation-authority-tests",
+      "selectors": [
+        {
+          "kind": "exact",
+          "value": "framework/core/tests/python/test_kfx_mutation_authority_cli.py"
+        }
+      ],
+      "facets": [
+        "registry-admission-lifecycle",
+        "capabilities",
+        "qualification-status"
+      ],
+      "disposition": "proof-eligible"
+    },
+    {
       "id": "github-webhook-reference-implementation",
       "selectors": [
         {

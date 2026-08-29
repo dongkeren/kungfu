@@ -312,7 +312,7 @@ def native_environment(
     adapter: Mapping[str, Any] | None = None,
     source: Mapping[str, str] | None = None,
     stdio_is_tty: bool | None = None,
-    skill_context_builder: Callable[..., dict[str, Any]] = build_skill_context,
+    skill_context_builder: Callable[..., Mapping[str, Any]] = build_skill_context,
 ) -> dict[str, str]:
     """Return a credential-safe native UI environment with compact Kungfu hints."""
 

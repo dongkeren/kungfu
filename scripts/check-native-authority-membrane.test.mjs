@@ -104,7 +104,11 @@ test('installed language projections expose raw transport and never pre-decide u
 });
 
 test('Python conformance oracles are explicit and production fallback is absent', () => {
-  const source = read('framework/core/src/python/kungfu/agent/work_profile.py');
+  const facade = read('framework/core/src/python/kungfu/agent/work_profile.py');
+  const source = read(
+    'framework/core/src/python/kungfu/agent/_work_profile/session.py',
+  );
+  assert.match(facade, /capabilities_python as capabilities_python/u);
   assert.doesNotMatch(source, /_native_edge_available/u);
   assert.doesNotMatch(source, /fall back to the pure-Python/u);
   for (const name of [

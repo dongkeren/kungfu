@@ -376,7 +376,7 @@
             "refs": [
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               }
             ],
             "policy": "all four language implementation references are required for complete"
@@ -406,7 +406,7 @@
             "refs": [
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               }
             ],
             "policy": "implementation references are bounded operational evidence, not availability"
@@ -428,7 +428,7 @@
             "refs": [
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               }
             ],
             "proofRefs": []
@@ -1275,7 +1275,7 @@
             "refs": [
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               }
             ],
             "policy": "all four language implementation references are required for complete"
@@ -1305,7 +1305,7 @@
             "refs": [
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               }
             ],
             "policy": "implementation references are bounded operational evidence, not availability"
@@ -1327,7 +1327,7 @@
             "refs": [
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               }
             ],
             "proofRefs": []
@@ -1589,7 +1589,7 @@
               },
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               },
               {
                 "path": "framework/core/src/python/kungfu/assignment_orchestration.py",
@@ -1631,7 +1631,7 @@
               },
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               },
               {
                 "path": "framework/core/src/python/kungfu/assignment_orchestration.py",
@@ -1665,7 +1665,7 @@
               },
               {
                 "path": "extensions/work-control/work-control-actions/domain/work_control_runtime.py",
-                "root": "sha256:a2e64cf0376b5bb639f35adbda603eef0eb75ad033503c84d47d2efdb2213692"
+                "root": "sha256:3360f81fbd30aa42ff4889d53e58c4608f4c2ec8dbcd8207d36fb920c7f04746"
               },
               {
                 "path": "framework/core/src/python/kungfu/assignment_orchestration.py",
@@ -1721,5 +1721,5 @@
       "artifacts": []
     }
   ],
-  "catalogRoot": "sha256:949fb4468631db49456d5bc316bab607d234666482b2188fb007b5f8039cb33a"
+  "catalogRoot": "sha256:0d64b67a13705da0433027a6bbaef817b62de9edad5ba492753b1bb8ca9a7587"
 }

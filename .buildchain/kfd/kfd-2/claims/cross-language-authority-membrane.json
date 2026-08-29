@@ -25,7 +25,7 @@
       "pointer": {
         "kind": "file",
         "path": "scripts/check-native-authority-membrane.test.mjs",
-        "sha256": "92c11028398ff041fa39402e8c8dafc181dd9f428c4f86f4e11a9337b80bee70"
+        "sha256": "8a8f30875c8cb4d8802922ca32225fef737fec088bc019a42d8d28368600ee76"
       },
       "description": "Closed inventory, raw transport, forbidden fallback, status preservation, and ownership gate."
     },
@@ -76,7 +76,7 @@
       },
       {
         "path": "scripts/check-native-authority-membrane.test.mjs",
-        "sha256": "92c11028398ff041fa39402e8c8dafc181dd9f428c4f86f4e11a9337b80bee70"
+        "sha256": "8a8f30875c8cb4d8802922ca32225fef737fec088bc019a42d8d28368600ee76"
       },
       {
         "path": "tests/qualification/work-lifecycle/four-language-v1.json",

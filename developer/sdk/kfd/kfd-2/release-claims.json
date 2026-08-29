@@ -11,7 +11,7 @@
     "version": "4.0.0-alpha.3",
     "channel": "repository-default",
     "tag": "v4.0.0-alpha.3",
-    "sourceSha": "8dfc996f9c15ad786efdf7f3c4ab4f618d60c7c6"
+    "sourceSha": "40ffe19f3e4cfabf3e1b9ee3c160c6c1c9247a3e"
   },
   "claims": [
     {
@@ -324,7 +324,7 @@
           "pointer": {
             "kind": "file",
             "path": "scripts/check-native-authority-membrane.test.mjs",
-            "sha256": "92c11028398ff041fa39402e8c8dafc181dd9f428c4f86f4e11a9337b80bee70"
+            "sha256": "8a8f30875c8cb4d8802922ca32225fef737fec088bc019a42d8d28368600ee76"
           },
           "description": "Closed inventory, raw transport, forbidden fallback, status preservation, and ownership gate."
         },

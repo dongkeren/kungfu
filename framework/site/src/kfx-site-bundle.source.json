@@ -105,6 +105,14 @@
       "nonClaim": "Catalog availability does not bypass command mutation policy."
     },
     {
+      "id": "kfx-cli-implementation",
+      "path": "framework/core/src/python/kungfu/cli/commands/kfx.py",
+      "role": "cli-implementation",
+      "maturity": "pre-release",
+      "status": "implemented",
+      "nonClaim": "CLI implementation exposes declared routes but does not grant capabilities, admit packages, or issue runtime authority."
+    },
+    {
       "id": "kfd7-release-passport",
       "path": "framework/core/architecture/kfd7-release-passport.json",
       "role": "release-passport-evidence",
@@ -186,7 +194,7 @@
       "summary": "The 4.0.0-alpha.3 KFX manifest declares package identity, facets, requested capabilities, and host inputs; after separate native admission, executable product hosts consume a distinct Core-issued Runtime Warrant lease.",
       "maturity": "pre-release",
       "status": "implemented",
-      "sourceIds": ["kfx-contract", "extensions-guide", "installed-authoring-contract", "github-webhook-qualification", "runtime-warrant-adopter-evidence"],
+      "sourceIds": ["kfx-contract", "extensions-guide", "installed-authoring-contract", "github-webhook-qualification", "runtime-warrant-adopter-evidence", "kfx-cli-implementation"],
       "nonClaim": "A conforming manifest remains inert and is neither a capability grant nor a Runtime Warrant."
     },
     {
@@ -195,7 +203,7 @@
       "summary": "On the 4.0.0-alpha.3 development line, a pinned Fact cut, Work, Warrant, policy, exact roots, and CAS guard every accepted package, install, activation, upgrade, rollback, and removal mutation.",
       "maturity": "pre-release",
       "status": "staged",
-      "sourceIds": ["kfx-domain-profile", "kfx-topology", "installed-authoring-contract", "github-webhook-qualification"],
+      "sourceIds": ["kfx-domain-profile", "kfx-topology", "installed-authoring-contract", "github-webhook-qualification", "kfx-cli-implementation"],
       "nonClaim": "Filesystem discovery and package metadata are observations, not registry authority."
     },
     {
@@ -204,7 +212,7 @@
       "summary": "On the 4.0.0-alpha.3 development line, Core keeps the exact capability grant separate from the leased Runtime Warrant that binds one holder, generation, fencing token, heartbeat, expiry, revocation, recovery, and terminal settlement.",
       "maturity": "pre-release",
       "status": "implemented",
-      "sourceIds": ["kfx-contract", "capability-ownership", "kfx-topology", "installed-authoring-contract", "github-webhook-qualification", "runtime-warrant-adopter-evidence"],
+      "sourceIds": ["kfx-contract", "capability-ownership", "kfx-topology", "installed-authoring-contract", "github-webhook-qualification", "runtime-warrant-adopter-evidence", "kfx-cli-implementation"],
       "nonClaim": "Declaration, KFD evidence, package origin, an Episode, or Settlement does not become a capability grant or Runtime Warrant."
     },
     {
@@ -222,7 +230,7 @@
       "summary": "The installed 4.0.0-alpha.3-matched kit supports inert authoring and lifecycle steps; separately admitted product hosts then adopt Core-owned Runtime Warrant leases without deriving authority from authoring output.",
       "maturity": "pre-release",
       "status": "experimental",
-      "sourceIds": ["installed-agent-index", "installed-authoring-brief", "installed-authoring-contract", "github-webhook-suite-readme", "runtime-warrant-adopter-evidence"],
+      "sourceIds": ["installed-agent-index", "installed-authoring-brief", "installed-authoring-contract", "github-webhook-suite-readme", "runtime-warrant-adopter-evidence", "kfx-cli-implementation"],
       "nonClaim": "Authoring output and draft adopter evidence remain inert; neither can issue a Runtime Warrant or expose a public listener."
     },
     {
@@ -231,7 +239,7 @@
       "summary": "The 4.0.0-alpha.3 runtime SDK projection exposes typed Runtime Warrant adoption, heartbeat, revocation, and settlement edges while Core alone owns issuance, recovery fencing, and authoritative lease state.",
       "maturity": "pre-release",
       "status": "implemented",
-      "sourceIds": ["installed-authoring-brief", "installed-authoring-contract", "cli-surface-catalog", "kfx-contract", "github-webhook-suite-readme", "runtime-warrant-adopter-evidence"],
+      "sourceIds": ["installed-authoring-brief", "installed-authoring-contract", "cli-surface-catalog", "kfx-contract", "github-webhook-suite-readme", "runtime-warrant-adopter-evidence", "kfx-cli-implementation"],
       "nonClaim": "A visible SDK type or CLI route does not mint, recover, or widen Runtime Warrant authority."
     },
     {
@@ -240,7 +248,7 @@
       "summary": "The 4.0.0-alpha.3 development line keeps Profiles compositional and Suites explicit about required and optional member closure, including the maintained webhook ingress, view, and dormant bridge.",
       "maturity": "pre-release",
       "status": "staged",
-      "sourceIds": ["profile-suite-decision", "github-webhook-profile", "github-webhook-suite-manifest", "github-webhook-suite-readme"],
+      "sourceIds": ["profile-suite-decision", "github-webhook-profile", "github-webhook-suite-manifest", "github-webhook-suite-readme", "kfx-cli-implementation"],
       "nonClaim": "Dependency closure does not install, activate, or widen a member."
     },
     {
@@ -258,7 +266,7 @@
       "summary": "For the 4.0.0-alpha.3 development line, retained qualification covers existing installed-product and reference-suite boundaries; the product-host Runtime Warrant witness is additional draft KFD-10 adopter evidence only.",
       "maturity": "pre-release",
       "status": "qualified",
-      "sourceIds": ["kfx-terminal-qualification", "installed-authoring-contract", "github-webhook-qualification", "github-webhook-suite-readme", "runtime-warrant-adopter-evidence"],
+      "sourceIds": ["kfx-terminal-qualification", "installed-authoring-contract", "github-webhook-qualification", "github-webhook-suite-readme", "runtime-warrant-adopter-evidence", "kfx-cli-implementation"],
       "nonClaim": "The draft Runtime Warrant witness does not establish KFD-10 conformance, activation, shipped support, stable compatibility, or downstream Site adoption."
     }
   ],
