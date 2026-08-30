@@ -7,8 +7,60 @@ from typing import Any
 import kungfu
 
 from kungfu.action_envelope import canonical_json_bytes, payload_hash
+from kungfu.storage._service_episode import (
+    _episode_close_edge as _episode_close_edge,
+    _episode_write_edge as _episode_write_edge,
+    _episode_write_options as _episode_write_options,
+    episode_abort as episode_abort,
+    episode_attach_frame as episode_attach_frame,
+    episode_attach_ref as episode_attach_ref,
+    episode_begin as episode_begin,
+    episode_end as episode_end,
+    episode_heartbeat as episode_heartbeat,
+    episode_inspect as episode_inspect,
+    episode_list as episode_list,
+    episode_projection_rebuild as episode_projection_rebuild,
+    episode_recover as episode_recover,
+    episode_recovery_execute as episode_recovery_execute,
+    episode_recovery_plan as episode_recovery_plan,
+)
+from kungfu.storage._service_fact import (
+    action_runtime as action_runtime,
+    build_fact_query_definition as build_fact_query_definition,
+    compile_fact_query_sql as compile_fact_query_sql,
+    fact_changelog as fact_changelog,
+    fact_contract as fact_contract,
+    fact_declare_contract_world as fact_declare_contract_world,
+    fact_declare_surface as fact_declare_surface,
+    fact_kernel as fact_kernel,
+    fact_kernel_backend_parity as fact_kernel_backend_parity,
+    fact_kernel_export as fact_kernel_export,
+    fact_kernel_fsck as fact_kernel_fsck,
+    fact_kernel_import as fact_kernel_import,
+    fact_kernel_rebuild_projections as fact_kernel_rebuild_projections,
+    fact_kernel_retention_plan as fact_kernel_retention_plan,
+    fact_library_contract as fact_library_contract,
+    fact_library_export as fact_library_export,
+    fact_library_import as fact_library_import,
+    fact_material_list as fact_material_list,
+    fact_material_put as fact_material_put,
+    fact_observe as fact_observe,
+    fact_profile_shadow_compare as fact_profile_shadow_compare,
+    fact_profile_shadow_inspect as fact_profile_shadow_inspect,
+    fact_profile_shadow_project as fact_profile_shadow_project,
+    fact_query as fact_query,
+    fact_query_conformance as fact_query_conformance,
+    fact_query_definition as fact_query_definition,
+    fact_state as fact_state,
+    fact_type_create as fact_type_create,
+    fact_type_list as fact_type_list,
+    kfx_registry as kfx_registry,
+    profile_lifecycle as profile_lifecycle,
+    query_plan as query_plan,
+    saved_query_catalog as saved_query_catalog,
+)
 from kungfu.storage.kfx_service import (
-    kfx_registry as _kfx_registry,
+    kfx_registry as _kfx_registry_impl,
     kfx_runtime_contract as kfx_runtime_contract,
     validate_kfx_runtime_document as validate_kfx_runtime_document,
 )
@@ -24,9 +76,65 @@ PROJECTION_MANIFEST_CATALOG = "manifest-catalog-sqlite"
 PROJECTION_ATLAS_JOURNAL_FOLD = "atlas-journal-fold"
 RUNTIME_STORAGE_SERVICE_SCHEMA = "kungfu.runtime.storage-service/v1"
 
+_kfx_registry = _kfx_registry_impl
+
 
 def _runtime():
     return kungfu.__binding__.runtime
+
+
+for _facade_callable in (
+    _episode_close_edge,
+    _episode_write_edge,
+    _episode_write_options,
+    episode_abort,
+    episode_attach_frame,
+    episode_attach_ref,
+    episode_begin,
+    episode_end,
+    episode_heartbeat,
+    episode_inspect,
+    episode_list,
+    episode_projection_rebuild,
+    episode_recover,
+    episode_recovery_execute,
+    episode_recovery_plan,
+    action_runtime,
+    build_fact_query_definition,
+    compile_fact_query_sql,
+    fact_changelog,
+    fact_contract,
+    fact_declare_contract_world,
+    fact_declare_surface,
+    fact_kernel,
+    fact_kernel_backend_parity,
+    fact_kernel_export,
+    fact_kernel_fsck,
+    fact_kernel_import,
+    fact_kernel_rebuild_projections,
+    fact_kernel_retention_plan,
+    fact_library_contract,
+    fact_library_export,
+    fact_library_import,
+    fact_material_list,
+    fact_material_put,
+    fact_observe,
+    fact_profile_shadow_compare,
+    fact_profile_shadow_inspect,
+    fact_profile_shadow_project,
+    fact_query,
+    fact_query_conformance,
+    fact_query_definition,
+    fact_state,
+    fact_type_create,
+    fact_type_list,
+    kfx_registry,
+    profile_lifecycle,
+    query_plan,
+    saved_query_catalog,
+):
+    _facade_callable.__module__ = __name__
+del _facade_callable
 
 
 def service_capabilities() -> dict[str, Any]:
@@ -452,709 +560,6 @@ def query_projection(
     )
 
 
-def _episode_write_options(
-    operation_options: dict[str, Any], write_retry: dict[str, Any] | None
-) -> dict[str, Any]:
-    options = _binding_json(operation_options)
-    if write_retry is not None:
-        options["write_retry"] = _binding_json(write_retry)
-    return options
-
-
-def _episode_write_edge(value: dict[str, Any]) -> dict[str, Any]:
-    """Preserve the established typed Python shape over the native JSON edge."""
-
-    result = dict(value)
-    status = result.get("status")
-    if isinstance(status, str):
-        result["status"] = {
-            "open": 1,
-            "ended": 2,
-            "aborted": 3,
-            "tombstoned": 4,
-        }.get(status, 0)
-    ref_kind = result.get("ref_kind")
-    if isinstance(ref_kind, str):
-        result["ref_kind"] = {
-            "input_frame": 1,
-            "payload": 2,
-            "schema": 3,
-            "episode": 4,
-        }.get(ref_kind, 0)
-    return result
-
-
-def _episode_close_edge(value: dict[str, Any]) -> dict[str, Any]:
-    result = _episode_write_edge(value)
-    write_retry = result.pop("write_retry", None)
-    content_root = result.pop("content_root", None)
-    edge: dict[str, Any] = {"close": result}
-    if content_root is not None:
-        edge["content_root"] = content_root
-    if write_retry is not None:
-        edge["write_retry"] = write_retry
-    return edge
-
-
-def episode_begin(
-    runtime_dir: str | Path,
-    *,
-    title: str = "",
-    actor: str = "",
-    source: str = "",
-    episode_id: int = 0,
-    parent_episode_id: int = 0,
-    root_trigger_frame_uid: int = 0,
-    location_uid: int = 0,
-    begin_time: int = 0,
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return _episode_write_edge(
-        dict(
-            _runtime().run_storage_service_operation(
-                "episode_begin",
-                str(runtime_dir),
-                _episode_write_options(
-                    {
-                        "episode_id": episode_id,
-                        "parent_episode_id": parent_episode_id,
-                        "root_trigger_frame_uid": root_trigger_frame_uid,
-                        "location_uid": location_uid,
-                        "begin_time": begin_time,
-                        "title": title,
-                        "actor": actor,
-                        "source": source,
-                    },
-                    write_retry,
-                ),
-            )
-        )
-    )
-
-
-def episode_heartbeat(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    location_uid: int = 0,
-    update_time: int = 0,
-    last_frame_uid: int = 0,
-    frame_count: int = 0,
-    note: str = "",
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return _episode_write_edge(
-        dict(
-            _runtime().run_storage_service_operation(
-                "episode_heartbeat",
-                str(runtime_dir),
-                _episode_write_options(
-                    {
-                        "episode_id": episode_id,
-                        "location_uid": location_uid,
-                        "update_time": update_time,
-                        "last_frame_uid": last_frame_uid,
-                        "frame_count": frame_count,
-                        "note": note,
-                    },
-                    write_retry,
-                ),
-            )
-        )
-    )
-
-
-def episode_attach_frame(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    frame_uid: int,
-    location_uid: int = 0,
-    trigger_frame_uid: int = 0,
-    stream_id: int = 0,
-    gen_time: int = 0,
-    trigger_time: int = 0,
-    carrier_type: int = 0,
-    source: int = 0,
-    dest: int = 0,
-    data_length: int = 0,
-    integrity_version: int = 0,
-    payload_checksum: int = 0,
-    frame_checksum: int = 0,
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return _episode_write_edge(
-        dict(
-            _runtime().run_storage_service_operation(
-                "episode_attach_frame",
-                str(runtime_dir),
-                _episode_write_options(
-                    {
-                        "episode_id": episode_id,
-                        "frame_uid": frame_uid,
-                        "location_uid": location_uid,
-                        "trigger_frame_uid": trigger_frame_uid,
-                        "stream_id": stream_id,
-                        "gen_time": gen_time,
-                        "trigger_time": trigger_time,
-                        "carrier_type": carrier_type,
-                        "source": source,
-                        "dest": dest,
-                        "data_length": data_length,
-                        "integrity_version": integrity_version,
-                        "payload_checksum": payload_checksum,
-                        "frame_checksum": frame_checksum,
-                    },
-                    write_retry,
-                ),
-            )
-        )
-    )
-
-
-def episode_attach_ref(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    ref_kind: str = "input_frame",
-    ref_uid: int = 0,
-    ref_id: str = "",
-    ref_hash: str = "",
-    location_uid: int = 0,
-    update_time: int = 0,
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return _episode_write_edge(
-        dict(
-            _runtime().run_storage_service_operation(
-                "episode_attach_ref",
-                str(runtime_dir),
-                _episode_write_options(
-                    {
-                        "episode_id": episode_id,
-                        "ref_kind": ref_kind,
-                        "ref_uid": ref_uid,
-                        "ref_id": ref_id,
-                        "ref_hash": ref_hash,
-                        "location_uid": location_uid,
-                        "update_time": update_time,
-                    },
-                    write_retry,
-                ),
-            )
-        )
-    )
-
-
-def episode_end(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    location_uid: int = 0,
-    end_time: int = 0,
-    last_frame_uid: int = 0,
-    frame_count: int = 0,
-    reason: str = "",
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return _episode_close_edge(
-        dict(
-            _runtime().run_storage_service_operation(
-                "episode_end",
-                str(runtime_dir),
-                _episode_write_options(
-                    {
-                        "episode_id": episode_id,
-                        "location_uid": location_uid,
-                        "end_time": end_time,
-                        "last_frame_uid": last_frame_uid,
-                        "frame_count": frame_count,
-                        "reason": reason,
-                    },
-                    write_retry,
-                ),
-            )
-        )
-    )
-
-
-def episode_abort(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    location_uid: int = 0,
-    end_time: int = 0,
-    last_frame_uid: int = 0,
-    frame_count: int = 0,
-    reason: str = "",
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return _episode_close_edge(
-        dict(
-            _runtime().run_storage_service_operation(
-                "episode_abort",
-                str(runtime_dir),
-                _episode_write_options(
-                    {
-                        "episode_id": episode_id,
-                        "location_uid": location_uid,
-                        "end_time": end_time,
-                        "last_frame_uid": last_frame_uid,
-                        "frame_count": frame_count,
-                        "reason": reason,
-                    },
-                    write_retry,
-                ),
-            )
-        )
-    )
-
-
-def episode_list(
-    runtime_dir: str | Path,
-    *,
-    location_uid: int = 0,
-    limit: int = 100,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().storage_episode_list_typed(
-            str(runtime_dir), location_uid=location_uid, limit=limit
-        )
-    )
-
-
-def episode_inspect(runtime_dir: str | Path, *, episode_id: int) -> dict[str, Any]:
-    return dict(
-        _runtime().storage_episode_inspect_typed(
-            str(runtime_dir), episode_id=episode_id
-        )
-    )
-
-
-def build_fact_query_definition(
-    *, episode_id: int = 0, cut: dict[str, Any] | None = None, limit: int = 100
-) -> dict[str, Any]:
-    """Build the canonical edge form consumed by the C++ query planner."""
-
-    examples = _runtime().run_storage_service_operation(
-        "query_plan", "", {"action": "examples"}
-    )
-    definition = dict(examples["examples"][0]["definition"])
-    definition["basis"] = dict(definition["basis"])
-    definition["basis"]["episode_id"] = _u64(episode_id)
-    definition["basis"]["cut"] = cut or {"kind": "head"}
-    definition["limit"] = limit
-    return definition
-
-
-def query_plan(
-    runtime_dir: str | Path,
-    *,
-    action: str,
-    definition: dict[str, Any] | None = None,
-    object_name: str = "episodes",
-    sql: str | None = None,
-    engine: str = "authority",
-) -> dict[str, Any]:
-    """Use the C++-owned KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 planner and discovery contract."""
-
-    options: dict[str, Any] = {
-        "action": action,
-        "object": object_name,
-        "engine": engine,
-    }
-    if definition is not None:
-        options["definition"] = definition
-    if sql is not None:
-        options["query"] = sql
-    return dict(
-        _runtime().run_storage_service_operation(
-            "query_plan", str(runtime_dir), options
-        )
-    )
-
-
-def fact_query_definition(
-    runtime_dir: str | Path,
-    definition: dict[str, Any],
-    *,
-    engine: str = "authority",
-) -> dict[str, Any]:
-    """Plan once and execute through the selected physical engine."""
-
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_query",
-            str(runtime_dir),
-            {"definition": definition, "engine": engine},
-        )
-    )
-
-
-def fact_query(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int = 0,
-    cut: dict[str, Any] | None = None,
-    limit: int = 100,
-    engine: str = "authority",
-) -> dict[str, Any]:
-    """Run the KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 Episode query through one declared engine."""
-
-    return fact_query_definition(
-        runtime_dir,
-        build_fact_query_definition(episode_id=episode_id, cut=cut, limit=limit),
-        engine=engine,
-    )
-
-
-def fact_changelog(
-    runtime_dir: str | Path,
-    definition: dict[str, Any],
-    *,
-    resume_token: dict[str, Any] | None = None,
-    max_messages: int = 100,
-) -> dict[str, Any]:
-    """Read one deterministic page of the KF-ADR-019f86da-4f90-7e38-b72f-ef8829e14104 proof changelog."""
-
-    options: dict[str, Any] = {
-        "definition": definition,
-        "max_messages": max_messages,
-    }
-    if resume_token is not None:
-        options["resume_token"] = resume_token
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_changelog", str(runtime_dir), options
-        )
-    )
-
-
-def saved_query_catalog(
-    runtime_dir: str | Path, action: str = "list", **kwargs: Any
-) -> dict[str, Any]:
-    """Operate the workspace-local journal-backed saved-query catalog."""
-    return dict(
-        _runtime().run_storage_service_operation(
-            "saved_query_catalog", str(runtime_dir), {"action": action, **kwargs}
-        )
-    )
-
-
-def profile_lifecycle(
-    runtime_dir: str | Path, action: str = "list", **kwargs: Any
-) -> dict[str, Any]:
-    """Operate the Core-owned journal-backed Profile Suite lifecycle."""
-    return dict(
-        _runtime().run_storage_service_operation(
-            "profile_lifecycle", str(runtime_dir), {"action": action, **kwargs}
-        )
-    )
-
-
-def kfx_registry(
-    action: str,
-    request: dict[str, Any],
-    runtime_dir: str | Path = "",
-) -> dict[str, Any]:
-    """Project one Core-native KFX registry or lifecycle operation."""
-
-    return _kfx_registry(action, request, runtime_dir, runtime=_runtime())
-
-
-def fact_contract(runtime_dir: str | Path = "") -> dict[str, Any]:
-    """Return the C++-owned KF-ADR-019f86da-4f90-7d81-90a0-d144fc27fe03 declaration/admission contract."""
-
-    return dict(
-        _runtime().run_storage_service_operation("fact_contract", str(runtime_dir), {})
-    )
-
-
-def fact_kernel(
-    runtime_dir: str | Path,
-    action: str,
-    request: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Forward one generic Fact operation to the Core-owned native kernel."""
-
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_kernel", str(runtime_dir), {"action": action, **(request or {})}
-        )
-    )
-
-
-def action_runtime(
-    runtime_dir: str | Path,
-    action: str,
-    request: dict[str, Any] | None = None,
-) -> Any:
-    """Forward one Action Geometry / Domain Profile / Profile action to native.
-
-    Most actions return a JSON object; ``session_valid_actions`` returns a JSON
-    array, so the wrapper preserves non-object results instead of forcing dict().
-    """
-
-    operation_request = {"action": action, **(request or {})}
-    if "search_base" not in operation_request:
-        from kungfu import host
-
-        product_root = host.product_root()
-        if product_root is not None:
-            operation_request["search_base"] = str(product_root)
-
-    result = _runtime().run_storage_service_operation(
-        "action_runtime", str(runtime_dir), operation_request
-    )
-    return dict(result) if isinstance(result, dict) else result
-
-
-def fact_profile_shadow_project(
-    runtime_dir: str | Path, document: dict[str, Any]
-) -> dict[str, Any]:
-    """Project Profile source material through the native Fact kernel."""
-
-    from kungfu.storage import fact_profile_shadow
-
-    return fact_profile_shadow.project(runtime_dir, document)
-
-
-def fact_profile_shadow_inspect(
-    runtime_dir: str | Path, *, cut_root: str = "", ref_name: str = ""
-) -> dict[str, Any]:
-    """Inspect one shadow Cut without selecting it as authority."""
-
-    from kungfu.storage import fact_profile_shadow
-
-    return fact_profile_shadow.inspect(
-        runtime_dir, cut_root=cut_root, ref_name=ref_name
-    )
-
-
-def fact_profile_shadow_compare(
-    expected: dict[str, Any], actual: dict[str, Any]
-) -> dict[str, Any]:
-    """Compare an authoritative source view with a shadow projection."""
-
-    from kungfu.storage import fact_profile_shadow
-
-    return fact_profile_shadow.compare(expected, actual)
-
-
-def fact_kernel_fsck(runtime_dir: str | Path, *, cut_root: str = "") -> dict[str, Any]:
-    from kungfu.storage import fact_kernel_integrity
-
-    return fact_kernel_integrity.fsck(runtime_dir, cut_root=cut_root)
-
-
-def fact_kernel_export(
-    runtime_dir: str | Path, *, cut_root: str = "", ref_name: str = ""
-) -> dict[str, Any]:
-    from kungfu.storage import fact_kernel_integrity
-
-    return fact_kernel_integrity.export_bundle(
-        runtime_dir, cut_root=cut_root, ref_name=ref_name
-    )
-
-
-def fact_kernel_import(
-    runtime_dir: str | Path, bundle: dict[str, Any], *, dry_run: bool = True
-) -> dict[str, Any]:
-    from kungfu.storage import fact_kernel_integrity
-
-    return fact_kernel_integrity.import_bundle(runtime_dir, bundle, dry_run=dry_run)
-
-
-def fact_kernel_retention_plan(
-    runtime_dir: str | Path, *, cut_roots: list[str] | None = None
-) -> dict[str, Any]:
-    from kungfu.storage import fact_kernel_integrity
-
-    return fact_kernel_integrity.retention_plan(runtime_dir, cut_roots=cut_roots)
-
-
-def fact_kernel_rebuild_projections(runtime_dir: str | Path) -> dict[str, Any]:
-    from kungfu.storage import fact_kernel_integrity
-
-    return fact_kernel_integrity.rebuild_projections(runtime_dir)
-
-
-def fact_kernel_backend_parity(
-    runtime_dir: str | Path, *, target_provider: str
-) -> dict[str, Any]:
-    from kungfu.storage import fact_kernel_integrity
-
-    return fact_kernel_integrity.qualify_backend_parity(
-        runtime_dir, target_provider=target_provider
-    )
-
-
-def fact_declare_contract_world(
-    runtime_dir: str | Path,
-    declaration: dict[str, Any],
-    *,
-    system_time: int = 0,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_declare_world",
-            str(runtime_dir),
-            {"declaration": declaration, "system_time": system_time},
-        )
-    )
-
-
-def fact_declare_surface(
-    runtime_dir: str | Path,
-    declaration: dict[str, Any],
-    *,
-    system_time: int = 0,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_declare_surface",
-            str(runtime_dir),
-            {"declaration": declaration, "system_time": system_time},
-        )
-    )
-
-
-def fact_observe(
-    runtime_dir: str | Path,
-    observation: dict[str, Any],
-    *,
-    system_time: int = 0,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_observe",
-            str(runtime_dir),
-            {"observation": observation, "system_time": system_time},
-        )
-    )
-
-
-def fact_state(
-    runtime_dir: str | Path,
-    *,
-    cut_system_time: int = 0,
-    subject_key: str = "",
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_state",
-            str(runtime_dir),
-            {"cut_system_time": cut_system_time, "subject_key": subject_key},
-        )
-    )
-
-
-def fact_library_contract(runtime_dir: str | Path = "") -> dict[str, Any]:
-    """Return the supported end-user Fact Library contract."""
-
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_library_contract", str(runtime_dir), {}
-        )
-    )
-
-
-def fact_type_create(
-    runtime_dir: str | Path,
-    definition: dict[str, Any],
-    *,
-    system_time: int = 0,
-) -> dict[str, Any]:
-    """Create or idempotently recover one versioned managed fact type."""
-
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_type_create",
-            str(runtime_dir),
-            {"definition": definition, "system_time": system_time},
-        )
-    )
-
-
-def fact_type_list(
-    runtime_dir: str | Path,
-    *,
-    cut_system_time: int = 0,
-    scope: str = "selected-data-root",
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_type_list",
-            str(runtime_dir),
-            {"cut_system_time": cut_system_time, "scope": scope},
-        )
-    )
-
-
-def fact_material_put(
-    runtime_dir: str | Path,
-    material: dict[str, Any],
-    *,
-    system_time: int = 0,
-) -> dict[str, Any]:
-    """Store JSON material and record its admitted observation in one intent."""
-
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_material_put",
-            str(runtime_dir),
-            {"material": material, "system_time": system_time},
-        )
-    )
-
-
-def fact_material_list(
-    runtime_dir: str | Path,
-    *,
-    type_id: str = "",
-    subject_key: str = "",
-    cut_system_time: int = 0,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_material_list",
-            str(runtime_dir),
-            {
-                "type_id": type_id,
-                "subject_key": subject_key,
-                "cut_system_time": cut_system_time,
-            },
-        )
-    )
-
-
-def fact_library_export(
-    runtime_dir: str | Path,
-    *,
-    thin: bool = False,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_library_export", str(runtime_dir), {"thin": thin}
-        )
-    )
-
-
-def fact_library_import(
-    runtime_dir: str | Path,
-    library_bundle: dict[str, Any],
-    *,
-    dry_run: bool = True,
-) -> dict[str, Any]:
-    return dict(
-        _runtime().run_storage_service_operation(
-            "fact_library_import",
-            str(runtime_dir),
-            {"library_bundle": _binding_json(library_bundle), "dry_run": dry_run},
-        )
-    )
-
-
 def assessment_contract(runtime_dir: str | Path = "") -> dict[str, Any]:
     """Return the C++-owned KF-ADR-019f86da-4f90-7b3f-9ef3-84f5a878f302 assessment contract."""
 
@@ -1295,153 +700,6 @@ def trust_await(
                 "state": status.get("state", "missing"),
             }
         time.sleep(max(poll_interval_seconds, 0.001))
-
-
-def compile_fact_query_sql(
-    runtime_dir: str | Path, *, sql: str, definition: dict[str, Any]
-) -> dict[str, Any]:
-    """Compile the bounded SQL subset into the canonical LogicalPlan."""
-
-    return query_plan(
-        runtime_dir,
-        action="compile-sql",
-        definition=definition,
-        sql=sql,
-    )
-
-
-def fact_query_conformance(
-    runtime_dir: str | Path, definition: dict[str, Any]
-) -> dict[str, Any]:
-    """Compare authority and SQLite execution at the public semantic seam."""
-
-    authority = fact_query_definition(runtime_dir, definition, engine="authority")
-    sqlite = fact_query_definition(runtime_dir, definition, engine="sqlite")
-    authority_lineage = dict(authority["lineage"])
-    sqlite_lineage = dict(sqlite["lineage"])
-    authority_lineage.pop("execution", None)
-    sqlite_lineage.pop("execution", None)
-    checks = {
-        "definition": authority["definition"] == sqlite["definition"],
-        "logical_plan": authority["logical_plan"] == sqlite["logical_plan"],
-        "result_schema": authority["result_schema"] == sqlite["result_schema"],
-        "rows": authority["rows"] == sqlite["rows"],
-        "result_hash": authority["result_hash"] == sqlite["result_hash"],
-        "lineage_semantics": authority_lineage == sqlite_lineage,
-        "lineage_authority": (
-            authority["lineage"]["authority"] == sqlite["lineage"]["authority"]
-        ),
-        "lineage_cut": authority["lineage"]["cut"] == sqlite["lineage"]["cut"],
-        "lineage_admission": (
-            authority["lineage"]["admission_outcomes"]
-            == sqlite["lineage"]["admission_outcomes"]
-        ),
-        "canonical_state": (
-            authority["lineage"]["canonical_state"]
-            == sqlite["lineage"]["canonical_state"]
-        ),
-    }
-    return {
-        "schema": "kungfu.query.conformance/v1",
-        "ok": all(checks.values()),
-        "checks": checks,
-        "authority": authority,
-        "sqlite": sqlite,
-    }
-
-
-def episode_recover(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int = 0,
-    location_uid: int = 0,
-    end_time: int = 0,
-    reason: str = "",
-    expected_manifest_frame_uid: int = 0,
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    result = dict(
-        _runtime().run_storage_service_operation(
-            "episode_recover",
-            str(runtime_dir),
-            _episode_write_options(
-                {
-                    "episode_id": episode_id,
-                    "location_uid": location_uid,
-                    "end_time": end_time,
-                    "reason": reason,
-                    "expected_manifest_frame_uid": expected_manifest_frame_uid,
-                },
-                write_retry,
-            ),
-        )
-    )
-    result["recovered"] = [
-        _episode_close_edge(dict(item)) for item in result.get("recovered", [])
-    ]
-    return result
-
-
-def episode_recovery_plan(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    location_uid: int = 0,
-    stale_after_seconds: float = 300.0,
-    now_ns: int | None = None,
-) -> dict[str, Any]:
-    options: dict[str, Any] = {
-        "episode_id": episode_id,
-        "location_uid": location_uid,
-        "stale_after_seconds": stale_after_seconds,
-    }
-    if now_ns is not None:
-        options["now_ns"] = now_ns
-    return dict(
-        _runtime().run_storage_service_operation(
-            "episode_recovery_plan", str(runtime_dir), _binding_json(options)
-        )
-    )
-
-
-def episode_recovery_execute(
-    runtime_dir: str | Path,
-    *,
-    episode_id: int,
-    location_uid: int = 0,
-    stale_after_seconds: float = 300.0,
-    reason: str = "operator recovery",
-    now_ns: int | None = None,
-    write_retry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    options: dict[str, Any] = {
-        "episode_id": episode_id,
-        "location_uid": location_uid,
-        "stale_after_seconds": stale_after_seconds,
-        "reason": reason,
-    }
-    if now_ns is not None:
-        options["now_ns"] = now_ns
-    result = dict(
-        _runtime().run_storage_service_operation(
-            "episode_recovery_execute",
-            str(runtime_dir),
-            _episode_write_options(options, write_retry),
-        )
-    )
-    if result.get("ok") and isinstance(result.get("recovery"), dict):
-        recovery = dict(result["recovery"])
-        recovery["recovered"] = [
-            _episode_close_edge(dict(item)) for item in recovery.get("recovered", [])
-        ]
-        result["recovery"] = recovery
-    return result
-
-
-def episode_projection_rebuild(runtime_dir: str | Path) -> dict[str, Any]:
-    """Rebuild the Episode manifest SQLite projection from the journal."""
-
-    return dict(_runtime().storage_episode_projection_rebuild_typed(str(runtime_dir)))
 
 
 write_jsonl = StorageTransfer.write_jsonl
