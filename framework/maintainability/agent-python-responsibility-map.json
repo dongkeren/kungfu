@@ -236,7 +236,7 @@
         "currentSources": [
           {
             "path": "framework/core/src/python/kungfu/assignment_orchestration.py",
-            "sha256": "8403f657c61835996fb70c84db44f5de9d432336d7c041be430328b8396824ca"
+            "sha256": "41668878eb536531124e691d37a649105675252ab13af959492cf2ee3b56cc82"
           },
           {
             "path": "framework/core/src/python/kungfu/assignment_outcome.py",

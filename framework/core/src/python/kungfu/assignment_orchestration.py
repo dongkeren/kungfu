@@ -71,12 +71,10 @@ def _same_or_descendant(path: Path, root: Path) -> bool:
 
 def binding_provenance(*, allow_foreign: bool = False) -> dict[str, Any]:
     """Fail closed unless pykungfu belongs to this source or installed product.
-
-    Source admission binds the native extension to the exact Git checkout and
-    build-info revision.  Installed admission instead binds the extension,
-    packaged runtime, release manifest, and source revision without requiring a
-    source checkout.  The two paths are explicit peers; a foreign binding is
-    never silently upgraded to either authority.
+    Source admission binds the native extension to the exact Git checkout and build-info
+    revision. Installed admission binds the extension, packaged runtime, release manifest,
+    and source revision without a source checkout. The two paths are explicit peers; a
+    foreign binding is never silently upgraded to either authority.
     """
 
     return assignment_provenance.inspect_binding(
@@ -533,7 +531,9 @@ class _NextActionProjection:
         )
         if semantic_state not in {
             ("executing", True, False),
+            ("recovered-closeout", False, False),
             ("recovered-closeout", True, False),
+            ("stage-ready", False, False),
             ("stage-ready", True, False),
         }:
             return None
