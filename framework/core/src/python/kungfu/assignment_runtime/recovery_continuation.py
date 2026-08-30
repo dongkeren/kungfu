@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from kungfu import initiative_family
+from kungfu import initiative_family, work_authority
 from kungfu.agent import session_contract
 from kungfu.coordination import locks
 
@@ -17,8 +17,7 @@ JsonObject = dict[str, Any]
 CONTINUATION_SCHEMA = "kungfu.work.fresh-recovery-continuation/v1"
 CONTINUATION_INDEX_SCHEMA = "kungfu.work.fresh-recovery-continuation-index/v1"
 CONTINUATION_MODE = "resume/new-attempt"
-RECEIPT_SCHEMA = "kungfu.work.fresh-recovery-receipt/v1"
-_PROJECTION_KEYS = frozenset({"query_proof_root", "work_semantics"})
+RECEIPT_SCHEMA = "kungfu.work.fresh-recovery-receipt/v3"
 
 
 def _root(value: Any) -> str:
@@ -26,7 +25,7 @@ def _root(value: Any) -> str:
 
 
 def _preserved_state(status: Mapping[str, Any]) -> JsonObject:
-    return {key: value for key, value in status.items() if key not in _PROJECTION_KEYS}
+    return work_authority.retained_assignment_authority(status)
 
 
 def _storage_root(runtime_dir: str | Path) -> Path:
@@ -54,6 +53,8 @@ def _write_exact_json(path: Path, value: Mapping[str, Any]) -> None:
 
 
 def _body(plan: Mapping[str, Any], receipt: Mapping[str, Any]) -> JsonObject:
+    decision = dict(receipt.get("continuationDecision") or {})
+    next_action = decision.get("nextAction")
     return {
         "schema": CONTINUATION_SCHEMA,
         "state": "available",
@@ -66,7 +67,12 @@ def _body(plan: Mapping[str, Any], receipt: Mapping[str, Any]) -> JsonObject:
         "work": dict(plan.get("work") or {}),
         "writeAuthority": "none",
         "assignmentWrites": [],
-        "allowedNextActions": ["claim-completion"],
+        "continuationDecision": decision,
+        "allowedNextActions": (
+            [str(next_action.get("action") or "")]
+            if isinstance(next_action, Mapping)
+            else []
+        ),
         "forbiddenEffects": ["admit", "claim", "kickoff"],
     }
 
@@ -150,7 +156,22 @@ def _identity_checks(
         continuation.get("continuationRoot") == _root(body),
         continuation.get("writeAuthority") == "none",
         continuation.get("assignmentWrites") == [],
-        continuation.get("allowedNextActions") == ["claim-completion"],
+        continuation.get("continuationDecision")
+        == (continuation.get("freshRecoveryReceipt") or {}).get("continuationDecision"),
+        continuation.get("allowedNextActions")
+        == (
+            [
+                str(
+                    (
+                        continuation.get("continuationDecision", {}).get("nextAction")
+                        or {}
+                    ).get("action")
+                    or ""
+                )
+            ]
+            if continuation.get("continuationDecision", {}).get("nextAction")
+            else []
+        ),
         set(continuation.get("forbiddenEffects") or [])
         == {"admit", "claim", "kickoff"},
         not lifecycle.get("active_lease"),

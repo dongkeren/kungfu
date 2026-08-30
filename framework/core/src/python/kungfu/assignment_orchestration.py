@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
-from kungfu import assignment_outcome, assignment_provenance
+from kungfu import assignment_outcome, assignment_provenance, work_authority
 from kungfu.initiative_family import canonical as assignment_canonical
 
 REQUEST_SCHEMA = "kungfu.assignment-request/v1"
@@ -574,6 +574,28 @@ def next_actions(status: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Preserve the public facade seam while delegating projection ownership."""
 
     return _NextActionProjection.project(status)
+
+
+def continuation_decision(status: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive the only semantic next-action decision for one Assignment cut."""
+
+    actions = next_actions(status)
+    if len(actions) > 1:
+        raise ValueError("Work continuation has more than one semantic next action")
+    semantics = status.get("work_semantics")
+    body = {
+        "schema": work_authority.CONTINUATION_DECISION_SCHEMA,
+        "retainedAuthorityRoot": work_authority.semantic_root(
+            work_authority.retained_assignment_authority(status)
+        ),
+        "workSemanticsRoot": (
+            work_authority.semantic_root(semantics)
+            if isinstance(semantics, Mapping)
+            else None
+        ),
+        "nextAction": dict(actions[0]) if actions else None,
+    }
+    return {**body, "decisionRoot": work_authority.semantic_root(body)}
 
 
 def gate(status: Mapping[str, Any], target: str) -> dict[str, Any]:

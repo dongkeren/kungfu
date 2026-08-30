@@ -1676,6 +1676,41 @@ def test_next_actions_keeps_completion_after_work_semantics_settle():
     )
 
 
+def test_continuation_decision_is_the_rooted_single_next_action_projection():
+    status = {
+        "initiative_id": "initiative-a",
+        "assignment_id": "assignment-a",
+        "phase": "stage-ready",
+        "active_lease": {"lease_id": "lease-a"},
+        "assignment": {"assignment_id": "assignment-a"},
+        "completion_claim_count": 0,
+        "work_semantics": {
+            "current_input_snapshot": {"record_root": _sha256("a")},
+            "completion_eligible": True,
+            "next_actions": [{"action": "claim-completion"}],
+        },
+    }
+
+    decision = assignment_orchestration.continuation_decision(status)
+
+    assert decision["schema"] == "kungfu.work.continuation-decision/v1"
+    assert decision["nextAction"] == assignment_orchestration.next_actions(status)[0]
+    assert decision["decisionRoot"] == assignment_canonical.semantic_root(
+        {key: value for key, value in decision.items() if key != "decisionRoot"}
+    )
+
+
+def test_continuation_decision_rejects_multiple_semantic_actions(monkeypatch):
+    monkeypatch.setattr(
+        assignment_orchestration._NextActionProjection,
+        "project",
+        lambda _status: [{"action": "one"}, {"action": "two"}],
+    )
+
+    with pytest.raises(ValueError, match="more than one semantic next action"):
+        assignment_orchestration.continuation_decision({})
+
+
 def test_gate_field_equivalence_and_runtime_independent_seal(tmp_path):
     status = {
         "initiative_id": "initiative-a",

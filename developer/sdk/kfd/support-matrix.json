@@ -262,7 +262,7 @@
           },
           {
             "path": "framework/core/tests/python/test_assignment_orchestration.py",
-            "sha256": "sha256:8078c1a1df495816eeefc1be4ceea98212353acf6aa77e9dadbbc91858cabc69"
+            "sha256": "sha256:69ebc70889d6cd612634833eb96d6a94249115833cc64a46cce792c4377477a6"
           },
           {
             "path": "docs/architecture/primitive-management-plane.md",
@@ -635,7 +635,7 @@
         "evidenceRoots": [
           {
             "path": "framework/core/src/python/kungfu/assignment_orchestration.py",
-            "sha256": "sha256:8403f657c61835996fb70c84db44f5de9d432336d7c041be430328b8396824ca"
+            "sha256": "sha256:af5e104b1389c557c6aa7c6b6e8befd1c00c9f2ce20410a4bb71ab77ef647008"
           }
         ]
       },
