@@ -229,9 +229,9 @@ test('repository regex literals cannot extend known function boundaries', () => 
     },
     {
       path: 'scripts/readonly-source-toolchain.mjs',
-      symbol: 'parseYaml',
-      startLine: 163,
-      endLine: 284,
+      symbol: 'parseYamlBlockScalar',
+      startLine: 196,
+      endLine: 231,
     },
   ];
   for (const expected of fixtures) {
