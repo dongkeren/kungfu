@@ -82,6 +82,11 @@ ${modules}
 ):
     _export_legacy_surface(_module)
 
+# Static aliases keep the typed public consumers visible to mypy while the
+# complete legacy surface remains projected by the generated-name loop above.
+BaseType = _BaseType.BaseType
+Schema = _Schema.Schema
+
 # These names were also visible on flatc's former one-file module.
 flatbuffers = _Schema.flatbuffers
 import_numpy = _Schema.import_numpy
