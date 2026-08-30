@@ -262,7 +262,7 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   );
   assert.match(
     bridge,
-    /\.head\.repo\.full_name == \$repository[\s\S]*\.head\.sha == \$head[\s\S]*\.base\.ref == \$branch[\s\S]*\.state == "open"/u,
+    /\.base\.repo\.full_name == \$repository[\s\S]*\.head\.sha == \$head[\s\S]*\.base\.ref == \$branch[\s\S]*\.state == "open"/u,
   );
   assert.match(
     bridge,
@@ -373,6 +373,15 @@ test('Dev behind admission produces and forwards an exact Project Cut replay pro
     workflow,
     /git ls-remote --exit-code origin "refs\/heads\/\$TARGET_BRANCH"[\s\S]*test "\$current_base" = "\$remote_base"/u,
   );
+  assert.match(
+    workflow,
+    /test "\$GITHUB_REPOSITORY" = "\$\(jq -r '\.base\.repo\.full_name' "\$pull_request"\)"/u,
+  );
+  assert.match(
+    workflow,
+    /\.base\.repo\.full_name == \$repository[\s\S]*\.head\.sha == \$head[\s\S]*\.base\.ref == \$branch[\s\S]*\.state == "open"/u,
+  );
+  assert.doesNotMatch(workflow, /\.head\.repo\.full_name == \$repository/u);
   assert.doesNotMatch(
     workflow,
     /test "\$current_base" = "\$\(jq -r '\.base\.sha'/u,
