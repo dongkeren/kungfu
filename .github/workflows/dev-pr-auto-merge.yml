@@ -371,6 +371,7 @@ jobs:
           SOURCE_RUN_ID: ${{ needs.resolve-target.outputs.source-workflow-run-id }}
           EXPECTED_PR: ${{ needs.resolve-target.outputs.expected-pr-number }}
           EXPECTED_HEAD: ${{ needs.resolve-target.outputs.expected-head-sha }}
+          TARGET_BRANCH: ${{ needs.resolve-target.outputs.target-branch }}
         run: |
           set -euo pipefail
           mkdir -p .buildchain/dev-delivery-input
@@ -384,10 +385,36 @@ jobs:
              and .path == ".github/workflows/affected-native-pr.yml"
              and .event == "pull_request"
              and .status == "completed"
-             and .head_sha == $head
-             and (.pull_requests | length) == 1
-             and .pull_requests[0].number == $pullRequest' \
+             and .head_sha == $head' \
             .buildchain/dev-delivery-input/source-workflow-run.json >/dev/null
+          source_run_pull_request_count="$(jq '(.pull_requests // []) | length' .buildchain/dev-delivery-input/source-workflow-run.json)"
+          case "$source_run_pull_request_count" in
+            1)
+              jq -e \
+                --argjson pullRequest "$EXPECTED_PR" \
+                '.pull_requests[0].number == $pullRequest' \
+                .buildchain/dev-delivery-input/source-workflow-run.json >/dev/null
+              ;;
+            0)
+              # GitHub's Actions REST payload may omit pull_requests for an
+              # exact pull_request run. Retain the same binding by reading the
+              # declared PR and proving its live head/base before continuation.
+              gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > .buildchain/dev-delivery-input/source-pull-request.json
+              jq -e \
+                --argjson pullRequest "$EXPECTED_PR" \
+                --arg head "$EXPECTED_HEAD" \
+                --arg branch "$TARGET_BRANCH" \
+                '.number == $pullRequest
+                 and .state == "open"
+                 and .head.sha == $head
+                 and .base.ref == $branch' \
+                .buildchain/dev-delivery-input/source-pull-request.json >/dev/null
+              ;;
+            *)
+              echo "source workflow run must bind zero or one pull request; got: $source_run_pull_request_count" >&2
+              exit 1
+              ;;
+          esac
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/jobs?filter=latest&per_page=100" \
             > .buildchain/dev-delivery-input/source-workflow-jobs.json
           jq -e \

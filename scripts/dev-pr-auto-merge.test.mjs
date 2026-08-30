@@ -101,7 +101,11 @@ test('Dev Agent admission binds every targeted run to one exact PR head', () => 
   );
   assert.match(
     workflow,
-    /Verify exact source qualification run[\s\S]*\.name == "Core affected native"[\s\S]*\.path == "\.github\/workflows\/affected-native-pr\.yml"[\s\S]*\.head_sha == \$head[\s\S]*\.pull_requests\[0\]\.number == \$pullRequest/u,
+    /Verify exact source qualification run[\s\S]*\.name == "Core affected native"[\s\S]*\.path == "\.github\/workflows\/affected-native-pr\.yml"[\s\S]*\.head_sha == \$head/u,
+  );
+  assert.match(
+    workflow,
+    /source_run_pull_request_count=.*\(\.pull_requests \/\/ \[\]\) \| length[\s\S]*case "\$source_run_pull_request_count" in[\s\S]*1\)[\s\S]*\.pull_requests\[0\]\.number == \$pullRequest[\s\S]*0\)[\s\S]*repos\/\$GITHUB_REPOSITORY\/pulls\/\$EXPECTED_PR[\s\S]*\.state == "open"[\s\S]*\.head\.sha == \$head[\s\S]*\.base\.ref == \$branch/u,
   );
   assert.match(
     workflow,
