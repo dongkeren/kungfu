@@ -479,7 +479,7 @@ test('workflow contract keeps candidates exact-source, independent, and publish-
   assert.doesNotMatch(workflow, /inputs\.buildchain-ref/u);
   assert.match(
     affectedNativeWorkflow,
-    /source_acceptance:[\s\S]*uses: kungfu-systems\/buildchain\/\.github\/workflows\/check\.yml@1342b7d68936ab3c31b58b255df1de49c234bc02[\s\S]*buildchain-ref: 1342b7d68936ab3c31b58b255df1de49c234bc02[\s\S]*source-proof-reuse: true[\s\S]*source-proof-policy-paths-json: '\["\.github\/workflows\/affected-native-pr\.yml"\]'[\s\S]*source-proof-closure-paths-json: '\["\.buildchain\/buildchain\.toml","shifu","scripts\/source-acceptance\.mjs","scripts\/require-shifu\.mjs"\]'[\s\S]*source-proof-dependency-paths-json: '\["package\.json","pnpm-lock\.yaml"\]'[\s\S]*source-proof-required-contexts-json: '\["Candidate source acceptance \/ check"\]'/u,
+    /source_acceptance:[\s\S]*uses: kungfu-systems\/buildchain\/\.github\/workflows\/check\.yml@14d5d5a4a3e8865f7acb61abb0cfc36ed734aad5[\s\S]*buildchain-ref: 14d5d5a4a3e8865f7acb61abb0cfc36ed734aad5[\s\S]*source-proof-reuse: true[\s\S]*source-proof-policy-paths-json: '\["\.github\/workflows\/affected-native-pr\.yml"\]'[\s\S]*source-proof-closure-paths-json: '\["\.buildchain\/buildchain\.toml","shifu","scripts\/source-acceptance\.mjs","scripts\/require-shifu\.mjs"\]'[\s\S]*source-proof-dependency-paths-json: '\["package\.json","pnpm-lock\.yaml"\]'[\s\S]*source-proof-required-contexts-json: '\["Candidate source acceptance \/ check"\]'/u,
   );
   assert.match(
     affectedNativeWorkflow,
