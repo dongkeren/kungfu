@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Mapping, NoReturn
 
@@ -113,6 +114,25 @@ def _source_directory(state: Mapping[str, Any]) -> Path | None:
         if current.parent == current:
             break
         current = current.parent
+    return _relocated_source_directory(state)
+
+
+def _relocated_source_directory(state: Mapping[str, Any]) -> Path | None:
+    """Resolve an identical bundled source after product-image replacement."""
+
+    bundled_root = os.environ.get("KF_BUNDLED_EXTENSION_ROOT", "")
+    profile_id = state.get("profile_id")
+    profile_root = state.get("profile_suite_root")
+    if bundled_root and isinstance(profile_id, str) and isinstance(profile_root, str):
+        try:
+            discovered = profile_sdk.discover_source(
+                profile_id,
+                search_roots=[bundled_root],
+            )
+            if discovered.get("profileSuiteRoot") == profile_root:
+                return Path(discovered["source"]).expanduser().resolve()
+        except (KeyError, profile_sdk.ProfileSdkError):
+            pass
     return None
 
 
