@@ -9,17 +9,20 @@ existing KFD-7 Work Profile, native Fact ref CAS, and Episode lifecycle APIs.
 
 from __future__ import annotations
 
-import argparse
+import argparse as argparse
 import copy
 import hashlib
 import json
-import sys
+import sys as sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from kungfu.agent import _action_loop_transport
 from kungfu.agent import work_profile
-from kungfu.agent.native_authority import inspect_native_authority
+from kungfu.agent.native_authority import (
+    inspect_native_authority as inspect_native_authority,
+)
 from kungfu.storage import service
 from kungfu.storage.episode_lifecycle import (
     RuntimeEpisodeLifecycle,
@@ -981,59 +984,11 @@ def resolve_fact_ref(runtime_dir: str | Path, loop_ref: str) -> dict[str, Any] |
 
 
 def dispatch(runtime_dir: str | Path, operation: str, payload: Any) -> Any:
-    if operation == "authority-inspect":
-        expected = payload if isinstance(payload, Mapping) else None
-        return inspect_native_authority(runtime_dir, expected)
-    if isinstance(payload, Mapping):
-        expected_authority = payload.get("nativeAuthority")
-        envelope = payload.get("envelope")
-        if expected_authority is None and isinstance(envelope, Mapping):
-            expected_authority = envelope.get("nativeAuthority")
-        if isinstance(expected_authority, Mapping):
-            authority = inspect_native_authority(runtime_dir, expected_authority)
-            if authority.get("status") != "current":
-                return authority
-    if operation == "work-profile-bind":
-        return bind_work_profile(runtime_dir, payload)
-    if operation == "episode-resume-or-begin":
-        return resume_or_begin_episode(runtime_dir, payload)
-    if operation == "episode-inspect":
-        return inspect_episode(runtime_dir, payload)
-    if operation == "episode-seal":
-        return seal_episode(runtime_dir, payload)
-    if operation == "work-profile-atlas-refresh":
-        return refresh_atlas(runtime_dir, payload)
-    if operation == "completion-review":
-        return review_completion(runtime_dir, payload)
-    if operation == "fact-settle":
-        return settle_fact(runtime_dir, payload)
-    if operation == "checkpoint-save":
-        return save_checkpoint(runtime_dir, payload)
-    if operation == "checkpoint-load":
-        return load_checkpoint(runtime_dir, payload)
-    if operation == "checkpoint-resolve":
-        return resolve_fact_ref(runtime_dir, payload)
-    raise ValueError(f"unsupported Action Loop adapter operation: {operation}")
+    return _action_loop_transport.dispatch(runtime_dir, operation, payload)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--runtime-dir", required=True)
-    parser.add_argument("operation")
-    args = parser.parse_args(argv)
-    try:
-        payload = json.load(sys.stdin)
-        result = dispatch(args.runtime_dir, args.operation, payload)
-    except Exception as error:
-        result = {
-            "status": "denied",
-            "code": "adapter-error",
-            "message": str(error),
-            "writeOccurred": False,
-        }
-    json.dump(result, sys.stdout, ensure_ascii=False, separators=(",", ":"))
-    sys.stdout.write("\n")
-    return 0
+    return _action_loop_transport.main(dispatch, argv)
 
 
 if __name__ == "__main__":
