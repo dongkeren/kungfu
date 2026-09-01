@@ -42,14 +42,57 @@
         "functionRisk": { "functions": 22, "total": 171, "maximum": 28 }
       },
       "current": {
-        "physicalLines": 1210,
-        "responsibilities": 33,
-        "functionRisk": { "functions": 20, "total": 133, "maximum": 27 }
+        "physicalLines": 517,
+        "responsibilities": 17,
+        "functionRisk": { "functions": 4, "total": 44, "maximum": 27 }
       },
-      "ownerFiles": ["framework/core/src/python/kungfu/agent/native_launch.py"],
-      "ownedDefinitions": ["provider_interactive_argv"],
-      "facadeSymbols": ["interactive_launch_argv"],
-      "responsibility": "Agent process execution remains here; provider-specific interactive launch construction is owned by kungfu.agent.native_launch."
+      "ownerFiles": [
+        "framework/core/src/python/kungfu/agent/native_launch.py",
+        "framework/core/src/python/kungfu/agent/_run_agent/runtime.py"
+      ],
+      "ownedDefinitions": [
+        "provider_interactive_argv",
+        "bind_current_native_work",
+        "agent_activity_history_projection",
+        "validate_work_ref",
+        "validate_continuation",
+        "select_profile",
+        "select_interactive_profile",
+        "launch_argv",
+        "_direct_process_transport",
+        "native_environment",
+        "run_native_interactive",
+        "_environment",
+        "_cwd",
+        "ProcessResult",
+        "_session_ref",
+        "_invoke_session_control",
+        "_wait_for_session",
+        "run_session_attempt",
+        "run_process"
+      ],
+      "facadeSymbols": [
+        "interactive_launch_argv",
+        "bind_current_native_work",
+        "agent_activity_history_projection",
+        "validate_work_ref",
+        "validate_continuation",
+        "select_profile",
+        "select_interactive_profile",
+        "launch_argv",
+        "_direct_process_transport",
+        "native_environment",
+        "run_native_interactive",
+        "_environment",
+        "_cwd",
+        "ProcessResult",
+        "_session_ref",
+        "_invoke_session_control",
+        "_wait_for_session",
+        "run_session_attempt",
+        "run_process"
+      ],
+      "responsibility": "Episode, report, and public execution orchestration remain on the stable facade; Work binding, launch policy, environment construction, Session control, and direct process transport are owned by the private run-agent runtime module, while provider-specific interactive argv remains owned by native_launch."
     },
     {
       "sourcePath": "framework/core/src/python/kungfu/agent_work_lab.py",
