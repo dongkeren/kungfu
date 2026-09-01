@@ -1,6 +1,6 @@
 {
   "schema": "kungfu.code-complexity-budget-waiver/v3",
-  "issue_root": "sha256:a8c66538ea77cb8d725ad83c0637a67c171d267194cec8e3ede92da8c17ad2a3",
+  "issue_root": "sha256:a46c55fe8664a23d4cb406e8f8b38710a68bc72e146ecab449718b787d82c6ca",
   "issue_kind": "new-helper-proliferation",
   "paths_or_scope": [
     "framework/core/src/python/kungfu/agent/_action_loop_support.py",
@@ -13,8 +13,7 @@
     "framework/core/src/python/kungfu/cli/commands/_workspace/admission.py",
     "framework/core/src/python/kungfu/cli/commands/_workspace/presentation.py",
     "framework/core/src/python/kungfu/project_tour/native_operations.py",
-    "framework/core/src/python/kungfu/skill/_registry/support.py",
-    "framework/core/src/python/kungfu/storage/cli_episode.py"
+    "framework/core/src/python/kungfu/skill/_registry/support.py"
   ],
   "budget_classes": [
     "first-party-handwritten-implementation:python"
@@ -108,20 +107,12 @@
       "owner": "core/package",
       "lines": 418,
       "contentRoot": "sha256:9bd200ba083e3ebb64a14b29c6b21d8b7b0dac4f11390359c5c2de0bcfb7e09d"
-    },
-    {
-      "path": "framework/core/src/python/kungfu/storage/cli_episode.py",
-      "class": "first-party-handwritten-implementation",
-      "language": "python",
-      "owner": "core/package",
-      "lines": 482,
-      "contentRoot": "sha256:f9a15498697750fb6a27833edee5c531854636e0fa66d60aefcef4e552bb5aed"
     }
   ],
-  "allowed_delta": 3572,
+  "allowed_delta": 3090,
   "owner": "core/package",
   "responsibility_boundary": "Phase 7 separates seven production Python facades into cohesive Skill CLI, Agent run, Skill registry, Workspace CLI, Project Tour, Action Loop, and Storage Episode owners while preserving their stable public modules.",
-  "cohesion_rationale": "The twelve new owner modules are the minimum cumulative responsibility set needed to remove the seven Phase 7 monoliths. Storage Episode commands live in the storage domain rather than inflating the CLI aggregate, and each remaining helper owns an independently changing command, transport, persistence, or native-operation boundary.",
+  "cohesion_rationale": "The eleven new owner modules are the minimum cumulative responsibility set needed to remove the seven Phase 7 monoliths. Storage Episode commands move from the CLI package into their existing storage-domain ownership without increasing the clean-HEAD helper count, and each new helper owns an independently changing command, transport, persistence, or native-operation boundary.",
   "rejected_split_alternatives": [
     "Keeping any of the seven responsibility groups in its original facade would retain an over-1000-line handwritten production module.",
     "Splitting individual commands or functions into smaller arbitrary files would increase indirection without creating independent ownership.",
