@@ -5,8 +5,8 @@ import hashlib
 import inspect
 from pathlib import Path
 
-from kungfu.cli.commands import _storage_episode
 from kungfu.cli.commands import storage as storage_cli
+from kungfu.storage import cli_episode as _storage_episode
 
 
 EPISODE_NAMES = (
