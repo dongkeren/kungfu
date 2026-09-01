@@ -664,6 +664,7 @@ export function sourceAcceptancePlan(
       'scripts/check-community-health-baseline.mjs',
     ],
     ['npm Release package registry', 'scripts/check-npm-package-registry.mjs'],
+    ['framework layout boundary', 'scripts/check-framework-layout.mjs'],
     [
       'component distribution boundary',
       'scripts/check-npm-package-registry.mjs',
@@ -1013,6 +1014,7 @@ export function sourceAcceptancePlan(
               'scripts/prepare-ungfu-release-evidence.test.mjs',
               'scripts/check-npm-package-registry.test.mjs',
               'scripts/npm-release-inventory.test.mjs',
+              'scripts/check-framework-layout.test.mjs',
               'scripts/check-upgrade-contract.test.mjs',
               'scripts/probe-cpp-cmake-contract.test.mjs',
               'scripts/check-upgrade-qualification.test.mjs',

@@ -772,6 +772,7 @@ test('source plan covers representative source-only checks', () => {
   assert.ok(labels.includes('Python type baseline'));
   assert.ok(labels.includes('changed C/C++ format'));
   assert.ok(labels.includes('documentation contracts'));
+  assert.ok(labels.includes('framework layout boundary'));
   assert.ok(labels.includes('core architecture contract'));
   assert.ok(labels.includes('core architecture negative fixtures'));
   assert.ok(labels.includes('core affected-native negative fixtures'));
@@ -853,6 +854,9 @@ test('source plan covers representative source-only checks', () => {
   ]);
   assert.ok(
     contractTests.args.includes('scripts/check-upgrade-contract.test.mjs'),
+  );
+  assert.ok(
+    contractTests.args.includes('scripts/check-framework-layout.test.mjs'),
   );
   assert.ok(
     contractTests.args.includes('scripts/affected-native-proof.test.mjs'),
