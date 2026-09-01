@@ -11,6 +11,7 @@ def test_action_loop_responsibility_modules_are_bounded():
     facade = Path(action_loop.__file__).resolve()
     budgets = {
         facade: 1000,
+        facade.with_name("_action_loop_support.py"): 80,
         facade.with_name("_action_loop_transport.py"): 80,
     }
     for source, maximum in budgets.items():
