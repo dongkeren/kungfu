@@ -6,7 +6,7 @@ import tempfile
 import click
 
 from kungfu.cli.commands import PrioritizedCommandGroup, initialize_runtime_context, kfc
-from kungfu.cli.commands._storage_episode import (
+from kungfu.storage.cli_episode import (
     _run_episode_write,
     attach_frame,
     attach_payload,

@@ -130,7 +130,7 @@ test('high-value command paths declare the registered preflight profiles', () =>
     .join('\n');
   const storageSource = [
     'framework/core/src/python/kungfu/cli/commands/storage.py',
-    'framework/core/src/python/kungfu/cli/commands/_storage_episode.py',
+    'framework/core/src/python/kungfu/storage/cli_episode.py',
   ]
     .map((relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8'))
     .join('\n');

@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
+"""Episode command ownership behind the stable storage CLI facade."""
+
 import json
 from pathlib import Path
 import sys
