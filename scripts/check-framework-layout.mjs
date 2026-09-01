@@ -95,147 +95,178 @@ function isSafeRepositoryPath(value) {
   );
 }
 
-function importSpecifiers(source) {
+function skipLineComment(source, index) {
+  const end = source.indexOf('\n', index + 2);
+  return end === -1 ? source.length : end;
+}
+
+function skipBlockComment(source, index) {
+  const end = source.indexOf('*/', index + 2);
+  return end === -1 ? source.length : end + 2;
+}
+
+function scanQuotedString(source, index) {
+  const quote = source[index];
+  let value = '';
+  let cursor = index + 1;
+  while (cursor < source.length && source[cursor] !== quote) {
+    if (source[cursor] === '\\' && cursor + 1 < source.length) {
+      value += source.slice(cursor, cursor + 2);
+      cursor += 2;
+    } else {
+      value += source[cursor];
+      cursor += 1;
+    }
+  }
+  return { next: cursor + 1, token: { kind: 'string', value } };
+}
+
+function skipTemplateLiteral(source, index) {
+  let cursor = index + 1;
+  while (cursor < source.length) {
+    if (source[cursor] === '\\') cursor += 2;
+    else if (source[cursor] === '`') return cursor + 1;
+    else cursor += 1;
+  }
+  return cursor;
+}
+
+function scanWord(source, index) {
+  let cursor = index + 1;
+  while (cursor < source.length && /[A-Za-z0-9_$]/u.test(source[cursor]))
+    cursor += 1;
+  return {
+    next: cursor,
+    token: { kind: 'word', value: source.slice(index, cursor) },
+  };
+}
+
+function javascriptTokens(source) {
   const tokens = [];
   let index = 0;
   while (index < source.length) {
     const character = source[index];
-    if (/\s/u.test(character)) {
+    if (/\s/u.test(character)) index += 1;
+    else if (source.startsWith('//', index))
+      index = skipLineComment(source, index);
+    else if (source.startsWith('/*', index))
+      index = skipBlockComment(source, index);
+    else if (character === '"' || character === "'") {
+      const scanned = scanQuotedString(source, index);
+      tokens.push(scanned.token);
+      index = scanned.next;
+    } else if (character === '`') index = skipTemplateLiteral(source, index);
+    else if (/[A-Za-z_$]/u.test(character)) {
+      const scanned = scanWord(source, index);
+      tokens.push(scanned.token);
+      index = scanned.next;
+    } else {
+      tokens.push({ kind: 'punctuation', value: character });
       index += 1;
-      continue;
     }
-    if (character === '/' && source[index + 1] === '/') {
-      index = source.indexOf('\n', index + 2);
-      if (index === -1) break;
-      continue;
-    }
-    if (character === '/' && source[index + 1] === '*') {
-      const end = source.indexOf('*/', index + 2);
-      index = end === -1 ? source.length : end + 2;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      const quote = character;
-      let value = '';
-      index += 1;
-      while (index < source.length && source[index] !== quote) {
-        if (source[index] === '\\' && index + 1 < source.length) {
-          value += source.slice(index, index + 2);
-          index += 2;
-        } else {
-          value += source[index];
-          index += 1;
-        }
-      }
-      index += 1;
-      tokens.push({ kind: 'string', value });
-      continue;
-    }
-    if (character === '`') {
-      index += 1;
-      while (index < source.length) {
-        if (source[index] === '\\') index += 2;
-        else if (source[index] === '`') {
-          index += 1;
-          break;
-        } else index += 1;
-      }
-      continue;
-    }
-    if (/[A-Za-z_$]/u.test(character)) {
-      const start = index;
-      index += 1;
-      while (index < source.length && /[A-Za-z0-9_$]/u.test(source[index]))
-        index += 1;
-      tokens.push({ kind: 'word', value: source.slice(start, index) });
-      continue;
-    }
-    tokens.push({ kind: 'punctuation', value: character });
-    index += 1;
   }
+  return tokens;
+}
 
+function callSpecifier(tokens, tokenIndex) {
+  if (
+    tokens[tokenIndex + 1]?.value === '(' &&
+    tokens[tokenIndex + 2]?.kind === 'string'
+  )
+    return tokens[tokenIndex + 2].value;
+  return '';
+}
+
+function fromSpecifier(tokens, tokenIndex) {
+  for (let cursor = tokenIndex + 1; cursor < tokens.length; cursor += 1) {
+    if (tokens[cursor].value === ';') return '';
+    if (
+      tokens[cursor].kind === 'word' &&
+      tokens[cursor].value === 'from' &&
+      tokens[cursor + 1]?.kind === 'string'
+    )
+      return tokens[cursor + 1].value;
+  }
+  return '';
+}
+
+function tokenSpecifier(tokens, tokenIndex) {
+  const token = tokens[tokenIndex];
+  if (token.kind !== 'word') return '';
+  if (token.value === 'require') return callSpecifier(tokens, tokenIndex);
+  if (token.value !== 'import' && token.value !== 'export') return '';
+  return (
+    callSpecifier(tokens, tokenIndex) ||
+    (tokens[tokenIndex + 1]?.kind === 'string'
+      ? tokens[tokenIndex + 1].value
+      : fromSpecifier(tokens, tokenIndex))
+  );
+}
+
+function importSpecifiers(source) {
+  const tokens = javascriptTokens(source);
   const specifiers = [];
   for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
-    const token = tokens[tokenIndex];
-    if (token.kind !== 'word') continue;
-    if (token.value === 'require' || token.value === 'import') {
-      if (
-        tokens[tokenIndex + 1]?.value === '(' &&
-        tokens[tokenIndex + 2]?.kind === 'string'
-      ) {
-        specifiers.push(tokens[tokenIndex + 2].value);
-        continue;
-      }
-      if (
-        token.value === 'import' &&
-        tokens[tokenIndex + 1]?.kind === 'string'
-      ) {
-        specifiers.push(tokens[tokenIndex + 1].value);
-        continue;
-      }
-    }
-    if (token.value !== 'import' && token.value !== 'export') continue;
-    for (let cursor = tokenIndex + 1; cursor < tokens.length; cursor += 1) {
-      if (tokens[cursor].value === ';') break;
-      if (
-        tokens[cursor].kind === 'word' &&
-        tokens[cursor].value === 'from' &&
-        tokens[cursor + 1]?.kind === 'string'
-      ) {
-        specifiers.push(tokens[cursor + 1].value);
-        break;
-      }
-    }
+    const specifier = tokenSpecifier(tokens, tokenIndex);
+    if (specifier) specifiers.push(specifier);
   }
   return specifiers.filter((specifier) => /^\.\.?\//u.test(specifier));
 }
 
-export function discoverBoundaryImports({ root = ROOT, manifest } = {}) {
+function completedBoundaries(root, manifest) {
   const entries = Array.isArray(manifest?.entries) ? manifest.entries : [];
-  const boundaries = entries
+  return entries
     .filter((entry) => entry.boundaryReview === 'complete' && entry.boundary)
     .map((entry) => ({
       path: entry.path,
       root: path.resolve(root, entry.path),
       stableEntrypoints: new Set(entry.boundary.stableEntrypoints || []),
     }));
+}
+
+function importedBoundary(root, file, specifier, boundary) {
+  const target = path.resolve(path.dirname(file), specifier);
+  if (
+    target !== boundary.root &&
+    !target.startsWith(`${boundary.root}${path.sep}`)
+  )
+    return null;
+  if (file === boundary.root || file.startsWith(`${boundary.root}${path.sep}`))
+    return null;
+  const targetPath = repositoryPath(root, target);
+  return {
+    importer: repositoryPath(root, file),
+    target: targetPath,
+    kind: boundary.stableEntrypoints.has(targetPath) ? 'stable' : 'deep',
+  };
+}
+
+function sortBoundaryImports(imports) {
+  for (const values of Object.values(imports))
+    values.sort((left, right) => {
+      const leftKey = `${left.importer}\0${left.target}`;
+      const rightKey = `${right.importer}\0${right.target}`;
+      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+    });
+  return imports;
+}
+
+export function discoverBoundaryImports({ root = ROOT, manifest } = {}) {
+  const boundaries = completedBoundaries(root, manifest);
   const imports = Object.fromEntries(
     boundaries.map((entry) => [entry.path, []]),
   );
   if (boundaries.length === 0) return imports;
 
   for (const file of sourceFiles(root)) {
-    const importer = repositoryPath(root, file);
     for (const specifier of importSpecifiers(fs.readFileSync(file, 'utf8'))) {
-      const target = path.resolve(path.dirname(file), specifier);
       for (const boundary of boundaries) {
-        if (
-          target !== boundary.root &&
-          !target.startsWith(`${boundary.root}${path.sep}`)
-        )
-          continue;
-        if (
-          file === boundary.root ||
-          file.startsWith(`${boundary.root}${path.sep}`)
-        )
-          continue;
-        const targetPath = repositoryPath(root, target);
-        imports[boundary.path].push({
-          importer,
-          target: targetPath,
-          kind: boundary.stableEntrypoints.has(targetPath) ? 'stable' : 'deep',
-        });
+        const imported = importedBoundary(root, file, specifier, boundary);
+        if (imported) imports[boundary.path].push(imported);
       }
     }
   }
-  for (const boundary of boundaries) {
-    imports[boundary.path].sort((left, right) => {
-      const leftKey = `${left.importer}\0${left.target}`;
-      const rightKey = `${right.importer}\0${right.target}`;
-      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
-    });
-  }
-  return imports;
+  return sortBoundaryImports(imports);
 }
 
 function boundaryCycles(entries) {
@@ -692,10 +723,6 @@ function main() {
     return;
   }
   const manifest = readJson(ROOT, MANIFEST_PATH);
-  if (process.argv.includes('--print-boundary-imports')) {
-    console.log(JSON.stringify(discoverBoundaryImports({ manifest }), null, 2));
-    return;
-  }
   const result = validateFrameworkLayout({ root: ROOT, manifest });
   if (!result.ok) {
     for (const entry of result.issues)
@@ -718,4 +745,9 @@ function main() {
   );
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main();
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  if (process.argv.includes('--print-boundary-imports')) {
+    const manifest = readJson(ROOT, MANIFEST_PATH);
+    console.log(JSON.stringify(discoverBoundaryImports({ manifest }), null, 2));
+  } else main();
+}
