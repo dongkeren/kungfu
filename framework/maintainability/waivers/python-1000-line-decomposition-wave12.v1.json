@@ -1,10 +1,11 @@
 {
   "schema": "kungfu.code-complexity-budget-waiver/v3",
-  "issue_root": "sha256:f9684f7c249be03804a71b1083cb928023e5c3168d056a3f0161dfe9ed80c5db",
+  "issue_root": "sha256:2d0d704dca3f4986178543a75c1f23f89a74c8b6d1c3f4d0f1ce15ef4e58499f",
   "issue_kind": "new-helper-proliferation",
   "paths_or_scope": [
     "framework/core/src/python/kungfu/agent_work_lab_demo.py",
     "framework/core/src/python/kungfu/agent_work_lab_template.py",
+    "framework/core/src/python/kungfu/agent/_action_loop_support.py",
     "framework/core/src/python/kungfu/agent/_action_loop_transport.py",
     "framework/core/src/python/kungfu/agent/_run_agent/runtime.py",
     "framework/core/src/python/kungfu/cli/commands/_agent/base.py",
@@ -44,12 +45,20 @@
       "contentRoot": "sha256:defda8c879baf32ae27f41bc446dd12603319a38b573105323b567129f081a1f"
     },
     {
+      "path": "framework/core/src/python/kungfu/agent/_action_loop_support.py",
+      "class": "first-party-handwritten-implementation",
+      "language": "python",
+      "owner": "core/package",
+      "lines": 61,
+      "contentRoot": "sha256:2f48d8bfd65f9eba350b161fa328ee9cf9ccc4e327750b04633d6b0757b4efc3"
+    },
+    {
       "path": "framework/core/src/python/kungfu/agent/_action_loop_transport.py",
       "class": "first-party-handwritten-implementation",
       "language": "python",
       "owner": "core/package",
-      "lines": 68,
-      "contentRoot": "sha256:2c544793569b0a90456c569b9582840c1cda5b278362898f115d5fca1e6e982c"
+      "lines": 53,
+      "contentRoot": "sha256:aca56d518a88ea12530d048e4eb3aac84291ca89a5dd90d509b9394653cad778"
     },
     {
       "path": "framework/core/src/python/kungfu/agent/_run_agent/runtime.py",
@@ -145,7 +154,7 @@
       "language": "python",
       "owner": "core/package",
       "lines": 136,
-      "contentRoot": "sha256:9c54d5cfc02420320e50c1195b4a807d43734f0230b0fd23c41d56ef1c8ddd98"
+      "contentRoot": "sha256:2c659d480c1d0f351cfe60c13ccb60223d20d6eaf2f3cc69f63423d4894bd54f"
     },
     {
       "path": "framework/core/src/python/kungfu/cli/commands/_workspace/presentation.py",
@@ -172,10 +181,10 @@
       "contentRoot": "sha256:9bd200ba083e3ebb64a14b29c6b21d8b7b0dac4f11390359c5c2de0bcfb7e09d"
     }
   ],
-  "allowed_delta": 5044,
+  "allowed_delta": 5090,
   "owner": "core/package",
-  "responsibility_boundary": "Wave 12 separates Action Loop transport encoding and delivery from action orchestration while preserving the existing action-loop API and earlier decomposition owners.",
-  "cohesion_rationale": "Transport framing and delivery form one small cohesive boundary that changes independently from action policy; the exact scope renews the complete protected core/package helper issue root.",
+  "responsibility_boundary": "Wave 12 separates Action Loop content-addressed support and transport routing from action orchestration while preserving the existing action-loop API and earlier decomposition owners.",
+  "cohesion_rationale": "Content-addressed support and transport routing are distinct cohesive boundaries that change independently from action policy; the exact scope renews the complete protected core/package helper issue root.",
   "rejected_split_alternatives": [
     "Keeping transport mechanics in action_loop.py would retain protocol delivery inside action orchestration.",
     "Splitting encoding and delivery into arbitrary micro-files would add indirection without a distinct owner boundary.",
