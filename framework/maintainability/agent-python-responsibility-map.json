@@ -338,7 +338,7 @@
         "functionRisk": { "functions": 55, "total": 899, "maximum": 70 }
       },
       "current": {
-        "physicalLines": 414,
+        "physicalLines": 412,
         "responsibilities": 25,
         "functionRisk": { "functions": 14, "total": 178, "maximum": 70 }
       },

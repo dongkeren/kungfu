@@ -86,10 +86,7 @@ def intent_map(ctx, as_json):
 agent_work_lab_commands.register_advisories(agent, agent_command_context)
 
 
-@agent.group(
-    name="first-value",
-    help=api_help("kungfu.agent.first-value"),
-)
+@agent.group(name="first-value", help=api_help("kungfu.agent.first-value"))
 @kfd3_api("kungfu.agent.first-value")
 @agent_command_context
 def first_value(ctx):
@@ -203,7 +200,7 @@ def _capabilities_payload():
     work_domain_profile = contract_runtime.contract_metadata(
         "agent-work-domain-profile"
     )
-    payload = {
+    return {
         "schema": "kungfu.agent-capabilities/v1",
         "index": agent_pack.index(),
         "commands": agent_pack.commands(),
@@ -219,7 +216,6 @@ def _capabilities_payload():
         "workLoop": first_value_protocol.work_authority_capabilities(),
         "workspaceGit": first_value_protocol.workspace_git_policy_view(),
     }
-    return payload
 
 
 @agent.command(help=api_help("kungfu.agent.capabilities"))
@@ -400,8 +396,10 @@ def verify(ctx, as_json):
     if as_json:
         _json(payload)
     else:
-        status_text = "ok" if payload["ok"] else "failed"
-        click.echo(f"[agent] KFD-3 collaboration-interface verify: {status_text}")
+        click.echo(
+            f"[agent] KFD-3 collaboration-interface verify: "
+            f"{'ok' if payload['ok'] else 'failed'}"
+        )
         for section in ["registryErrors", "hiddenUsableApis"]:
             for failure in payload.get(section, []):
                 click.echo(f"- {section}: {failure}")
