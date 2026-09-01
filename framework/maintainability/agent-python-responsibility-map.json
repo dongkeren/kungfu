@@ -340,7 +340,7 @@
       "current": {
         "physicalLines": 412,
         "responsibilities": 25,
-        "functionRisk": { "functions": 14, "total": 178, "maximum": 70 }
+        "functionRisk": { "functions": 14, "total": 173, "maximum": 65 }
       },
       "ownerFiles": [
         "framework/core/src/python/kungfu/agent/context_surface.py",
