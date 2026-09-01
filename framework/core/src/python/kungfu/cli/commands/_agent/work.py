@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-
 """KFD-7 Work Profile commands owned by the ``kungfu agent`` facade."""
 
 import base64

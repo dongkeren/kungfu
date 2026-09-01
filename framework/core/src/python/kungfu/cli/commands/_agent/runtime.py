@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-
 """Machine-local Agent runtime profile commands."""
 
 import click

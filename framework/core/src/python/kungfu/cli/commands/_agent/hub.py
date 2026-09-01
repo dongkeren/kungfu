@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-
 """Product-owned KFD Agent Hub commands."""
 
 import base64

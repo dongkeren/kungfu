@@ -1,5 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-
 """Provider policy, bootstrap, and Skill installation commands."""
 
 import os
