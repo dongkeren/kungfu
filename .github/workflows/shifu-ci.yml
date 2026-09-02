@@ -10,6 +10,7 @@ name: shifu CI
 on:
   pull_request:
     branches:
+      - alpha/v*/v*
       - release/v*/v*
     paths:
       - "**/*.md"

@@ -111,7 +111,13 @@ jobs:
     needs:
       - dco
       - source_acceptance
-    if: ${{ false }}
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.run_attempt == 1 &&
+        needs.dco.result == 'success' &&
+        needs.source_acceptance.result == 'success'
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -179,7 +185,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Verify protected merge-queue replay
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -189,7 +195,7 @@ jobs:
             --base "$base_sha" \
             --head "$head_sha"
       - name: Verify exact Initiative-family queue lease
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'merge_group' }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -215,6 +221,8 @@ jobs:
             --candidate-tree "$candidate_tree"
       - name: Verify ADR delivery intent
         run: ./shifu gate run governance.adr-delivery
+      - name: Rehearse alpha and stable promotion contracts
+        run: ./shifu gate run governance.promotion-rehearsal
       - name: Plan exact dev candidate qualification
         id: plan
         shell: bash
@@ -264,7 +272,6 @@ jobs:
 
   proof_probe:
     name: affected-native proof probe / linux
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -507,7 +514,15 @@ jobs:
     needs:
       - candidate_preflight
       - proof_probe
-    if: ${{ false }}
+    if: >-
+      ${{
+        needs.candidate_preflight.result == 'success' &&
+        needs.proof_probe.result == 'success' &&
+        (needs.candidate_preflight.outputs.native-required == 'true' ||
+         needs.candidate_preflight.outputs.sdk-required == 'true' ||
+         needs.candidate_preflight.outputs.shifu-required == 'true' ||
+         needs.candidate_preflight.outputs.kfd-required == 'true')
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -605,10 +620,12 @@ jobs:
     needs:
       - candidate_preflight
       - proof_probe
+      - warrant_admission
     if: >-
       ${{
         needs.candidate_preflight.result == 'success' &&
         needs.proof_probe.result == 'success' &&
+        needs.warrant_admission.result == 'success' &&
         needs.proof_probe.outputs.reuse != 'true' &&
         (needs.candidate_preflight.outputs.native-required == 'true' ||
          needs.candidate_preflight.outputs.sdk-required == 'true')
@@ -815,32 +832,40 @@ jobs:
           }}
         shell: bash
         run: ccache --zero-stats
-      - name: Run selected native qualification
+      - name: Run all expensive native qualification under the live Warrant
         if: ${{ steps.plan.outputs.required == 'true' }}
         id: native-gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          export GITHUB_BASE_SHA='${{ steps.revisions.outputs.base_sha }}'
-          export GITHUB_HEAD_SHA='${{ steps.revisions.outputs.head_sha }}'
-          export KUNGFU_AFFECTED_NATIVE_PLAN=product/qualification/affected-native/plan.json
-          ./shifu install --frozen-lockfile
-          if [ '${{ steps.plan.outputs.sdk-required }}' = true ] && [ '${{ matrix.partition }}' = 0 ]; then
-            cmake_js_bin=""
-            for candidate in node_modules/.pnpm/cmake-js@*/node_modules/cmake-js/bin/cmake-js; do
-              if [ -x "$candidate" ]; then cmake_js_bin="$candidate"; break; fi
-            done
-            test -n "$cmake_js_bin"
-            export PATH="$GITHUB_WORKSPACE/$(dirname "$cmake_js_bin"):$PATH"
-            # shifu-entry-contract: allow the SDK toolchain availability probe before the Shifu SDK build
-            cmake-js --version
-            ./shifu build:core:sdk
-            ./shifu pack:sdk
-            ./shifu layers:qualify:sdk -- --report product/qualification/affected-native/layered-sdk-report.json
-          fi
-          if [ '${{ steps.plan.outputs.native-required }}' = true ]; then
-            ./shifu gate run source.changed-scope --omit-dependency source.acceptance --capability native-toolchain
-          fi
+        uses: ./.github/actions/native-execution-under-warrant
+        with:
+          pull-request: ${{ needs.warrant_admission.outputs.pull-request }}
+          source-head: ${{ needs.warrant_admission.outputs.source-head }}
+          protected-base: ${{ needs.warrant_admission.outputs.protected-base }}
+          qualified-base: ${{ needs.warrant_admission.outputs.qualified-base }}
+          toolchain-root: ${{ needs.warrant_admission.outputs.toolchain-root }}
+          environment-root: ${{ needs.warrant_admission.outputs.environment-root }}
+          allowed-phases: ${{ needs.warrant_admission.outputs.allowed-phases }}
+          output: product/qualification/affected-native/warrant-execution-${{ matrix.partition }}.json
+          command: |
+            set -euo pipefail
+            export GITHUB_BASE_SHA='${{ steps.revisions.outputs.base_sha }}'
+            export GITHUB_HEAD_SHA='${{ steps.revisions.outputs.head_sha }}'
+            export KUNGFU_AFFECTED_NATIVE_PLAN=product/qualification/affected-native/plan.json
+            ./shifu install --frozen-lockfile
+            if [ '${{ steps.plan.outputs.sdk-required }}' = true ] && [ '${{ matrix.partition }}' = 0 ]; then
+              cmake_js_bin=""
+              for candidate in node_modules/.pnpm/cmake-js@*/node_modules/cmake-js/bin/cmake-js; do
+                if [ -x "$candidate" ]; then cmake_js_bin="$candidate"; break; fi
+              done
+              test -n "$cmake_js_bin"
+              export PATH="$GITHUB_WORKSPACE/$(dirname "$cmake_js_bin"):$PATH"
+              cmake-js --version
+              ./shifu build:core:sdk
+              ./shifu pack:sdk
+              ./shifu layers:qualify:sdk -- --report product/qualification/affected-native/layered-sdk-report.json
+            fi
+            if [ '${{ steps.plan.outputs.native-required }}' = true ]; then
+              ./shifu gate run source.changed-scope --omit-dependency source.acceptance --capability native-toolchain
+            fi
       - name: Record compiler cache statistics
         if: >-
           ${{
@@ -934,10 +959,12 @@ jobs:
     needs:
       - candidate_preflight
       - proof_probe
+      - warrant_admission
     if: >-
       ${{
         needs.candidate_preflight.result == 'success' &&
         needs.proof_probe.result == 'success' &&
+        needs.warrant_admission.result == 'success' &&
         needs.proof_probe.outputs.reuse != 'true' &&
         needs.candidate_preflight.outputs.shifu-required == 'true'
       }}
@@ -954,19 +981,31 @@ jobs:
         with:
           node-version: 24
       - name: Run required Linux Shifu workspace Gate
-        run: |
-          ./shifu install --frozen-lockfile
-          ./shifu gate run shifu.workspace --capability rust
+        uses: ./.github/actions/native-execution-under-warrant
+        with:
+          pull-request: ${{ needs.warrant_admission.outputs.pull-request }}
+          source-head: ${{ needs.warrant_admission.outputs.source-head }}
+          protected-base: ${{ needs.warrant_admission.outputs.protected-base }}
+          qualified-base: ${{ needs.warrant_admission.outputs.qualified-base }}
+          toolchain-root: ${{ needs.warrant_admission.outputs.toolchain-root }}
+          environment-root: ${{ needs.warrant_admission.outputs.environment-root }}
+          allowed-phases: ${{ needs.warrant_admission.outputs.allowed-phases }}
+          output: product/qualification/affected-native/shifu-warrant-execution.json
+          command: |
+            ./shifu install --frozen-lockfile
+            ./shifu gate run shifu.workspace --capability rust
 
   kfd_verifier:
     name: KFD verifier / linux
     needs:
       - candidate_preflight
       - proof_probe
+      - warrant_admission
     if: >-
       ${{
         needs.candidate_preflight.result == 'success' &&
         needs.proof_probe.result == 'success' &&
+        needs.warrant_admission.result == 'success' &&
         needs.proof_probe.outputs.reuse != 'true' &&
         needs.candidate_preflight.outputs.kfd-required == 'true'
       }}
@@ -980,10 +1019,20 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
-      - name: Verify product-owned fixtures
-        run: |
-          ./shifu install --frozen-lockfile
-          ./shifu kfd:verify-owned-fixtures
+      - name: Verify product-owned fixtures under the live Warrant
+        uses: ./.github/actions/native-execution-under-warrant
+        with:
+          pull-request: ${{ needs.warrant_admission.outputs.pull-request }}
+          source-head: ${{ needs.warrant_admission.outputs.source-head }}
+          protected-base: ${{ needs.warrant_admission.outputs.protected-base }}
+          qualified-base: ${{ needs.warrant_admission.outputs.qualified-base }}
+          toolchain-root: ${{ needs.warrant_admission.outputs.toolchain-root }}
+          environment-root: ${{ needs.warrant_admission.outputs.environment-root }}
+          allowed-phases: ${{ needs.warrant_admission.outputs.allowed-phases }}
+          output: product/qualification/affected-native/kfd-warrant-execution.json
+          command: |
+            ./shifu install --frozen-lockfile
+            ./shifu kfd:verify-owned-fixtures
 
   affected_native:
     name: affected-native / linux
@@ -993,47 +1042,7 @@ jobs:
       - source_acceptance
       - candidate_preflight
       - proof_probe
-      - affected_native_shards
-      - shifu_workspace
-      - kfd_verifier
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Report qualification result
-        shell: bash
-        env:
-          DCO_RESULT: ${{ needs.dco.result }}
-          SOURCE_RESULT: ${{ needs.source_acceptance.result }}
-          PREFLIGHT_RESULT: ${{ needs.candidate_preflight.result }}
-          PROBE_RESULT: ${{ needs.proof_probe.result }}
-          NATIVE_RESULT: ${{ needs.affected_native_shards.result }}
-          SHIFU_RESULT: ${{ needs.shifu_workspace.result }}
-          KFD_RESULT: ${{ needs.kfd_verifier.result }}
-        run: |
-          set -euo pipefail
-          for result in \
-            "$DCO_RESULT" \
-            "$SOURCE_RESULT" \
-            "$PREFLIGHT_RESULT" \
-            "$PROBE_RESULT" \
-            "$NATIVE_RESULT" \
-            "$SHIFU_RESULT" \
-            "$KFD_RESULT"; do
-            case "$result" in
-              success|skipped) ;;
-              *) echo "Qualification job failed: $result" >&2; exit 1 ;;
-            esac
-          done
-          echo "Dev qualification passed."
-
-  legacy_affected_native:
-    name: Legacy affected-native proof publication / linux
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    needs:
-      - dco
-      - source_acceptance
-      - candidate_preflight
-      - proof_probe
+      - warrant_admission
       - affected_native_shards
       - shifu_workspace
       - kfd_verifier
@@ -1052,7 +1061,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Fail closed without the exact active Warrant
-        if: ${{ false }}
+        if: >-
+          ${{
+            needs.warrant_admission.result != 'success' &&
+            (needs.candidate_preflight.outputs.native-required == 'true' ||
+             needs.candidate_preflight.outputs.sdk-required == 'true' ||
+             needs.candidate_preflight.outputs.shifu-required == 'true' ||
+             needs.candidate_preflight.outputs.kfd-required == 'true')
+          }}
         shell: bash
         run: |
           echo "Expensive native qualification requires the exact active Delivery Warrant." >&2
@@ -1417,7 +1433,12 @@ jobs:
             --checkout-sha "$(git rev-parse HEAD)" \
             "${delta_args[@]}"
       - name: Consume Warrant and record exact Integration Delivery Proof
-        if: ${{ false }}
+        if: >-
+          ${{
+            github.event_name == 'merge_group' &&
+            (needs.candidate_preflight.outputs.native-required == 'true' ||
+             needs.candidate_preflight.outputs.sdk-required == 'true')
+          }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

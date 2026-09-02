@@ -3,6 +3,9 @@
 name: Alpha promotion preflight
 
 on:
+  push:
+    branches:
+      - dev/v*/v*
   workflow_dispatch:
     inputs:
       source-sha:
