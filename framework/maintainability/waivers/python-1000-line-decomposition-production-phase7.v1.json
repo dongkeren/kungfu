@@ -1,6 +1,6 @@
 {
   "schema": "kungfu.code-complexity-budget-waiver/v3",
-  "issue_root": "sha256:a46c55fe8664a23d4cb406e8f8b38710a68bc72e146ecab449718b787d82c6ca",
+  "issue_root": "sha256:8ccff0c59d6ac485dc4251bfc5a2fca5adaed66a30d7ddfbe93af5ee3175174f",
   "issue_kind": "new-helper-proliferation",
   "paths_or_scope": [
     "framework/core/src/python/kungfu/agent/_action_loop_support.py",
@@ -42,7 +42,7 @@
       "language": "python",
       "owner": "core/package",
       "lines": 836,
-      "contentRoot": "sha256:6dc903603e243df96424a9dc36eaab01e72d0a0a0b90793a7f1894877948cf0c"
+      "contentRoot": "sha256:179a798613cff52fc4178b30cf5eb2291c6d93b083291bf5dbd968d8189c53f5"
     },
     {
       "path": "framework/core/src/python/kungfu/cli/commands/_skill/authoring.py",
