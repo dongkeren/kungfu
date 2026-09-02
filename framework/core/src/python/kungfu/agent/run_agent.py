@@ -65,7 +65,6 @@ from kungfu.agent._run_agent.runtime import (
     _BOOTSTRAP as _BOOTSTRAP,
     bind_current_native_work as bind_current_native_work,
     canonical_root as canonical_root,
-    agent_activity_history_projection as agent_activity_history_projection,
     validate_work_ref as validate_work_ref,
     validate_continuation as validate_continuation,
     select_profile as select_profile,
@@ -101,7 +100,7 @@ _COMPATIBILITY_EXPORTS = (
 
 
 _MOVED_CALLABLE_SYMBOLS = (
-    "bind_current_native_work agent_activity_history_projection validate_work_ref "
+    "bind_current_native_work validate_work_ref "
     "validate_continuation select_profile select_interactive_profile launch_argv "
     "_direct_process_transport _environment _cwd ProcessResult _session_ref "
     "_invoke_session_control _wait_for_session run_session_attempt run_process"
@@ -109,6 +108,18 @@ _MOVED_CALLABLE_SYMBOLS = (
 for _symbol in _MOVED_CALLABLE_SYMBOLS:
     globals()[_symbol].__module__ = __name__
     globals()[_symbol].__qualname__ = _symbol
+
+
+def agent_activity_history_projection(
+    work_ref: Mapping[str, Any] | None,
+    *,
+    entrypoint: str = "managed-run",
+) -> dict[str, Any]:
+    """Project Agent activity through the stable facade contract."""
+
+    return agent_resources.agent_activity_history_projection(
+        validate_work_ref(work_ref), entrypoint=entrypoint
+    )
 
 
 def native_environment(*args, **kwargs) -> dict[str, str]:
