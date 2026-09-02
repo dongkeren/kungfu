@@ -42,9 +42,9 @@
         "functionRisk": { "functions": 22, "total": 171, "maximum": 28 }
       },
       "current": {
-        "physicalLines": 517,
-        "responsibilities": 17,
-        "functionRisk": { "functions": 4, "total": 44, "maximum": 27 }
+        "physicalLines": 528,
+        "responsibilities": 18,
+        "functionRisk": { "functions": 5, "total": 48, "maximum": 27 }
       },
       "ownerFiles": [
         "framework/core/src/python/kungfu/agent/native_launch.py",
