@@ -484,7 +484,7 @@ def _direct_process_transport(
 
 def native_environment(
     *args,
-    skill_context_builder: Callable[..., Mapping[str, Any]] = build_skill_context,
+    skill_context_builder: Callable[..., dict[str, Any]] = build_skill_context,
     **kwargs,
 ) -> dict[str, str]:
     """Compatibility facade retaining the injectable Skill context seam."""
