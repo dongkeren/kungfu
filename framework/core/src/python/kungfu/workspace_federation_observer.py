@@ -181,6 +181,20 @@ def _component_cache(query: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
 
 
+def _observer_state_advanced(
+    previous_cursors: Mapping[str, Mapping[str, Any]],
+    current_cursors: Mapping[str, Mapping[str, Any]],
+    previous_signals: Mapping[str, str],
+    current_signals: Mapping[str, str],
+    changed_roots: set[str],
+) -> bool:
+    return bool(
+        changed_roots
+        or previous_cursors != current_cursors
+        or previous_signals != current_signals
+    )
+
+
 def _event(
     query: Mapping[str, Any],
     *,
@@ -414,6 +428,8 @@ def observe_federation(
             )
             continue
 
+        previous_cursors = dict(cursors)
+        previous_signals = signals
         changed_roots: set[str] = set()
         changed_ids: list[str] = []
         for identity_root, workspace_id, cursor, changed, _gap in observations:
@@ -439,4 +455,11 @@ def observe_federation(
                 started=started,
             )
         signals = current_signals
-        _write_state(state_file, query, cursors, signals)
+        if _observer_state_advanced(
+            previous_cursors,
+            cursors,
+            previous_signals,
+            signals,
+            changed_roots,
+        ):
+            _write_state(state_file, query, cursors, signals)
