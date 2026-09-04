@@ -304,17 +304,35 @@ function qualifyCommandContract() {
     );
   }
 
-  const runtimeEntry = run(python, [
-    '-c',
-    'from kungfu.cli.commands.work_design import _preflight_entry; print(_preflight_entry())',
-  ]).trim();
+  const runtimeEntry = run(
+    python,
+    [
+      '-c',
+      'from kungfu.cli.commands.work_design import _preflight_entry; print(_preflight_entry())',
+    ],
+    {
+      env: {
+        ...process.env,
+        PYTHONHOME: '',
+        PYTHONPATH: '',
+      },
+    },
+  ).trim();
+  let runtimeRoot = path.dirname(runtimeEntry);
+  while (
+    runtimeRoot !== path.dirname(runtimeRoot) &&
+    !fs.existsSync(path.join(runtimeRoot, 'work-design-runtime.json'))
+  )
+    runtimeRoot = path.dirname(runtimeRoot);
+  if (!fs.existsSync(path.join(runtimeRoot, 'work-design-runtime.json')))
+    fail(`installed Work Design manifest is unavailable above ${runtimeEntry}`);
   const workDesignQualification = JSON.parse(
     run(process.execPath, [
       path.join(root, 'scripts', 'qualify-installed-work-design.mjs'),
       '--binary',
       binary,
       '--runtime-root',
-      path.resolve(path.dirname(runtimeEntry), '..', '..', '..'),
+      runtimeRoot,
       '--surface',
       'wheel',
     ]),

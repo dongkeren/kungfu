@@ -125,6 +125,32 @@ import {
 } from './workspace-selection';
 
 const qualificationMode = process.env.KF_QUALIFICATION_MODE === '1';
+const qualificationAllWork =
+  qualificationMode && process.env.KF_QUALIFICATION_ALL_WORK === '1';
+const qualificationExpectedWorkTitle =
+  process.env.KF_QUALIFICATION_EXPECTED_WORK_TITLE?.trim() || '';
+
+async function waitForQualifiedAllWork(win: BrowserWindow): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  let lastText = '';
+  while (!win.isDestroyed() && Date.now() < deadline) {
+    lastText = await win.webContents.executeJavaScript(
+      'document.body.innerText',
+      true,
+    );
+    if (
+      lastText.includes('All Work') &&
+      qualificationExpectedWorkTitle &&
+      lastText.includes(qualificationExpectedWorkTitle)
+    ) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(
+    `packaged All Work did not render the seeded Work; body=${lastText.slice(-4096)}`,
+  );
+}
 
 // Resolve the kungfu runtime directory that holds libkungfu.dylib and the
 // kungfu_electron.node binding. In development it lives in the kungfu-core
@@ -1377,9 +1403,23 @@ function createWindow() {
   }
 
   if (qualificationMode) {
-    win.webContents.once('did-finish-load', () => {
+    win.webContents.once('did-finish-load', async () => {
       console.log('KF_GUI_QUALIFICATION_READY');
-      setTimeout(quitGui, 250);
+      if (!qualificationAllWork) {
+        setTimeout(quitGui, 250);
+        return;
+      }
+      try {
+        await waitForQualifiedAllWork(win);
+        console.log('KF_GUI_QUALIFICATION_ALL_WORK_READY');
+        quitGui();
+      } catch (error) {
+        console.error(
+          `KF_GUI_QUALIFICATION_ALL_WORK_FAIL ${(error as Error).message}`,
+        );
+        process.exitCode = 1;
+        quitGui();
+      }
     });
   } else {
     let revealed = false;
