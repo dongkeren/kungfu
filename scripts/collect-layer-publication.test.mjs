@@ -81,6 +81,11 @@ test('collects the exact 44-file cross-platform publication set', () => {
       fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'),
     );
     assert.equal(manifest.artifacts.length, 44);
+    assert.ok(
+      manifest.artifacts.some(
+        ({ name }) => name === 'kungfu-tech-work-4.0.0-alpha.1.tgz',
+      ),
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
