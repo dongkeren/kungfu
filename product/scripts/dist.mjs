@@ -1032,7 +1032,7 @@ export function copyTree(source, target, options = {}) {
   return true;
 }
 
-function copyInstalledWorkDesignPackageClosure(source, target) {
+function findInstalledWorkDesignRuntimeManifest(source) {
   const manifests = [];
   const pending = [source];
   while (pending.length > 0) {
@@ -1054,56 +1054,84 @@ function copyInstalledWorkDesignPackageClosure(source, target) {
     throw new Error(
       `expected one installed Work Design runtime manifest, found ${manifests.length}`,
     );
-  const manifest = JSON.parse(fs.readFileSync(manifests[0], 'utf8'));
+  return manifests[0];
+}
+
+function readInstalledWorkDesignPackageDependencies(manifestPath) {
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   if (
     manifest.schema !== 'kungfu.work-design.runtime-closure/v1' ||
     !Array.isArray(manifest.packageDependencies)
   )
     throw new Error('invalid installed Work Design runtime closure manifest');
-  const runtimeRoot = path.dirname(manifests[0]);
-  const runtimeRelative = path.relative(source, runtimeRoot);
-  const seen = new Set();
-  for (const dependency of manifest.packageDependencies) {
+  return manifest.packageDependencies;
+}
+
+function validateInstalledWorkDesignPackageDependency(dependency, seen) {
+  if (
+    !dependency ||
+    typeof dependency.name !== 'string' ||
+    !/^@[^/]+\/[^/]+$/u.test(dependency.name) ||
+    !Array.isArray(dependency.files) ||
+    dependency.files.length === 0 ||
+    seen.has(dependency.name)
+  )
+    throw new Error('invalid installed Work Design package dependency');
+  seen.add(dependency.name);
+}
+
+function copyInstalledWorkDesignPackageDependency(
+  dependency,
+  runtimeRoot,
+  targetRuntimeRoot,
+) {
+  const packageCoordinate = dependency.name.split('/');
+  for (const relative of dependency.files) {
     if (
-      !dependency ||
-      typeof dependency.name !== 'string' ||
-      !/^@[^/]+\/[^/]+$/u.test(dependency.name) ||
-      !Array.isArray(dependency.files) ||
-      dependency.files.length === 0 ||
-      seen.has(dependency.name)
+      typeof relative !== 'string' ||
+      path.isAbsolute(relative) ||
+      relative.split(/[\\/]/u).includes('..')
     )
-      throw new Error('invalid installed Work Design package dependency');
-    seen.add(dependency.name);
-    const packageCoordinate = dependency.name.split('/');
-    for (const relative of dependency.files) {
-      if (
-        typeof relative !== 'string' ||
-        path.isAbsolute(relative) ||
-        relative.split(/[\\/]/u).includes('..')
-      )
-        throw new Error(
-          `invalid installed Work Design package file: ${dependency.name}/${relative}`,
-        );
-      const sourceFile = path.join(
-        runtimeRoot,
-        'node_modules',
-        ...packageCoordinate,
-        ...relative.split('/'),
+      throw new Error(
+        `invalid installed Work Design package file: ${dependency.name}/${relative}`,
       );
-      if (!fs.existsSync(sourceFile) || !fs.statSync(sourceFile).isFile())
-        throw new Error(
-          `missing installed Work Design package file: ${dependency.name}/${relative}`,
-        );
-      const targetFile = path.join(
-        target,
-        runtimeRelative,
-        'node_modules',
-        ...packageCoordinate,
-        ...relative.split('/'),
+    const sourceFile = path.join(
+      runtimeRoot,
+      'node_modules',
+      ...packageCoordinate,
+      ...relative.split('/'),
+    );
+    if (!fs.existsSync(sourceFile) || !fs.statSync(sourceFile).isFile())
+      throw new Error(
+        `missing installed Work Design package file: ${dependency.name}/${relative}`,
       );
-      fs.mkdirSync(path.dirname(targetFile), { recursive: true });
-      fs.copyFileSync(sourceFile, targetFile);
-    }
+    const targetFile = path.join(
+      targetRuntimeRoot,
+      'node_modules',
+      ...packageCoordinate,
+      ...relative.split('/'),
+    );
+    fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+    fs.copyFileSync(sourceFile, targetFile);
+  }
+}
+
+function copyInstalledWorkDesignPackageClosure(source, target) {
+  const manifestPath = findInstalledWorkDesignRuntimeManifest(source);
+  const dependencies = readInstalledWorkDesignPackageDependencies(manifestPath);
+  const runtimeRoot = path.dirname(manifestPath);
+  const targetRuntimeRoot = path.join(
+    target,
+    path.relative(source, runtimeRoot),
+  );
+  const seen = new Set();
+  for (const dependency of dependencies) {
+    validateInstalledWorkDesignPackageDependency(dependency, seen);
+    copyInstalledWorkDesignPackageDependency(
+      dependency,
+      runtimeRoot,
+      targetRuntimeRoot,
+    );
   }
 }
 

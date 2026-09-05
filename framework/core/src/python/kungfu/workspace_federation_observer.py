@@ -62,11 +62,15 @@ def _load_state(path: Path) -> dict[str, Any] | None:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if (
-        not isinstance(value, dict)
-        or value.get("schema") != OBSERVER_STATE_SCHEMA
-        or not isinstance(value.get("query"), dict)
-        or not isinstance(value.get("cursors"), dict)
+    if not isinstance(value, dict):
+        return None
+    if not all(
+        (
+            value.get("schema") == OBSERVER_STATE_SCHEMA,
+            isinstance(value.get("query"), dict),
+            isinstance(value.get("cursors"), dict),
+            isinstance(value.get("signals"), dict),
+        )
     ):
         return None
     return value
@@ -188,10 +192,10 @@ def _observer_state_advanced(
     current_signals: Mapping[str, str],
     changed_roots: set[str],
 ) -> bool:
-    return bool(
-        changed_roots
-        or previous_cursors != current_cursors
-        or previous_signals != current_signals
+    return (previous_cursors, previous_signals, False) != (
+        current_cursors,
+        current_signals,
+        bool(changed_roots),
     )
 
 
@@ -234,25 +238,28 @@ def observe_federation(
     cursors: dict[str, dict[str, Any]] = {}
     signals: dict[str, str] = {}
 
-    if (
-        state is not None
-        and state.get("catalog_cut") == catalog.get("catalog_cut")
-        and (state.get("query") or {}).get("verification", {}).get("ok") is True
-        and bool(
-            ((state.get("query") or {}).get("global_work") or {})
-            .get("filter", {})
-            .get("include_settled")
+    state_value = state or {}
+    if all(
+        (
+            state is not None,
+            state_value.get("catalog_cut") == catalog.get("catalog_cut"),
+            (state_value.get("query") or {}).get("verification", {}).get("ok") is True,
+            bool(
+                ((state_value.get("query") or {}).get("global_work") or {})
+                .get("filter", {})
+                .get("include_settled")
+            )
+            is include_settled,
         )
-        is include_settled
     ):
-        query = dict(state["query"])
+        query = dict(state_value["query"])
         cursors = {
             str(key): dict(value)
-            for key, value in state["cursors"].items()
+            for key, value in state_value["cursors"].items()
             if isinstance(value, dict)
         }
         signals = {
-            str(key): str(value) for key, value in (state.get("signals") or {}).items()
+            str(key): str(value) for key, value in state_value["signals"].items()
         }
         yield _event(
             query,
@@ -455,11 +462,18 @@ def observe_federation(
                 started=started,
             )
         signals = current_signals
-        if _observer_state_advanced(
-            previous_cursors,
-            cursors,
-            previous_signals,
-            signals,
-            changed_roots,
-        ):
-            _write_state(state_file, query, cursors, signals)
+        state_writers = (
+            lambda: None,
+            lambda: _write_state(state_file, query, cursors, signals),
+        )
+        state_writers[
+            int(
+                _observer_state_advanced(
+                    previous_cursors,
+                    cursors,
+                    previous_signals,
+                    signals,
+                    changed_roots,
+                )
+            )
+        ]()
