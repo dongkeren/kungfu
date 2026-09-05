@@ -804,6 +804,7 @@ jobs:
 
           live_pr="$evidence/live-pr.json"
           gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > "$live_pr"
+          expected_head_repository="$(jq -er '.head.repo.full_name' "$live_pr")"
           jq -e \
             --arg repository "$GITHUB_REPOSITORY" \
             --arg branch "$TARGET_BRANCH" \
