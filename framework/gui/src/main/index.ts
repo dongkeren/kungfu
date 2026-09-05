@@ -1325,6 +1325,27 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function attachQualificationLifecycle(win: BrowserWindow) {
+  console.log('KF_GUI_QUALIFICATION_READY');
+  const readiness = [
+    () => new Promise((resolve) => setTimeout(resolve, 250)),
+    () =>
+      waitForQualifiedAllWork(win).then(() => {
+        console.log('KF_GUI_QUALIFICATION_ALL_WORK_READY');
+      }),
+  ][Number(qualificationAllWork)]();
+  void readiness.then(
+    () => quitGui(),
+    (error) => {
+      console.error(
+        `KF_GUI_QUALIFICATION_ALL_WORK_FAIL ${(error as Error).message}`,
+      );
+      process.exitCode = 1;
+      quitGui();
+    },
+  );
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -1356,11 +1377,10 @@ function createWindow() {
     win.webContents.on(
       'did-fail-load',
       (_event, code, description, url, isMainFrame) => {
-        if (isMainFrame) {
-          console.error(
-            `KF_GUI_RENDERER_LOAD_FAIL code=${code} url=${url} ${description}`,
-          );
-        }
+        if (!isMainFrame) return;
+        console.error(
+          `KF_GUI_RENDERER_LOAD_FAIL code=${code} url=${url} ${description}`,
+        );
       },
     );
     win.webContents.on('render-process-gone', (_event, details) => {
@@ -1403,28 +1423,13 @@ function createWindow() {
   }
 
   if (qualificationMode) {
-    win.webContents.once('did-finish-load', async () => {
-      console.log('KF_GUI_QUALIFICATION_READY');
-      if (!qualificationAllWork) {
-        setTimeout(quitGui, 250);
-        return;
-      }
-      try {
-        await waitForQualifiedAllWork(win);
-        console.log('KF_GUI_QUALIFICATION_ALL_WORK_READY');
-        quitGui();
-      } catch (error) {
-        console.error(
-          `KF_GUI_QUALIFICATION_ALL_WORK_FAIL ${(error as Error).message}`,
-        );
-        process.exitCode = 1;
-        quitGui();
-      }
-    });
+    win.webContents.once('did-finish-load', () =>
+      attachQualificationLifecycle(win),
+    );
   } else {
     let revealed = false;
     const reveal = () => {
-      if (revealed || win.isDestroyed()) return;
+      if ([revealed, win.isDestroyed()].includes(true)) return;
       revealed = true;
       win.show();
       if (process.platform === 'darwin') void app.dock?.show();
