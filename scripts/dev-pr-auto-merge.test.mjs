@@ -321,6 +321,15 @@ test('Qualified native proof re-runs the exact failed source jobs before landing
   );
   assert.match(
     bridge,
+    /expected_head_repository="\$\(jq -er '\.head\.repo\.full_name' "\$live_pr"\)"/u,
+  );
+  assert.equal(
+    bridge.match(/\.head_repository\.full_name == \$headRepository/gu)?.length,
+    2,
+  );
+  assert.doesNotMatch(bridge, /\.head_repository\.full_name == \$repository/u);
+  assert.match(
+    bridge,
     /check_name=affected-native%20%2F%20linux&filter=latest&per_page=100/u,
   );
   assert.match(

@@ -793,6 +793,7 @@ jobs:
 
           live_pr="$evidence/live-pr.json"
           gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR" > "$live_pr"
+          expected_head_repository="$(jq -er '.head.repo.full_name' "$live_pr")"
           jq -e \
             --arg repository "$GITHUB_REPOSITORY" \
             --arg branch "$TARGET_BRANCH" \
@@ -837,14 +838,14 @@ jobs:
           source_run_prior="$evidence/source-workflow-run-prior.json"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > "$source_run_prior"
           jq -e \
-            --arg repository "$GITHUB_REPOSITORY" \
+            --arg headRepository "$expected_head_repository" \
             --arg head "$EXPECTED_HEAD" \
             --argjson sourceRun "$SOURCE_RUN_ID" \
             '.id == $sourceRun
              and .name == "Core affected native"
              and .path == ".github/workflows/affected-native-pr.yml"
              and .event == "pull_request"
-             and .head_repository.full_name == $repository
+             and .head_repository.full_name == $headRepository
              and .head_sha == $head
              and .status == "completed"
              and (.conclusion == "failure" or .conclusion == "success")
@@ -915,7 +916,7 @@ jobs:
           fi
 
           jq -e \
-            --arg repository "$GITHUB_REPOSITORY" \
+            --arg headRepository "$expected_head_repository" \
             --arg head "$EXPECTED_HEAD" \
             --argjson sourceRun "$SOURCE_RUN_ID" \
             --argjson expectedAttempt "$expected_attempt" \
@@ -923,7 +924,7 @@ jobs:
              and .name == "Core affected native"
              and .path == ".github/workflows/affected-native-pr.yml"
              and .event == "pull_request"
-             and .head_repository.full_name == $repository
+             and .head_repository.full_name == $headRepository
              and .head_sha == $head
              and .run_attempt == $expectedAttempt
              and .status == "completed"
