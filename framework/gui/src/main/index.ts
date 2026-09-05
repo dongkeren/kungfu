@@ -1325,25 +1325,23 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function attachQualificationLifecycle(win: BrowserWindow) {
+async function completeQualification(win: BrowserWindow): Promise<void> {
   console.log('KF_GUI_QUALIFICATION_READY');
-  const readiness = [
-    () => new Promise((resolve) => setTimeout(resolve, 250)),
-    () =>
-      waitForQualifiedAllWork(win).then(() => {
-        console.log('KF_GUI_QUALIFICATION_ALL_WORK_READY');
-      }),
-  ][Number(qualificationAllWork)]();
-  void readiness.then(
-    () => quitGui(),
-    (error) => {
-      console.error(
-        `KF_GUI_QUALIFICATION_ALL_WORK_FAIL ${(error as Error).message}`,
-      );
-      process.exitCode = 1;
-      quitGui();
-    },
-  );
+  if (!qualificationAllWork) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    quitGui();
+    return;
+  }
+  try {
+    await waitForQualifiedAllWork(win);
+    console.log('KF_GUI_QUALIFICATION_ALL_WORK_READY');
+  } catch (error) {
+    console.error(
+      `KF_GUI_QUALIFICATION_ALL_WORK_FAIL ${(error as Error).message}`,
+    );
+    process.exitCode = 1;
+  }
+  quitGui();
 }
 
 function createWindow() {
@@ -1423,13 +1421,13 @@ function createWindow() {
   }
 
   if (qualificationMode) {
-    win.webContents.once('did-finish-load', () =>
-      attachQualificationLifecycle(win),
-    );
+    win.webContents.once('did-finish-load', () => {
+      void completeQualification(win);
+    });
   } else {
     let revealed = false;
     const reveal = () => {
-      if ([revealed, win.isDestroyed()].includes(true)) return;
+      if (revealed || win.isDestroyed()) return;
       revealed = true;
       win.show();
       if (process.platform === 'darwin') void app.dock?.show();

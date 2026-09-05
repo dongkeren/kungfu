@@ -192,11 +192,31 @@ def _observer_state_advanced(
     current_signals: Mapping[str, str],
     changed_roots: set[str],
 ) -> bool:
-    return (previous_cursors, previous_signals, False) != (
-        current_cursors,
-        current_signals,
-        bool(changed_roots),
+    return bool(
+        changed_roots
+        or previous_cursors != current_cursors
+        or previous_signals != current_signals
     )
+
+
+def _write_state_if_advanced(
+    path: Path,
+    query: Mapping[str, Any],
+    cursors: Mapping[str, Mapping[str, Any]],
+    signals: Mapping[str, str],
+    previous_cursors: Mapping[str, Mapping[str, Any]],
+    previous_signals: Mapping[str, str],
+    changed_roots: set[str],
+) -> None:
+    if not _observer_state_advanced(
+        previous_cursors,
+        cursors,
+        previous_signals,
+        signals,
+        changed_roots,
+    ):
+        return
+    _write_state(path, query, cursors, signals)
 
 
 def _event(
@@ -462,18 +482,12 @@ def observe_federation(
                 started=started,
             )
         signals = current_signals
-        state_writers = (
-            lambda: None,
-            lambda: _write_state(state_file, query, cursors, signals),
+        _write_state_if_advanced(
+            state_file,
+            query,
+            cursors,
+            signals,
+            previous_cursors,
+            previous_signals,
+            changed_roots,
         )
-        state_writers[
-            int(
-                _observer_state_advanced(
-                    previous_cursors,
-                    cursors,
-                    previous_signals,
-                    signals,
-                    changed_roots,
-                )
-            )
-        ]()
