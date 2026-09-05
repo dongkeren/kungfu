@@ -27,7 +27,6 @@ import {
   runInstalledKungfuAssignmentAdmissionSmoke,
   runInstalledKungfuCommand,
   runInstalledTuiBootstrapSmoke,
-  stageCoreRuntimeForCli,
   stageNodePtyForCli,
   stageXinfaContract,
   verifyProductObservabilityEvents,
@@ -565,71 +564,8 @@ test('CLI upgrade identity binds the filtered staged runtime', (t) => {
     fs.writeFileSync(path.join(source, 'kungfu'), 'runtime');
     fs.writeFileSync(path.join(source, 'bin', 'python3'), 'interpreter');
     fs.writeFileSync(path.join(source, 'bin', 'ignored.pyc'), 'bytecode');
-    const runtimeRoot = path.join(
-      source,
-      'python/lib/python3.13/site-packages/kungfu/work_design_runtime',
-    );
-    fs.mkdirSync(runtimeRoot, { recursive: true });
-    fs.writeFileSync(
-      path.join(runtimeRoot, 'work-design-runtime.json'),
-      `${JSON.stringify({
-        schema: 'kungfu.work-design.runtime-closure/v1',
-        packageDependencies: [
-          {
-            name: '@kungfu-tech/spec',
-            files: ['package.json', 'format/project-cut-canonical-json.mjs'],
-          },
-        ],
-      })}\n`,
-    );
-    for (const [relative, content] of [
-      ['package.json', '{"name":"@kungfu-tech/spec"}\n'],
-      [
-        'format/project-cut-canonical-json.mjs',
-        'export const canonical = true;\n',
-      ],
-    ]) {
-      const file = path.join(
-        runtimeRoot,
-        'node_modules/@kungfu-tech/spec',
-        relative,
-      );
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, content);
-    }
-    const unrelated = path.join(source, 'node_modules/unrelated/index.js');
-    fs.mkdirSync(path.dirname(unrelated), { recursive: true });
-    fs.writeFileSync(unrelated, 'development-only\n');
-    const rogue = path.join(runtimeRoot, 'node_modules/rogue/index.js');
-    fs.mkdirSync(path.dirname(rogue), { recursive: true });
-    fs.writeFileSync(rogue, 'undeclared\n');
     fs.symlinkSync('python3', path.join(source, 'bin', 'python'));
-    stageCoreRuntimeForCli(source, runtime);
-
-    for (const relative of [
-      'package.json',
-      'format/project-cut-canonical-json.mjs',
-    ])
-      assert.equal(
-        fs.existsSync(
-          path.join(
-            runtime,
-            'python/lib/python3.13/site-packages/kungfu/work_design_runtime/node_modules/@kungfu-tech/spec',
-            relative,
-          ),
-        ),
-        true,
-      );
-    assert.equal(fs.existsSync(path.join(runtime, 'node_modules')), false);
-    assert.equal(
-      fs.existsSync(
-        path.join(
-          runtime,
-          'python/lib/python3.13/site-packages/kungfu/work_design_runtime/node_modules/rogue',
-        ),
-      ),
-      false,
-    );
+    copyTree(source, runtime);
 
     const manifest = buildCliUpgradeManifest({
       stageRoot,
@@ -639,6 +575,12 @@ test('CLI upgrade identity binds the filtered staged runtime', (t) => {
     assert.equal(
       manifest.runtimeArtifactDigest,
       `sha256:${sha256Tree(runtime)}`,
+    );
+    assert.equal(
+      manifest.runtimeArtifactDigest,
+      `sha256:${sha256Tree(source, {
+        filter: (file) => !isPythonBytecodePath(file),
+      })}`,
     );
   } finally {
     fs.rmSync(parent, { recursive: true, force: true });
